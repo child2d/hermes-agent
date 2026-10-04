@@ -17,6 +17,13 @@ import { isMain } from "./utils.mjs"
 
 const STAMP_SCHEMA_VERSION = 1
 
+// Variants that ship the bundled runtime shape under their own branding. The
+// install stamp still says `payload: bundled` (installShape, bundledPayload
+// and steward.is_bundled_payload all key on that), but the Electron main
+// bundle must bake THIS variant's identity. Recorded as `identityVariant` so
+// bundle-electron-main.mjs needs no build-env input.
+const BRANDED_BUNDLED_VARIANTS = new Set(["plankton"])
+
 /** All-zero placeholder used when no real commit can be resolved. */
 export const FALLBACK_COMMIT = "0000000000000000000000000000000000000000"
 export const FALLBACK_BRANCH = "main"
@@ -184,7 +191,7 @@ function main() {
     )
   }
 
-  const bundled = ['bundled', 'store'].includes(process.env.HERMES_DESKTOP_VARIANT)
+  const bundled = ['bundled', 'store'].includes(process.env.HERMES_DESKTOP_VARIANT) || BRANDED_BUNDLED_VARIANTS.has(process.env.HERMES_DESKTOP_VARIANT || '')
   const payload = bundled
     ? stageDesktopLaunchers(join(OUT_DIR, 'agent-payload'))
     : null
@@ -203,6 +210,13 @@ function main() {
 
 /** One artifact schema for source, bundled and Light builds.
  * The PM bundle builder supplies launch paths only for bundled artifacts.
+ * @param {{ commit: string, branch?: string | null, dirty: boolean, source: string,
+ *   commitDate?: number | null, baseVersion?: string | null, displayVersion?: string | null,
+ *   distance?: number | null }} stamp
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.Platform} [platform]
+ * @param {{ runtime?: { repoDir: string, toolsDir: string, storePython: string,
+ *   sitePackages: string, commands: Record<string, string> } } | null} [payload]
  */
 export function buildStampPayload(stamp, env = process.env, platform = process.platform, payload = null) {
   const variant = (env.HERMES_DESKTOP_VARIANT || "").trim()
@@ -248,23 +262,29 @@ export function buildStampPayload(stamp, env = process.env, platform = process.p
   const updateMechanism = {
     '': 'self',
     bootstrap: 'self',
+    // The enterprise variant is a branded bundled carrier: it takes the same
+    // native update owner as `bundled`, never a checkout self-update.
+    plankton: { win32: 'app-installer', darwin: 'electron-updater' }[platform] || 'external',
     store: 'microsoft-store',
     bundled: { win32: 'app-installer', darwin: 'electron-updater' }[platform] || 'external',
     light: platform === 'darwin' ? 'electron-updater' : 'external'
   }[variant]
   if (!updateMechanism) throw new Error(`Unknown desktop variant: ${variant}`)
   if (channelBuild && updateMechanism === 'external') throw new Error('Channel builds require a supported native update owner')
-  const bundled = variant === 'bundled' || variant === 'store'
+  const bundled = variant === 'bundled' || variant === 'store' || BRANDED_BUNDLED_VARIANTS.has(variant)
   if (bundled && !payload?.runtime?.commands?.hermes) {
     throw new Error('PM payload has no completed launch contract; stage the bundle before packaging')
   }
   return {
     ...base,
-    payload: variant === "store" ? "bundled" : variant || "bootstrap",
+    payload: variant === "store" || BRANDED_BUNDLED_VARIANTS.has(variant) ? "bundled" : variant || "bootstrap",
     distribution: "desktop-app",
 
     updateMechanism: commitBuild ? 'external' : updateMechanism,
     tag: channelBuild?.receiverCandidate ? channelBuild.releaseTag : env.HERMES_PAYLOAD_TAG || null,
+    // A branded bundled carrier keeps its own identity in the stamp; the
+    // runtime shape is the `bundled` payload above.
+    ...(BRANDED_BUNDLED_VARIANTS.has(variant) ? { identityVariant: variant } : {}),
     ...(bundleEnv ? { bundleEnv } : {}),
     ...(bundled ? { runtime: payload.runtime } : {})
   }

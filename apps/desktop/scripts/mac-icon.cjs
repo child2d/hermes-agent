@@ -16,10 +16,13 @@
 'use strict'
 
 const path = require('node:path')
+const fs = require('node:fs')
 const { spawnSync } = require('node:child_process')
 
 const ICON_COMPOSER = 'assets/icon.icon'
 const LEGACY_ICNS = 'assets/icon.icns'
+
+const DEFAULT_ICON_BASE = 'assets/icon'
 
 /**
  * The actool short version from `actool --version` plist output, or null
@@ -58,25 +61,37 @@ function installedActoolVersion(run = (command, args) => spawnSync(command, args
 
 /**
  * The `mac.icon` value for this host: the Icon Composer package when actool
- * can compile it, otherwise the legacy .icns alone.
+ * can compile it AND the package exists for this variant, otherwise the
+ * legacy .icns alone.
+ *
+ * `iconBase` is the variant's extensionless artwork base (product-identity
+ * `iconBase`). Enterprise variants ship only .icns/.ico/.png, so the layered
+ * package is absent and the .icns is packaged.
  * @param {string} appDir the apps/desktop directory
- * @param {{ platform?: string, actoolVersion?: string | null, log?: (message: string) => void }} [options]
+ * @param {{ platform?: string, actoolVersion?: string | null, iconBase?: string, composerExists?: (file: string) => boolean, log?: (message: string) => void }} [options]
  * @returns {string}
  */
 function macIconResource(appDir, options = {}) {
   const platform = options.platform ?? process.platform
-  if (platform !== 'darwin') return LEGACY_ICNS
+  const iconBase = options.iconBase ?? DEFAULT_ICON_BASE
+  const composer = `${iconBase}.icon`
+  const legacy = `${iconBase}.icns`
+  if (platform !== 'darwin') return legacy
   const version = options.actoolVersion === undefined ? installedActoolVersion() : options.actoolVersion
-  if (actoolSupportsIconComposer(version)) return ICON_COMPOSER
+  const composerExists = options.composerExists ?? ((/** @type {string} */ file) => fs.existsSync(path.join(appDir, file)))
+  if (actoolSupportsIconComposer(version) && composerExists(composer)) return composer
   const log = options.log ?? (message => console.warn(message))
   log(
-    `[mac-icon] actool ${version ?? 'not found'}: packaging ${LEGACY_ICNS} only; ` +
-      `the macOS 26 layered icon (${path.join(appDir, ICON_COMPOSER)}) needs Xcode 26 or newer`
+    actoolSupportsIconComposer(version) && !composerExists(composer)
+      ? `[mac-icon] no layered icon at ${path.join(appDir, composer)}: packaging ${legacy} only`
+      : `[mac-icon] actool ${version ?? 'not found'}: packaging ${legacy} only; ` +
+        `the macOS 26 layered icon (${path.join(appDir, composer)}) needs Xcode 26 or newer`
   )
-  return LEGACY_ICNS
+  return legacy
 }
 
 module.exports = {
+  DEFAULT_ICON_BASE,
   ICON_COMPOSER,
   LEGACY_ICNS,
   actoolSupportsIconComposer,

@@ -231,14 +231,20 @@ def build_stamp(
     #               must not stamp as one: 'bundled' readers locate an
     #               enclosing desktop app (bundled_app.resolve_bundle_layout)
     #               and a tree without one is damage to them.
+    #   plankton  — the enterprise desktop fork: a branded bundled carrier.
+    #               It ships the SAME in-artifact runtime as 'bundled' and
+    #               stamps as 'bundled' (shared bundled shape logic), but its
+    #               own identity and first-launch data roots come from the
+    #               desktop build variant. Never a source checkout.
     # Release artifacts pin a tag. Commit builds never enter an update channel.
     variant = os.environ.get("HERMES_DESKTOP_VARIANT", "").strip()
-    if variant not in ("", "bootstrap", "bundled", "light", "store", "runtime"):
+    if variant not in ("", "bootstrap", "bundled", "light", "store", "runtime", "plankton"):
         raise SystemExit(
             f"write_install_stamp: unknown HERMES_DESKTOP_VARIANT {variant!r} "
-            "(expected unset, 'bootstrap', 'bundled', 'light', 'store', or 'runtime')"
+            "(expected unset, 'bootstrap', 'bundled', 'light', 'store', "
+            "'runtime', or 'plankton')"
         )
-    payload = "bundled" if variant == "store" else (variant or "bootstrap")
+    payload = "bundled" if variant in ("store", "plankton") else (variant or "bootstrap")
     tag = os.environ.get("HERMES_PAYLOAD_TAG") or None
 
     _stable_tag = re.compile(r"^v(0|[1-9]\d{0,2})\.\d+\.\d+$")

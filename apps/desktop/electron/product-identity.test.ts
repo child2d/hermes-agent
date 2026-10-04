@@ -299,3 +299,111 @@ test('store carries the Partner Center MSIX identity and no other variant does',
     assert.equal((await identityForVariant(v)).storeMsix, undefined, `variant ${v} must carry no storeMsix`)
   }
 })
+
+test('the enterprise variant owns its identity and leaves upstream variants untouched', async (): Promise<void> => {
+  const plankton: ProductIdentity = await identityForVariant('plankton')
+  assert.equal(plankton.enterprise, true)
+  assert.equal(plankton.bundledCarrier, true)
+  assert.equal(plankton.light, false)
+  assert.equal(plankton.store, false)
+  assert.equal(plankton.displayName, 'Plankton')
+  assert.equal(plankton.appNamePascal, 'Plankton')
+  assert.equal(plankton.artifactNamePascal, 'Plankton')
+  assert.equal(plankton.appId, 'com.shaoke.plankton')
+  assert.equal(plankton.iconBase, 'assets/plankton/icon')
+  assert.equal(plankton.channel, 'latest')
+  assert.equal(plankton.storeMsix, undefined)
+
+  const full: ProductIdentity = await identityForVariant(undefined)
+  assert.ok(!full.enterprise)
+  assert.ok(!full.bundledCarrier)
+  assert.equal(full.appId, 'com.nousresearch.hermes')
+  assert.equal(full.iconBase, 'assets/icon')
+
+  for (const field of ['displayName', 'appId', 'appNamePascal'] as const) {
+    assert.notEqual(plankton[field], full[field], `${field} must isolate the enterprise app`)
+  }
+
+  for (const variant of ['bundled', 'light'] as const) {
+    const other: ProductIdentity = await identityForVariant(variant)
+    assert.ok(!other.enterprise)
+    assert.ok(!other.bundledCarrier)
+    assert.equal(other.iconBase, 'assets/icon')
+  }
+})
+
+test('an enterprise build pins userData to its own appData dir before the app name can change', async (): Promise<void> => {
+  const plankton: ProductIdentity = await identityForVariant('plankton')
+  const runtime: { applyDesktopIdentity: typeof applyDesktopIdentity } = await import('./product-identity')
+  const root: string = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-plankton-'))
+  const paths: Record<string, string> = { appData: root, userData: path.join(root, 'Hermes') }
+  let name: string = 'Hermes'
+
+  const app: Parameters<typeof applyDesktopIdentity>[0] = {
+    getPath: (key: string): string => paths[key],
+    setPath: (key: string, value: string): void => {
+      assert.ok(fs.statSync(value).isDirectory())
+      paths[key] = value
+    },
+    setName: (value: string): void => {
+      name = value
+    }
+  }
+
+  try {
+    assert.equal(runtime.applyDesktopIdentity(app, plankton), plankton.displayName)
+    assert.equal(paths.userData, path.join(root, 'Plankton'))
+    assert.equal(name, plankton.displayName)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('packaging the enterprise variant follows its icon and identity', async (): Promise<void> => {
+  const pkg: { productName: string } = require('../package.json')
+  delete require.cache[require.resolve('../product-identity.cjs')]
+  delete require.cache[require.resolve('../electron-builder.config.cjs')]
+  const load = (): PackagingConfiguration => {
+    delete require.cache[require.resolve('../product-identity.cjs')]
+    delete require.cache[require.resolve('../electron-builder.config.cjs')]
+    return require('../electron-builder.config.cjs')
+  }
+
+  const plankton: ProductIdentity = await identityForVariant('plankton')
+  const config: PackagingConfiguration = load()
+
+  assert.equal(config.appId, 'com.shaoke.plankton')
+  assert.equal(config.productName, plankton.displayName)
+  assert.equal(config.icon, 'assets/plankton/icon')
+  assert.equal(config.mac.icon, 'assets/plankton/icon.icns')
+  assert.equal(config.artifactName, `Plankton-\${version}-\${os}-\${arch}.\${ext}`)
+  assert.deepEqual(config.protocols[0].schemes, ['hermes'])
+  assert.ok(config.protocols[0].name.includes(plankton.displayName))
+  const extraResources = (config.extraResources ?? []) as Array<{ from?: string; to?: string }>
+  assert.ok(extraResources.some(r => r.from === 'assets/plankton/icon.ico' && r.to === 'icon.ico'))
+
+  const payload = {
+    runtime: {
+      repoDir: 'hermes-agent',
+      toolsDir: 'tools',
+      storePython: 'tools/python/bin/python3',
+      sitePackages: 'venv/lib/python3.14/site-packages',
+      commands: { hermes: 'bin/hermes' }
+    }
+  }
+  const built = (await import('../scripts/write-build-stamp.mjs')).buildStampPayload(
+    { commit: 'a'.repeat(40), branch: 'main', dirty: false, source: 'local' },
+    { HERMES_DESKTOP_VARIANT: 'plankton' },
+    'darwin',
+    payload
+  )
+  // Plankton is a branded bundled carrier: the payload kind is the shared
+  // 'bundled' shape (so every bundled gate applies) and the branding variant
+  // rides in identityVariant.
+  assert.equal(built.payload, 'bundled')
+  assert.equal(built.identityVariant, 'plankton')
+  assert.equal(built.updateMechanism, 'electron-updater')
+  assert.deepEqual(built.runtime, payload.runtime)
+
+  assert.equal(pkg.productName, 'Hermes')
+})

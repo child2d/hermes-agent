@@ -38,7 +38,7 @@ export function resolveDesktopUserData(defaultPath, env = process.env) {
     : defaultPath + (env.HERMES_DATA_DIR_SUFFIX || '')
 }
 
-export function resolveDesktopHermesHome({ home, env = process.env, platform = process.platform, directoryExists = () => false, readWindowsHome = () => null }) {
+export function resolveDesktopHermesHome({ home, env = process.env, platform = process.platform, directoryExists = () => false, readWindowsHome = () => null, defaultHome = null }) {
   const paths = platform === 'win32' ? path.win32 : path.posix
   if (env.HERMES_HOME) {
     return normalizeHermesHomeRoot(env.HERMES_HOME, paths)
@@ -54,13 +54,17 @@ export function resolveDesktopHermesHome({ home, env = process.env, platform = p
       return normalizeHermesHomeRoot(registryHome, paths)
     }
   }
-  const defaultHome = platformDefaultHermesHome(home, env, platform)
-  // Keep the legacy migration for ordinary installs, not isolated suffix runs.
-  if (platform === 'win32' && !env.HERMES_DATA_DIR_SUFFIX) {
+  // A caller-supplied default (the enterprise fork's own home) replaces
+  // upstream's platform default only — every explicit override above still wins.
+  const resolvedDefaultHome = defaultHome || platformDefaultHermesHome(home, env, platform)
+  // Keep the legacy migration for ordinary installs, not isolated suffix runs,
+  // and never for a caller-supplied default (which must not fall back to
+  // personal ~/.hermes state).
+  if (platform === 'win32' && !env.HERMES_DATA_DIR_SUFFIX && !defaultHome) {
     const legacy = paths.join(home, '.hermes')
-    if (!directoryExists(defaultHome) && directoryExists(legacy)) {
+    if (!directoryExists(resolvedDefaultHome) && directoryExists(legacy)) {
       return legacy
     }
   }
-  return defaultHome
+  return resolvedDefaultHome
 }

@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 
 import { test, vi } from 'vitest'
 
+import { platformDefaultHermesHome } from './data-paths'
 import {
   baseSshOptions,
   buildControlArgs,
@@ -111,6 +112,37 @@ test('controlSocketPath default base stays under sun_path even with the temp-lis
   // And it must NOT live under the deeply-nested macOS per-user temp dir.
   assert.ok(!p.includes('/var/folders/'), 'default base must not be os.tmpdir() on macOS')
 })
+
+test.runIf(process.platform !== 'win32')(
+  'an explicit control dir overrides the personal ~/.hermes default',
+  () => {
+    const previous = process.env.HERMES_DESKTOP_SSH_CONTROL_DIR
+    // Short base: the sun_path budget falls back to /tmp when the path is deep.
+    const scoped = fs.mkdtempSync('/tmp/hermes-home-')
+
+    try {
+      process.env.HERMES_DESKTOP_SSH_CONTROL_DIR = path.join(scoped, 'desktop-ssh')
+      assert.equal(
+        path.dirname(controlSocketPath('me', 'box', 22)),
+        path.join(scoped, 'desktop-ssh')
+      )
+
+      delete process.env.HERMES_DESKTOP_SSH_CONTROL_DIR
+      assert.equal(
+        path.dirname(controlSocketPath('me', 'box', 22)),
+        path.join(platformDefaultHermesHome(os.homedir()), 'desktop-ssh')
+      )
+    } finally {
+      if (previous === undefined) {
+        delete process.env.HERMES_DESKTOP_SSH_CONTROL_DIR
+      } else {
+        process.env.HERMES_DESKTOP_SSH_CONTROL_DIR = previous
+      }
+
+      fs.rmSync(scoped, { recursive: true, force: true })
+    }
+  }
+)
 
 test.runIf(process.platform !== 'win32')(
   'deep HOME uses a private short directory and binds a real listener',

@@ -16,6 +16,9 @@
  *    local install (the default; also what non-desktop stamps carry).
  *  - 'bundled': the agent runtime ships inside the artifact resources.
  *  - 'light': no runtime at all; remote connections only.
+ * The enterprise `plankton` variant is a branded bundled carrier: its stamp
+ * payload is `bundled` (so every bundled gate above applies) and its own
+ * identity travels in `identityVariant`.
  * Selected at build time by HERMES_DESKTOP_VARIANT (unset = bootstrap).
  */
 export type ArtifactKind = 'bootstrap' | 'bundled' | 'light'
@@ -87,6 +90,13 @@ export interface InstallStamp {
   displayVersion: string | null
   distance: number | null
   payload: ArtifactKind
+  /**
+   * Branding variant when it differs from the payload-derived one: a branded
+   * bundled carrier (plankton) stamps `payload: bundled` but bakes its own
+   * identity. Absent on every upstream artifact — bundle-electron-main.mjs
+   * falls back to the payload-derived variant.
+   */
+  identityVariant?: string
   /** Present on bundled artifacts. Validated at build time, never discovered at boot. */
   runtime?: PayloadRuntime
   /** Complete channel inputs, absent on legacy releases and one-off builds. */

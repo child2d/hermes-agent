@@ -87,3 +87,35 @@ test('a user-bin launcher is ignored when it reports no Hermes source tree', ():
     fs.rmSync(base, { recursive: true, force: true })
   }
 })
+
+// Enterprise isolation: the ambient ~/.local/bin/hermes usually points into a
+// personal ~/.hermes install. A scoped lookup must never adopt it, while a
+// launcher published under the enterprise home stays reachable.
+test.skipIf(process.platform === 'win32')(
+  'a scoped lookup ignores the personal ~/.local/bin launcher but honours its own home',
+  (): void => {
+    const base: string = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'user-launcher-')))
+    const hermesHome: string = path.join(base, 'home', '.plankton', 'engine', 'home')
+
+    try {
+      const personalRoot: string = path.join(base, 'home', '.hermes', 'hermes-agent')
+      sourceTree(personalRoot)
+      publishLauncher(path.join(base, 'home', '.local', 'bin'), personalRoot)
+      vi.stubEnv('HOME', path.join(base, 'home'))
+
+      // Unscoped: upstream behaviour still finds the personal launcher.
+      assert.equal(userLauncherInstallRoot(false, hermesHome)?.root, personalRoot)
+
+      // Scoped: the personal launcher outside hermesHome is ignored.
+      assert.equal(userLauncherInstallRoot(false, hermesHome, { scopeHome: hermesHome }), null)
+
+      // A launcher under the enterprise home is still honoured.
+      const enterpriseRoot: string = path.join(hermesHome, 'hermes-agent')
+      sourceTree(enterpriseRoot)
+      publishLauncher(path.join(hermesHome, 'bin'), enterpriseRoot)
+      assert.equal(userLauncherInstallRoot(false, hermesHome, { scopeHome: hermesHome })?.root, enterpriseRoot)
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true })
+    }
+  }
+)

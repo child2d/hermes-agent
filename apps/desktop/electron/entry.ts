@@ -5,9 +5,21 @@ import path from 'node:path'
 import { app } from 'electron'
 
 import { resolveDesktopHermesHome } from './data-paths'
+import { enterpriseHermesHomeFor } from './enterprise-paths'
 import { readDesktopLaunchConfig } from './renderer-heap-flags'
 import { wslgLaunchArgs } from './wslg-launch'
 import { spawnWslgLaunch } from './wslg-launch-process'
+
+// The baked product identity is a build-time global (see product-identity.ts).
+// Read it defensively instead of importing the accessor: importing pulls in
+// product-identity.ts, whose dev fallback `require('../product-identity.cjs')`
+// is absent beside a dev/test bundle and would abort this pre-launch module.
+// `undefined` (dev bundle) simply means "not an enterprise artifact".
+declare const __HERMES_PRODUCT_IDENTITY__: { enterprise?: boolean } | undefined
+
+function bakedEnterpriseIdentity(): { enterprise?: boolean } | null {
+  return typeof __HERMES_PRODUCT_IDENTITY__ === 'undefined' ? null : __HERMES_PRODUCT_IDENTITY__
+}
 
 function configuredElectronFlags(env: NodeJS.ProcessEnv): string[] {
   // Resolve the home exactly like main.ts does, through the shared resolver:
@@ -20,7 +32,14 @@ function configuredElectronFlags(env: NodeJS.ProcessEnv): string[] {
     // Linux-only pre-launch path; the win32 legacy-migration probe is never
     // consulted on posix, so its directoryExists callback is not needed here.
     directoryExists: () => false,
-    readWindowsHome: () => null
+    readWindowsHome: () => null,
+    // Enterprise builds read config.yaml from the enterprise home here too, so
+    // pre-launch flags and the running app agree.
+    defaultHome: enterpriseHermesHomeFor(bakedEnterpriseIdentity(), {
+      home: os.homedir(),
+      platform: process.platform,
+      env
+    })
   })
 
   try {

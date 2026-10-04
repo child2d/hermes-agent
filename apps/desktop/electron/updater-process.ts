@@ -68,17 +68,35 @@ export function resolveInstallationLauncher(
 const CMD_UNSAFE_PATH: RegExp = /["%&|<>^\r\n]/
 
 /** Published user-bin launchers, at fixed locations: a GUI launch's PATH may omit them. */
-function userBinLaunchers(isWindows: boolean, hermesHome: string, extraDirs: string[] = []): string[] {
+function userBinLaunchers(
+  isWindows: boolean,
+  hermesHome: string,
+  extraDirs: string[] = [],
+  scopeHome: string | null = null
+): string[] {
   const names: string[] = isWindows ? ['hermes.exe', 'hermes.cmd'] : ['hermes']
   const defaultHome: string = platformDefaultHermesHome(os.homedir(), process.env, isWindows ? 'win32' : 'linux')
+  const scoped: string = String(scopeHome || '').trim()
 
-  const dirs: string[] = isWindows
-    ? [path.join(hermesHome || defaultHome, 'bin'), path.join(defaultHome, 'bin'), ...extraDirs]
-    : [path.join(os.homedir(), '.local', 'bin'), path.join(hermesHome || defaultHome, 'bin'), ...extraDirs]
+  // scoped: an enterprise build must never reach a launcher outside its own
+  // home, so the ambient ~/.local/bin (POSIX) and %LOCALAPPDATA%\hermes\bin
+  // (Windows) candidates are dropped and only <scopeHome>/bin is searched.
+  const dirs: string[] = scoped
+    ? [path.join(scoped, 'bin'), ...extraDirs]
+    : isWindows
+      ? [path.join(hermesHome || defaultHome, 'bin'), path.join(defaultHome, 'bin'), ...extraDirs]
+      : [path.join(os.homedir(), '.local', 'bin'), path.join(hermesHome || defaultHome, 'bin'), ...extraDirs]
 
   return [...new Set(dirs)]
     .flatMap((dir: string): string[] => names.map((name: string): string => path.join(dir, name)))
     .filter(stagedFileExists)
+}
+
+/** True when `child` is `parent` itself or nested under it (both resolved). */
+function isInsideDirectory(child: string, parent: string): boolean {
+  const rel: string = path.relative(path.resolve(parent), path.resolve(child))
+
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
 /**
@@ -86,15 +104,29 @@ function userBinLaunchers(isWindows: boolean, hermesHome: string, extraDirs: str
  * setup-hermes.sh clone) is reachable only through the user-bin launcher it
  * published. Return the install directory that launcher reports, when it is a
  * Hermes source tree; the caller still resolves and probes it by root.
+ *
+ * `options.scopeHome` restricts discovery to launchers published under that
+ * home (enterprise builds), so a machine-wide personal launcher is ignored.
  */
 export function userLauncherInstallRoot(
   isWindows: boolean = process.platform === 'win32',
-  hermesHome: string = process.env.HERMES_HOME ?? ''
+  hermesHome: string = process.env.HERMES_HOME ?? '',
+  options: { scopeHome?: string | null } = {}
 ): { launcher: string; root: string } | null {
-  for (const launcher of userBinLaunchers(isWindows, hermesHome)) {
+  const scopeHome: string = String(options.scopeHome || '').trim()
+
+  for (const launcher of userBinLaunchers(isWindows, hermesHome, [], scopeHome || null)) {
     const root: string | null = launcherInstallDirectory(launcher)
 
-    if (root && existsSync(path.join(root, 'hermes_cli', 'main.py'))) {
+    if (!root) {
+      continue
+    }
+
+    if (scopeHome && !isInsideDirectory(root, scopeHome)) {
+      continue
+    }
+
+    if (existsSync(path.join(root, 'hermes_cli', 'main.py'))) {
       return { launcher, root }
     }
   }

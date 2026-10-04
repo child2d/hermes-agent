@@ -9,12 +9,19 @@ import { environmentDefaultsBanner } from './bundle-env.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '../../..')
 
+// Variants that stamp `payload: bundled` (runtime shape) under their own
+// branding; the stamp records the branding variant in `identityVariant`.
+const BRANDED_BUNDLED_VARIANTS = new Set(['plankton'])
+
 // Evaluate the one identity module in a fresh process. Its CJS cache and the
 // caller's environment must not carry a previous variant into this artifact.
 function productIdentity(source, stamp) {
-  const variant = stamp.updateMechanism === 'microsoft-store' ? 'store'
+  const derived = stamp.updateMechanism === 'microsoft-store' ? 'store'
     : stamp.payload === 'bootstrap' ? '' : stamp.payload
-  if (!['', 'bundled', 'light', 'store'].includes(variant)) {
+  // A branded bundled carrier keeps its own baked identity even though its
+  // payload kind is 'bundled'. The stamp is the whole source: no build env.
+  const variant = BRANDED_BUNDLED_VARIANTS.has(stamp.identityVariant) ? stamp.identityVariant : derived
+  if (!['', 'bundled', 'light', 'store', 'plankton'].includes(variant)) {
     throw new Error(`Invalid desktop stamp payload: ${stamp.payload}`)
   }
   return execFileSync(process.execPath, ['-e', 'console.log(JSON.stringify(require(process.argv[1])))',

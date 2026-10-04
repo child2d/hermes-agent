@@ -39,6 +39,52 @@ test('default data roots append the suffix literally on each platform', (): void
   }
 })
 
+test('a caller-supplied defaultHome replaces the platform default but never an explicit override', (): void => {
+  const home: string = '/home/test'
+  const enterprise: string = path.posix.join(home, '.plankton', 'engine', 'home')
+
+  // No override -> the enterprise default wins.
+  assert.equal(
+    resolveDesktopHermesHome({ home, env: {}, platform: 'linux', defaultHome: enterprise }),
+    enterprise
+  )
+
+  // Explicit HERMES_HOME still wins (multi-instance / sandbox).
+  assert.equal(
+    resolveDesktopHermesHome({ home, env: { HERMES_HOME: '/explicit/home' }, platform: 'linux', defaultHome: enterprise }),
+    '/explicit/home'
+  )
+
+  // HERMES_DESKTOP_USER_DATA_DIR still wins (fresh-install rehearsals).
+  assert.equal(
+    resolveDesktopHermesHome({
+      home,
+      env: { HERMES_DESKTOP_USER_DATA_DIR: '/explicit/electron' },
+      platform: 'linux',
+      defaultHome: enterprise
+    }),
+    '/explicit/electron/hermes-home'
+  )
+
+  // Absent defaultHome -> upstream's platform default is bit-for-bit unchanged.
+  assert.equal(resolveDesktopHermesHome({ home, env: {}, platform: 'linux' }), path.posix.join(home, '.hermes'))
+
+  // Windows: a supplied default is never redirected into personal ~/.hermes
+  // by the legacy-migration probe, even when ~/.hermes exists.
+  const windowsHome: string = 'C:\\Users\\test'
+  const windowsEnterprise: string = path.win32.join(windowsHome, 'AppData', 'Local', 'plankton', 'engine', 'home')
+  assert.equal(
+    resolveDesktopHermesHome({
+      home: windowsHome,
+      env: {},
+      platform: 'win32',
+      directoryExists: (): boolean => true,
+      defaultHome: windowsEnterprise
+    }),
+    windowsEnterprise
+  )
+})
+
 test('explicit homes and userData retain precedence, and suffixed Windows homes never use legacy state', (): void => {
   const home: string = '/home/test'
 

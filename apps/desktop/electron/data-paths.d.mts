@@ -12,6 +12,10 @@ export interface HermesHomeOptions {
   platform?: NodeJS.Platform
   directoryExists?: (directory: string) => boolean
   readWindowsHome?: () => string | null
+  /** Replaces upstream's platform default (`~/.hermes`) when no explicit
+   *  HERMES_HOME / HERMES_DESKTOP_USER_DATA_DIR is set. The enterprise fork
+   *  passes its own home here. */
+  defaultHome?: string | null
 }
 
 export function resolveDesktopHermesHome(options: HermesHomeOptions): string

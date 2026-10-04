@@ -207,7 +207,11 @@ function defaultControlDir(): string {
     return path.join(os.tmpdir(), 'hermes-desktop-ssh')
   }
 
-  const homeDir = path.join(platformDefaultHermesHome(os.homedir()), 'desktop-ssh')
+  // An explicit control dir (the enterprise build pins one under its own home)
+  // keeps the SSH socket out of a personal ~/.hermes. Unset → the historical
+  // platform default, suffix handling included, is untouched.
+  const explicitDir: string = String(process.env.HERMES_DESKTOP_SSH_CONTROL_DIR || '').trim()
+  const homeDir = explicitDir || path.join(platformDefaultHermesHome(os.homedir()), 'desktop-ssh')
 
   // Include the filename and OpenSSH's temporary-listener suffix in the byte budget.
   return Buffer.byteLength(path.join(homeDir, '0123456789abcdef.sock.0123456789abcdef')) <= 104

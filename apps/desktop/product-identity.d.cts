@@ -3,6 +3,12 @@ interface ProductIdentity {
   light: boolean
   /** True for a Store-submission build (Windows Store packaging identity). */
   store: boolean
+  /** True for the enterprise fork variant (`plankton`): own data roots + model
+   *  seed. False for every upstream variant. */
+  enterprise?: boolean
+  /** True when this variant ships the `bundled` in-artifact runtime shape
+   *  under its own branding (enterprise fork). */
+  bundledCarrier?: boolean
   /** Display name. e.g. "Hermes Light" */
   displayName: string
   /** OS-level app identity. e.g. "com.nousresearch.hermes-light" */
@@ -11,6 +17,8 @@ interface ProductIdentity {
   appNamePascal: string
   /** Artifact prefix stays compatible with release archive consumers. */
   artifactNamePascal: string
+  /** Packaging artwork base path, extensionless. e.g. "assets/icon" */
+  iconBase?: string
   /** Windows GUI executable stem; not the payload CLI launcher path. */
   windowsExecutableName: string
   /** Exposed payload CLI command. */

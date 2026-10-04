@@ -215,6 +215,8 @@ import {
 } from './dashboard-token'
 import { resolveDashboardWebDist } from './dashboard-web-dist'
 import { resolveDesktopHermesHome, resolveDesktopUserData } from './data-paths'
+import { seedEnterpriseModelConfig } from './enterprise-model-seed'
+import { enterpriseHermesHomeFor } from './enterprise-paths'
 import { loadOrCreateInstallationId, sshOwnershipId } from './desktop-installation'
 import { formatDesktopLogLine, formatLogStamp } from './desktop-log-line'
 import {
@@ -1251,11 +1253,45 @@ if (process.env.HERMES_DESKTOP_TMPDIR) {
   delete process.env.HERMES_DESKTOP_TMPDIR
 }
 
+// Enterprise fork: the engine home defaults to the org's own directory
+// (~/.plankton/engine/home) instead of the personal ~/.hermes. null for every
+// upstream variant, so their resolution is bit-for-bit unchanged. An explicit
+// HERMES_HOME in the environment still wins (see resolveDesktopHermesHome).
+const ENTERPRISE_HERMES_HOME_DEFAULT: string | null = enterpriseHermesHomeFor(PRODUCT_IDENTITY, {
+  home: app.getPath('home'),
+  platform: process.platform
+})
+
 const HERMES_HOME: string = resolveDesktopHermesHome({
   home: app.getPath('home'),
   directoryExists,
-  readWindowsHome: (): string | null => readWindowsUserEnvVar('HERMES_HOME')
+  readWindowsHome: (): string | null => readWindowsUserEnvVar('HERMES_HOME'),
+  defaultHome: ENTERPRISE_HERMES_HOME_DEFAULT
 })
+
+// Make the resolved home visible to every child process and to the pure
+// helpers (backend-env storeFirstPath, bootstrap) that re-resolve it from
+// process.env — so the enterprise app never reaches for personal ~/.hermes.
+// Skip when the environment already set one (override / multi-instance).
+if (ENTERPRISE_HERMES_HOME_DEFAULT && !process.env.HERMES_HOME) {
+  process.env.HERMES_HOME = HERMES_HOME
+}
+
+// The SSH control socket default is a personal ~/.hermes/desktop-ssh. Pin it
+// under the resolved home for enterprise builds so no personal path is used.
+if (PRODUCT_IDENTITY.enterprise && !process.env.HERMES_DESKTOP_SSH_CONTROL_DIR) {
+  process.env.HERMES_DESKTOP_SSH_CONTROL_DIR = path.join(HERMES_HOME, 'desktop-ssh')
+}
+
+// First-launch model seed (enterprise only). Values come from an install-time
+// file, never from the repo or the bundle; an existing config.yaml is never
+// overwritten. No-op ('no-source') until the operator drops the seed file.
+if (PRODUCT_IDENTITY.enterprise) {
+  const seed = seedEnterpriseModelConfig({ identity: PRODUCT_IDENTITY, hermesHome: HERMES_HOME })
+  console.log(
+    `[hermes] enterprise model seed: ${seed.seeded ? `wrote ${seed.configPath}` : `skipped (${seed.reason})`}`
+  )
+}
 
 // #77311: `desktop.electron_flags` and the renderer heap ceiling
 // (`desktop.renderer_max_old_space_mb`) used to reach Chromium only through
@@ -5441,7 +5477,22 @@ async function resolveHermesBackend(backendArgs: string[]): Promise<ResolvedHerm
     //    fixed user-bin location: a Finder/Dock launch inherits a PATH without
     //    ~/.local/bin. The reported root is then resolved and probed like any
     //    installed runtime; HERMES_DESKTOP_IGNORE_EXISTING=1 skips it too.
-    const userInstall: ReturnType<typeof userLauncherInstallRoot> = userLauncherInstallRoot(IS_WINDOWS, HERMES_HOME)
+    const userInstall: ReturnType<typeof userLauncherInstallRoot> = userLauncherInstallRoot(IS_WINDOWS, HERMES_HOME, {
+      // Enterprise builds only trust launchers published under their own home;
+      // the ambient ~/.local/bin/hermes (which usually points into a personal
+      // ~/.hermes/hermes-agent install) must never be adopted.
+      scopeHome: PRODUCT_IDENTITY.enterprise ? HERMES_HOME : null
+    })
+
+    if (PRODUCT_IDENTITY.enterprise && !userInstall) {
+      const ambient: ReturnType<typeof userLauncherInstallRoot> = userLauncherInstallRoot(IS_WINDOWS, HERMES_HOME)
+
+      if (ambient) {
+        rememberLog(
+          `[bootstrap] ignoring user-bin launcher ${ambient.launcher} -> ${ambient.root}: outside enterprise home ${HERMES_HOME}`
+        )
+      }
+    }
 
     if (userInstall) {
       const userBackend: SourceBackend | null = await installedRuntimeGate.resolve(userInstall.root, () =>

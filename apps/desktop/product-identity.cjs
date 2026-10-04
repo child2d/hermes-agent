@@ -2,12 +2,20 @@
 // value a variant owns. HERMES_DESKTOP_VARIANT=light builds "Hermes
 // Light", the remote-only client; everything else is full "Hermes".
 //
+// 'plankton' is the enterprise variant: a *branded bundled carrier*. It ships
+// the same in-artifact runtime as `bundled` (the install stamp still reads
+// `payload: bundled`; see scripts/write-build-stamp.mjs), under its own name,
+// app id, icon and first-launch data roots. See ENTERPRISE.md.
+//
 // Consumed at build time by electron-builder.config.cjs (packaging
 // identity). electron/product-identity.ts is the typed runtime accessor.
 // @ts-check
 /// <reference types="node" />
 'use strict'
 
+/** @typedef {{ display: string, kebab: string, pascal: string, appIdBase?: string, iconBase?: string, enterprise?: boolean, bundledCarrier?: boolean }} Variant */
+
+/** @type {Record<string, Variant>} */
 const variants = {
   '': { display: 'Hermes', kebab: 'hermes', pascal: 'Hermes' },
   light: {
@@ -19,12 +27,29 @@ const variants = {
     display: 'Hermes Agent',
     kebab: 'hermes-bundled',
     pascal: 'HermesBundled'
+  },
+  // Plankton — the enterprise variant. `enterprise: true` is the one switch
+  // the desktop runtime reads to pick enterprise data roots (see
+  // electron/enterprise-paths.ts) and the first-launch model seed
+  // (electron/enterprise-model-seed.ts). `bundledCarrier: true` says its
+  // artifact reuses the `bundled` in-artifact runtime shape; electron-builder
+  // and the install stamp key on it (see electron-builder.config.cjs,
+  // scripts/write-build-stamp.mjs). `appIdBase` and `iconBase` keep every
+  // upstream variant on today's values.
+  plankton: {
+    display: 'Plankton',
+    kebab: 'plankton',
+    pascal: 'Plankton',
+    appIdBase: 'com.shaoke.plankton',
+    iconBase: 'assets/plankton/icon',
+    enterprise: true,
+    bundledCarrier: true
   }
 }
 
 const variant = process.env.HERMES_DESKTOP_VARIANT || ''
-if (!['', 'light', 'bundled', 'store'].includes(variant)) {
-  throw new Error(`Unknown HERMES_DESKTOP_VARIANT ${variant}. expected one of (empty), light, bundled, store`)
+if (!['', 'light', 'bundled', 'store', 'plankton'].includes(variant)) {
+  throw new Error(`Unknown HERMES_DESKTOP_VARIANT ${variant}. expected one of (empty), light, bundled, store, plankton`)
 }
 
 // 'store' is a Store-submission packaging identity layered on the bundled
@@ -34,6 +59,10 @@ if (!['', 'light', 'bundled', 'store'].includes(variant)) {
 const store = variant === 'store'
 const light = variant === 'light'
 const name = variants[store ? 'bundled' : (variant || '')]
+// Enterprise fork marker. False for every upstream variant, including the
+// store build (which inherits the `bundled` name and must keep upstream
+// behavior).
+const enterprise = variant === 'plankton'
 
 // The electron-updater feed channel this build PUBLISHES to. A canary
 // tag (vX.Y.Z+canary.YYYYMMDDTHHMMSSZ) writes canary.yml / light-canary.yml;
@@ -65,14 +94,21 @@ if (store && (canary || buildCommit)) {
 const identity = {
   store,
   light,
+  enterprise,
+  // True only for a branded variant that ships the `bundled` runtime shape.
+  bundledCarrier: Boolean(name.bundledCarrier),
   displayName,
-  appId: `com.nousresearch.${name.kebab}${kebabSuffix}`,
+  appId: `${name.appIdBase || `com.nousresearch.${name.kebab}`}${kebabSuffix}`,
   // Store and commit builds do not publish a release feed.
   channel: store || buildCommit ? null : light ? (canary ? 'light-canary' : 'light') : (canary ? 'canary' : 'latest'),
   appNamePascal: `${name.pascal}${pascalSuffix}`,
   artifactNamePascal: name.pascal,
   windowsExecutableName: kebabSuffix ? cliName : displayName,
   cliName,
+  // Packaging artwork base (no extension), resolved by electron-builder,
+  // scripts/mac-icon.cjs and scripts/after-pack.mjs. Upstream variants keep
+  // 'assets/icon'.
+  iconBase: name.iconBase || 'assets/icon',
   msixAppIdWithOrg: `NousResearch.${name.pascal}${pascalSuffix}`,
   ...(store
     ? {
