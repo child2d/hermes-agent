@@ -14,6 +14,7 @@ import { pathFromHermesDeepLink, resolveHermesOpenPath } from '@/lib/hermes-open
 import { storedSessionIdForNotification } from '@/lib/session-ids'
 import { announceNewSessionDraftKey } from '@/store/composer'
 import { recordAction } from '@/store/desktop-metrics'
+import { $enterpriseEnabled } from '@/store/enterprise-flag'
 import { requestMcpInstallFromDeepLink } from '@/store/mcp-deeplink-install'
 import { startMcpHealthChecker, stopMcpHealthChecker } from '@/store/mcp-health'
 import {
@@ -88,7 +89,13 @@ export function useDesktopIntegrations({
   // statusbar version pill and the update toasts. Also honors the main
   // process's "open updates" menu request.
   useEffect(() => {
-    startUpdatePoller()
+    // Enterprise (Plankton): self-update is disabled at the main process; do not
+    // even start the poller, so a startup launch issues no update check. Every
+    // upstream variant keeps the poller (see ENTERPRISE.md "Distribution").
+    if (!$enterpriseEnabled.get()) {
+      startUpdatePoller()
+    }
+
     // Background MCP health: HTTP/SSE servers only (never spawns stdio),
     // notifies on transitions into needs-auth/error with a Sign in action.
     startMcpHealthChecker()

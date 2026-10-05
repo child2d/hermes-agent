@@ -139,7 +139,13 @@ module.exports = {
     ...((process.env.HERMES_DESKTOP_VARIANT || '') === 'plankton'
       ? [
           { from: '../../LICENSE', to: 'LICENSE' },
-          { from: 'THIRD-PARTY-NOTICES.md', to: 'THIRD-PARTY-NOTICES.md' }
+          { from: 'THIRD-PARTY-NOTICES.md', to: 'THIRD-PARTY-NOTICES.md' },
+          // First-launch model seed (plankton only) — the build-machine file
+          // written by scripts/plankton-pack.sh; it may carry the provider key,
+          // so it lives under the gitignored build/ tree and never in git. The
+          // pack script guarantees the file exists (a keyless placeholder when
+          // no secret seed is present), so this entry never dangles.
+          { from: 'build/enterprise/model-seed.json', to: 'enterprise/model-seed.json' }
         ]
       : []),
     {

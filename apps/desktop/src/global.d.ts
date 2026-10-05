@@ -382,6 +382,8 @@ declare global {
       translucencySupported?: boolean
       /** Feature flag: the local-models UI is enabled. */
       localModelsEnabled?: boolean
+      /** Build-identity fact: this artifact is the enterprise (Plankton) build. */
+      enterpriseEnabled?: boolean
       /** Launch flag shared with every backend the app starts. */
       guestOnboardingEnabled?: boolean
       /** Sanitized local `display.skin`, available before any gateway connects. */

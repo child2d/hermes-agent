@@ -19,6 +19,19 @@ _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 # Module-level latch: the enabled/send mismatch is a static misconfiguration,
 # so it is reported once per process instead of on every hook fire.
 _warned_send_without_collection = False
+# Module-level latch for the enterprise override (a static fact of the build).
+_warned_enterprise_send = False
+
+
+def _enterprise_identity() -> bool:
+    """True when the enterprise (Plankton) app spawned this engine process.
+
+    Reuses the one definition in ``shared_metrics_consent`` (launcher-stamped
+    ``HERMES_ENTERPRISE=1``); imported lazily to keep this leaf module import-light.
+    """
+    from hermes_cli.observability.shared_metrics_consent import enterprise_identity
+
+    return enterprise_identity()
 
 
 @dataclass(frozen=True)
@@ -50,7 +63,7 @@ def resolve_send_config(config: dict | None) -> SendConfig:
     ``send`` is False whenever transmission cannot legitimately happen, so callers never
     have to re-check the combination.
     """
-    global _warned_send_without_collection
+    global _warned_send_without_collection, _warned_enterprise_send
 
     raw = config if isinstance(config, dict) else {}
     telemetry = raw.get("telemetry")
@@ -60,6 +73,25 @@ def resolve_send_config(config: dict | None) -> SendConfig:
 
     enabled = shared.get("enabled") is True
     send_requested = shared.get("send") is True
+
+    endpoint = shared.get("endpoint")
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        endpoint = DEFAULT_ENDPOINT
+    endpoint = endpoint.strip()
+
+    # Enterprise (Plankton) build: the transmission port is sealed at the build
+    # level, whatever the config says. This is the ONE gate every send path
+    # resolves through, so a config.yaml carrying `send: true` (a hand-edit, a
+    # migration, a synced profile) still cannot transmit. Logged, not silent.
+    if _enterprise_identity():
+        if send_requested and not _warned_enterprise_send:
+            _warned_enterprise_send = True
+            logger.error(
+                "Enterprise build: shared-metrics transmission is disabled by the "
+                "build; ignoring telemetry.shared_metrics.send=true (collection "
+                "stays local-only)."
+            )
+        return SendConfig(enabled=enabled, send=False, endpoint=endpoint)
 
     if send_requested and not enabled:
         # Loud, not silent: the user believes telemetry is being sent, and it never will be.
@@ -72,11 +104,6 @@ def resolve_send_config(config: dict | None) -> SendConfig:
                 "turn sending off."
             )
         return SendConfig(enabled=False, send=False, endpoint=DEFAULT_ENDPOINT)
-
-    endpoint = shared.get("endpoint")
-    if not isinstance(endpoint, str) or not endpoint.strip():
-        endpoint = DEFAULT_ENDPOINT
-    endpoint = endpoint.strip()
 
     if send_requested and not _endpoint_is_safe(endpoint):
         logger.error(

@@ -142,3 +142,91 @@ test('seed values are YAML-quoted so hostile characters cannot break the file', 
   assert.ok(lines.includes('  default: "a\\"b\\nc"'))
   assert.ok(lines.includes('  base_url: "https://x/#y"'))
 })
+
+test('a key-bearing seed writes the key to .env (0600), never into config.yaml', () => {
+  const home = sandboxHome()
+  const source = writeSeedFile(sandboxHome(), {
+    provider: 'deepseek',
+    model: 'deepseek-v4-flash',
+    base_url: 'https://api.deepseek.com',
+    api_key_env: 'DEEPSEEK_API_KEY',
+    api_key: 'sk-test-seed-value-1234567890'
+  })
+
+  const result = seedEnterpriseModelConfig({
+    identity: ENTERPRISE,
+    hermesHome: home,
+    env: { HERMES_ENTERPRISE_MODEL_SEED: source }
+  })
+
+  assert.equal(result.seeded, true)
+  assert.equal(result.envPath, path.join(home, '.env'))
+
+  const configBody = fs.readFileSync(path.join(home, 'config.yaml'), 'utf8')
+  assert.ok(!configBody.includes('sk-test-seed-value'), 'config.yaml must never carry the key')
+  assert.ok(!/api_key:/.test(configBody), 'config.yaml must contain no api_key field')
+
+  const envPath = path.join(home, '.env')
+  const envBody = fs.readFileSync(envPath, 'utf8')
+  assert.match(envBody, /^DEEPSEEK_API_KEY=sk-test-seed-value-1234567890$/m)
+  assert.equal(fs.statSync(envPath).mode & 0o777, 0o600, '.env must be 0600')
+})
+
+test('the seeded key env var name is honored, and defaults to DEEPSEEK_API_KEY', () => {
+  const home = sandboxHome()
+  const source = writeSeedFile(sandboxHome(), {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+    api_key_env: 'OPENAI_API_KEY',
+    api_key: 'sk-openai-seed'
+  })
+  seedEnterpriseModelConfig({
+    identity: ENTERPRISE,
+    hermesHome: home,
+    env: { HERMES_ENTERPRISE_MODEL_SEED: source }
+  })
+  assert.match(fs.readFileSync(path.join(home, '.env'), 'utf8'), /^OPENAI_API_KEY=sk-openai-seed$/m)
+})
+
+test('an existing .env is never overwritten by the key seed', () => {
+  const home = sandboxHome()
+  const envPath = path.join(home, '.env')
+  const original = 'OTHER=keep-me\n'
+  fs.writeFileSync(envPath, original, 'utf8')
+  const source = writeSeedFile(sandboxHome(), {
+    provider: 'deepseek',
+    model: 'deepseek-v4-flash',
+    api_key: 'sk-should-not-land'
+  })
+
+  const result = seedEnterpriseModelConfig({
+    identity: ENTERPRISE,
+    hermesHome: home,
+    env: { HERMES_ENTERPRISE_MODEL_SEED: source }
+  })
+  assert.equal(result.seeded, true)
+  assert.equal(result.envPath, undefined)
+  assert.equal(fs.readFileSync(envPath, 'utf8'), original)
+})
+
+test('a keyless seed writes no .env at all', () => {
+  const home = sandboxHome()
+  const source = writeSeedFile(sandboxHome(), { provider: 'deepseek', model: 'deepseek-v4-flash' })
+  seedEnterpriseModelConfig({
+    identity: ENTERPRISE,
+    hermesHome: home,
+    env: { HERMES_ENTERPRISE_MODEL_SEED: source }
+  })
+  assert.equal(fs.existsSync(path.join(home, '.env')), false)
+})
+
+test('the packaged resource seed is the lowest-precedence source', () => {
+  const home = sandboxHome()
+  const resources = sandboxHome()
+  fs.mkdirSync(path.join(resources, 'enterprise'), { recursive: true })
+  writeSeedFile(path.join(resources, 'enterprise'), { provider: 'packaged', model: 'from-resources' })
+
+  const source = seedEnterpriseModelConfig({ identity: ENTERPRISE, hermesHome: home, env: {}, resourcesPath: resources })
+  assert.equal(source.seeded, true)
+  assert.match(fs.readFileSync(path.join(home, 'config.yaml'), 'utf8'), /provider: "packaged"/)
+})

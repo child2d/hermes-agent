@@ -5,6 +5,7 @@ import { DocsLink } from '@/components/onboarding/flow'
 import { useI18n } from '@/i18n'
 import { $activeConnectionId } from '@/store/connections'
 import { setDesktopMetricsGate } from '@/store/desktop-metrics'
+import { $enterpriseEnabled } from '@/store/enterprise-flag'
 import { requestGatewayForAgent } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
@@ -29,6 +30,10 @@ export function SharedMetricsSettings() {
   const copy = t.sharedMetrics
   const scopeProfile = useStore($settingsScopeProfile)
   const connectionId = useStore($activeConnectionId)
+  // Enterprise (Plankton) build: the engine seals the transmission port at the
+  // build level, so the "Send" row is not shown at all. Upstream variants are
+  // unaffected ($enterpriseEnabled is false there). See ENTERPRISE.md §5.
+  const enterprise = useStore($enterpriseEnabled)
   const [consent, setConsent] = useState<SharedMetricsConsent | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -90,6 +95,7 @@ export function SharedMetricsSettings() {
   return (
     <div className="grid gap-1" id="setting-shared-metrics">
       <ToggleRow
+        below={enterprise ? <DocsLink href={SHARED_METRICS_DOCS_URL}>{copy.whatIsCollected}</DocsLink> : undefined}
         checked={enabled}
         description={copy.collectDesc}
         disabled={!consent || busy}
@@ -97,14 +103,16 @@ export function SharedMetricsSettings() {
         label={copy.collectLabel}
         onChange={on => void save({ enabled: on, send: on && send })}
       />
-      <ToggleRow
-        below={<DocsLink href={SHARED_METRICS_DOCS_URL}>{copy.whatIsCollected}</DocsLink>}
-        checked={send}
-        description={copy.sendDesc}
-        disabled={!consent || busy || !enabled}
-        label={copy.sendLabel}
-        onChange={on => void save({ enabled, send: on })}
-      />
+      {!enterprise && (
+        <ToggleRow
+          below={<DocsLink href={SHARED_METRICS_DOCS_URL}>{copy.whatIsCollected}</DocsLink>}
+          checked={send}
+          description={copy.sendDesc}
+          disabled={!consent || busy || !enabled}
+          label={copy.sendLabel}
+          onChange={on => void save({ enabled, send: on })}
+        />
+      )}
     </div>
   )
 }

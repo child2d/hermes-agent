@@ -32,6 +32,7 @@
     "prebuilder": "node scripts/patch-electron-builder-mac-binary.mjs",
     "builder": "node scripts/run-electron-builder.mjs",
     "pack": "npm run build && npm run builder -- --dir --publish never",
+    "pack:plankton": "bash scripts/plankton-pack.sh",
     "dist": "npm run build && npm run builder",
     "payload": "node ../../scripts/build/python.mjs ../../scripts/bundles/stage.py --out build/agent-payload",
     "dist:bundled": "npm run payload && cross-env HERMES_DESKTOP_VARIANT=bundled npm run dist",

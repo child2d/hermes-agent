@@ -181,50 +181,74 @@ Covered by `electron/user-launcher-install.test.ts`,
 `electron/ssh-connection.test.ts`, `electron/data-paths.test.ts`,
 `electron/enterprise-paths.test.ts`.
 
-## 3. First-launch model seed — values pending
+## 3. First-launch model seed — provider config and key
 
 On first enterprise launch, if `<HERMES_HOME>/config.yaml` does **not** exist,
-the app writes a minimal model config. It is a **framework**: no provider
-value, no base URL, and above all no API key is committed to the repo or baked
-into the installer.
+the app writes a minimal model config. When the seed also carries an
+`api_key`, the key is written to `<HERMES_HOME>/.env` (0600) — the provider's
+env var, which is where a built-in provider resolves its key from. It is
+**never** written into `config.yaml`.
 
 - Code: `electron/enterprise-model-seed.ts` (behavior tests in
   `enterprise-model-seed.test.ts`).
-- Guarantees: enterprise-only; never overwrites an existing `config.yaml`;
-  writes `config.yaml` mode **0600**; writes no secret field.
+- Guarantees: enterprise-only; never overwrites an existing `config.yaml` or
+  `.env`; writes both at mode **0600**; `config.yaml` never carries a secret.
 - Value sources, in precedence order:
   1. `$HERMES_ENTERPRISE_MODEL_SEED` → absolute path to a JSON file, or
-  2. `<HERMES_HOME>/enterprise/model-seed.json`.
-  If neither exists the seed is a logged no-op (`no-source`) — the app still
+  2. `<HERMES_HOME>/enterprise/model-seed.json`, or
+  3. `<Resources>/enterprise/model-seed.json` — **baked at pack time** by
+     `scripts/plankton-pack.sh` (plankton only; see below).
+  If none exists the seed is a logged no-op (`no-source`) — the app still
   boots and the operator can drop the file and relaunch.
 
-Seed JSON shape (the file the operator/installer supplies — **not** in git):
+Seed JSON shape (the file the operator/installer supplies):
 
 ```json
 {
   "provider": "deepseek",
-  "model": "deepseek-chat",
-  "base_url": "https://api.deepseek.example/v1",
-  "api_key_env": "DEEPSEEK_API_KEY"
+  "model": "deepseek-v4-flash",
+  "base_url": "https://api.deepseek.com",
+  "api_key_env": "DEEPSEEK_API_KEY",
+  "api_key": "…"
 }
 ```
 
-`provider` and `model` are required; `base_url`/`api_key_env` optional.
-`api_key_env` is documentation only — the **name** of the env var, never a
-value, and it is never written into `config.yaml`.
+`provider` and `model` are required; `base_url`, `api_key_env` and `api_key`
+are optional. `api_key_env` names the env var the key is written under
+(default `DEEPSEEK_API_KEY`).
+
+### Where the seed file lives (it can carry a secret)
+
+The build-machine seed file is `apps/desktop/build/enterprise/model-seed.json`.
+`build/` is **gitignored**, so a key-bearing seed never enters git; at pack time
+`scripts/plankton-pack.sh` copies it into the app as
+`Contents/Resources/enterprise/model-seed.json`. When the file is absent the
+script writes a **keyless** placeholder (`provider`/`model`/`base_url` only), so
+the pack-time Resources copy never dangles.
+
+**Key provenance (why the placeholder may carry a real key).** To prove the
+end-to-end path before an enterprise key endpoint exists, the seed shipped in
+this build was generated on the build machine from the operator's own provider
+key. The rule that follows from that:
+
+- **The key value exists only in the build-machine seed file above — never in
+  the repo, a report, a commit message, the shell environment, or `config.yaml`.**
+- Swapping it for a company-issued key means replacing that one file and
+  re-packing; no code change.
 
 ### ⚠️ 待接值 (values still to be wired)
 
-1. **Who provides the seed file?** No production seed file exists yet. The
-   installer (or an IT drop to `<HERMES_HOME>/enterprise/model-seed.json`) must
-   ship one. This batch only proves the mechanism.
-2. **API key delivery.** The key is intentionally absent. It must arrive at
-   install time as `~/.plankton/engine/home/.env` (`DEEPSEEK_API_KEY=…`, 0600)
-   or via `hermes auth`/`hermes model`. If the backend instead mints a token
-   via an enterprise auth endpoint, that endpoint + token exchange is a
-   follow-up.
-3. **Exact provider/model.** Replace the example values with the real
-   enterprise endpoint once known.
+1. **Who provides the production seed file?** Today the pack script bakes
+   `build/enterprise/model-seed.json` (a personal key). The production shape is
+   an IT drop or an installer that writes the seed with a company-issued key.
+2. **API key delivery.** The key is written to
+   `<HERMES_HOME>/.env` (`DEEPSEEK_API_KEY=…`, 0600) on first launch, from the
+   seed. If the backend instead mints a token via an enterprise auth endpoint,
+   that endpoint + token exchange is a follow-up.
+3. **Key rotation / revocation.** The baked key cannot be revoked per person and
+   its usage is billed to the original account; rotate to a dedicated key (or an
+   enterprise issuance endpoint) before broadening distribution (see
+   `spec-library` KI-PLANKTON-0069).
 
 ## 4. Payload size — the `HERMES_PAYLOAD_UV_CACHE` build switch
 
@@ -273,13 +297,13 @@ byte-for-identical (`bin`, `enabled-features.json`, `hermes-agent`, `manifest.js
 `pm-runtime`, `tools`, `venv`), so the app boots with no external Python exactly
 as before.
 
-## 5. Shared metrics — local-only, and the send-to-Nous offer is never shown
+## 5. Shared metrics — local-only, transmission sealed, the send switch not shown
 
 Upstream's first run asks *"Help improve Hermes?"* with three equal answers —
 **Send to Nous** / **Local only** / **No thanks** — and `AGENTS.md` requires outbound
 telemetry to stay behind a user-facing opt-in. The enterprise edition inverts the
-default: **collection stays local, transmission is off, and the "send to Nous" choice
-is never presented.**
+default: **collection stays local, transmission is sealed at the build, the "send to
+Nous" choice is never presented, and the "Send" row is not rendered at all.**
 
 This reuses upstream's own mechanism and keys. There is **no second consent system**:
 
@@ -288,8 +312,14 @@ This reuses upstream's own mechanism and keys. There is **no second consent syst
 - A profile counts as *decided* once either key is written, and **only a decided answer
   suppresses the offer** — on every surface (the desktop composer strip, the CLI offer,
   the dashboard banner). So the enterprise build settles those keys to **`enabled: true`,
-  `send: false`** before the UI can ask; the strip/dialog never render and no transmission
-  is possible (`resolve_send_config` resolves `send=False`).
+  `send: false`** before the UI can ask; the strip/dialog never render.
+
+**The transmission port is sealed regardless of config.** Every send path resolves
+through `resolve_send_config()`; on an enterprise build that resolver returns
+`send=False` for *any* config — a hand-edited `send: true`, a migrated profile, a synced
+one — and logs the override once. So the two guarantees are independent: the seeded
+answer keeps the question from being asked, and the resolver keeps the wire dark even if
+the answer is later changed.
 
 Where it lives (variant-driven — the other four variants are bit-for-bit unchanged):
 
@@ -297,8 +327,11 @@ Where it lives (variant-driven — the other four variants are bit-for-bit uncha
 |-------|------|------|
 | Identity stamp into the backend env | `electron/guest-onboarding.ts` → `desktopBackendSpawnEnv(base, guestOnboarding, enterprise)` | writes `HERMES_ENTERPRISE=1` for `plankton`, `=0` for every other variant (stamped for both states so an inherited value cannot leak) |
 | Passing the identity | `electron/main.ts` (both `hermes serve` spawn sites) | passes `PRODUCT_IDENTITY.enterprise` as the third argument |
-| Materializing the default | `hermes_cli/observability/shared_metrics_consent.py` → `apply_enterprise_consent_default()` | enterprise-only; no-op on any upstream build. If the profile already carries an explicit answer it is **respected verbatim** (even `send: true`) and logged; otherwise writes `enabled: true`, `send: false` through the existing `save_consent()` writer |
+| Materializing the default | `hermes_cli/observability/shared_metrics_consent.py` → `apply_enterprise_consent_default()` | enterprise-only; no-op on any upstream build. If the profile already carries an explicit answer it is **respected verbatim** (even `send: true`) and logged — the resolver below still refuses to send; otherwise writes `enabled: true`, `send: false` through the existing `save_consent()` writer |
+| **Sealing the send port** | `hermes_cli/observability/shared_metrics_send_config.py` → `resolve_send_config()` | enterprise-only: returns `send=False` for every config, logs the override once. Upstream (marker absent) is untouched |
 | Calling it at startup | `hermes_cli/web_server.py` (`_lifespan`) | runs once on backend start, before the UI's first `shared_metrics.status` read; best-effort (a failure is logged, never fatal) |
+| Renderer identity signal | `electron/main.ts` (`hermes:feature-flags`) → `electron/preload.ts` (`enterpriseEnabled`) | an additive boolean, `false` on every upstream variant |
+| **Hiding the "Send" row** | `src/app/settings/shared-metrics-settings.tsx` (via `src/store/enterprise-flag.ts`) | enterprise drops the send `ToggleRow`; upstream renders it unchanged |
 
 `HERMES_ENTERPRISE` is an **identity marker set by the launcher** (the same family as
 `HERMES_DESKTOP`, `HERMES_MANAGED`), not user-facing behavioural config — the behavioural
@@ -308,8 +341,10 @@ signal it can trust.
 
 Return values of `apply_enterprise_consent_default()`: `not-enterprise` (upstream — nothing
 read or written), `decided` (explicit existing answer kept), `seeded` (local-only default
-written). Behaviour tests: `tests/hermes_cli/test_shared_metrics_consent_enterprise.py`;
-the identity stamp is covered by `electron/backend-spawn-env.test.ts`.
+written). Behaviour tests: `tests/hermes_cli/test_shared_metrics_consent_enterprise.py`
+(includes the "config says `send: true`, the resolver still refuses" case);
+`tests/hermes_cli/test_shared_metrics_send_config.py`; the identity stamp is covered by
+`electron/backend-spawn-env.test.ts`.
 
 ## 6. License and third-party notice in the artifact
 
@@ -326,10 +361,29 @@ changed. Both are emitted **by the build**, not copied into a `.app` by hand:
   material changes in this distribution (variant identity, enterprise data roots + isolation,
   embedded engine, packaging slimming, sidebar fix, telemetry localization).
 
-To change what ships, edit the two extraResources entries or the notice file — no manual
+To change what ships, edit the extraResources entries or the notice file — no manual
 copy step exists, and every `npm run pack` reproduces them.
 
 ## Build / pack / rollback
+
+### One command (the supported entry point)
+
+```bash
+cd apps/desktop
+npm run pack:plankton
+# artifact: apps/desktop/release/mac-arm64/Plankton.app
+```
+
+`scripts/plankton-pack.sh` pins every build-time variable the enterprise pack
+needs — `HERMES_PYTHON=/opt/homebrew/bin/python3`,
+`ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`,
+`HERMES_DESKTOP_VARIANT=plankton`, `CSC_IDENTITY_AUTO_DISCOVERY=false` — makes
+sure `build/enterprise/model-seed.json` exists (keyless placeholder when no
+secret seed is present), then runs `npm run pack`. It assumes
+`build/agent-payload` is already staged (step 1 below); re-staging is only
+needed when the runtime payload itself changes.
+
+### The two underlying steps
 
 Two steps, mirroring upstream `dist:bundled`. Step 1 stages the in-artifact
 runtime with the upstream PM builder; step 2 packages the branded bundled app.
@@ -377,6 +431,19 @@ launch needs **no** external Python and **no** engine bootstrap. `uv-cache/`
 (offline venv-rebuild wheels, ~1.9 GB) is the largest chunk the staging step can
 omit — via the `HERMES_PAYLOAD_UV_CACHE` build switch (§4).
 
+## Distribution (分发说明)
+
+**产物在哪**：`apps/desktop/release/mac-arm64/Plankton.app`（未签名、未公证；~2.8G，内置引擎）。
+
+**怎么给别人**：整包拷贝 `Plankton.app` 即可（它自带运行时，不需要对方另装引擎或 Python）。
+
+- **⚠️ 同一台机器不要同时打开两个 Plankton**：两个实例共用同一个企业数据目录（桌面 `~/Library/Application Support/Plankton`，引擎 `~/.plankton/engine/home`），同时打开会争用同一份 `state.db` 与会话。用完一个再开另一个。
+- **未签名会遇到的拦阻**：macOS Gatekeeper 会提示「无法验证开发者 / 已损坏，无法打开」。
+  - 临时处置一：右键（或 Control-点击）应用 → 打开 → 在弹窗里再点「打开」。
+  - 临时处置二：`xattr -dr com.apple.quarantine /path/to/Plankton.app` 去掉隔离属性后再打开。
+  - 这两招只适合**本人机器**排障。发给同事前必须先做 Developer ID 签名 + 公证（需 Apple 开发者账号）——见 `spec-library` KI-PLANKTON-0068。
+- **许可与第三方声明在包内哪里**：`Plankton.app/Contents/Resources/LICENSE`（上游 MIT 原文）与 `Contents/Resources/THIRD-PARTY-NOTICES.md`（本分发改了什么的声明）。两者都由构建自动写入，无需手工拷贝。
+
 ### Rollback
 
 ```bash
@@ -420,17 +487,18 @@ Use this section for handover and for reviews. Write new status text in the same
 5. The app shows the 8 sessions that are already in the enterprise folder.
 6. The app does not send usage data to Nous. All network connections stay on the local computer.
 7. The size of the app is 3.0 GB. Before, the size was 4.9 GB.
+8. The app does not show the "Send" switch. The engine blocks all transmission.
+9. The app does not look for updates. The team sends each new version by hand.
+10. The build is one command. A person runs `npm run pack:plankton`.
+11. The app writes the model key at the first start. The key comes from the seed file.
 
 ### What does not work now
 
-8. **Privacy switch.** The Privacy page has a switch. The name of the switch is "Send". A user can turn on this switch. The app must hide this switch. To hide the switch, the screen part needs a signal. The signal must say "this app is the enterprise app". This signal is not available today.
-9. **Signature.** The app has no code signature. The app has no notarization. macOS stops the app on a colleague's computer. Sign and notarize the app before you give it to a colleague. You must have an Apple Developer account for this step.
-10. **Model key.** The app writes the provider, the base URL and the model name. The app does not write the model key. Decide where the key comes from. Two examples: the app downloads the key from an enterprise server, or a person types the key one time.
-11. **Update source.** The app can look for updates on the Nous cloud. Turn off this function. Or point the function to an enterprise server.
-12. **Build steps.** A person must set the HERMES_PYTHON variable before the build. A person must also set the mirror address for Electron. The build is not a one-command build today.
-13. **Network for plugins.** The app does not contain the uv cache. The cache had a size of 1.9 GB. Without the cache, the app needs the network to add a plugin.
-14. **Two apps.** The /Applications folder contains the old Plankton build. The new build stays in the build folder. Do not mix the two apps.
-15. **Chat area.** The chat area shows "Waking up". The session list is complete. The message is a readiness note for the model.
+12. **Signature.** The app has no code signature. The app has no notarization. macOS stops the app on a colleague's computer. Sign and notarize the app before you give it to a colleague. You must have an Apple Developer account for this step.
+13. **Model key is one person's key.** The seed carries one person's key. The usage is charged to that person. You cannot cancel the key for one user. Replace the key before you give the app to many people.
+14. **Network for plugins.** The app does not contain the uv cache. The cache had a size of 1.9 GB. Without the cache, the app needs the network to add a plugin.
+15. **Two apps.** The /Applications folder contains the old Plankton build. The new build stays in the build folder. Do not mix the two apps.
+16. **Chat area.** The chat area shows "Waking up". The session list is complete. The message is a readiness note for the model.
 
 ### Rules for this section
 
@@ -446,6 +514,8 @@ Use this section for handover and for reviews. Write new status text in the same
 
 **现在能做到的**：它就是我们自己改的 Plankton（基于 MIT 许可的开源 Hermes 桌面端，包内附许可原文与第三方声明）；引擎内置于包内，不需要额外安装；数据只落在企业目录、不碰个人目录；界面上能看到已有的 8 条会话；不向 Nous 发送使用数据、网络只在本机内；包体积 3.0G（原 4.9G）。
 
-**还没做到的（八项）**：① 设置里的隐私页仍有一个「发送」开关，要藏掉它需要给界面一个「这是企业版」的身份信号，目前没有；② 没有代码签名与公证，发给同事会被 macOS 拦下，需要 Apple 开发者账号；③ 模型密钥还没定来源（目前只写了 provider/地址/模型名）；④ 自动更新仍指向 Nous 云，要关掉或改指企业服务器；⑤ 构建需要人手指定解释器与下载镜像，还不是一条命令；⑥ 为了瘦身删掉了 1.9G 缓存，代价是加装插件要联网；⑦ `/Applications` 里还是旧版本，新版在构建目录，别混用；⑧ 聊天区显示的「Waking up」是模型就绪提示（不影响会话列表）。
+本轮新做好的四项：⑧ 设置里不再显示「发送」开关，而且引擎把发送口彻底封死（配置里就算手改成 `send: true` 也不发）；⑨ 不再检查自动更新（内部分发靠人工推新版本）；⑩ 构建已固化成一条命令 `npm run pack:plankton`；⑪ 首启会把模型密钥写进企业目录的 `.env`（0600），界面与流程可端到端对话。
+
+**还没做到的（五项）**：① 没有代码签名与公证，发给同事会被 macOS 拦下，需要 Apple 开发者账号（签名/公证本轮**挂起**，见 KI-PLANKTON-0068）；② 当前密钥是**个人 key 临时内置**，用度记在该个人账号、无法按人吊销，扩大分发前必须换成专供密钥（见 KI-PLANKTON-0069）；③ 为了瘦身删掉了 1.9G 缓存，代价是加装插件要联网；④ `/Applications` 里还是旧版本，新版在构建目录，别混用；⑤ 聊天区显示的「Waking up」是模型就绪提示（不影响会话列表）。
 
 **本节写法规则**：一句一个主题、不超过 20 词；主动语态、一般现在时；一个词一个意思（app/folder/switch/key）；要求用 must、能力用 can；不写「和/或」，只给一个动作；产品名与技术名保持原样，并登记进术语表。

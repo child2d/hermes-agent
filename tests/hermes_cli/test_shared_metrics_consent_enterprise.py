@@ -82,3 +82,35 @@ def test_enterprise_default_is_idempotent(home, monkeypatch):
     assert consent.apply_enterprise_consent_default() == "seeded"
     assert consent.apply_enterprise_consent_default() == "decided"
     assert _shared_metrics() == {"enabled": True, "send": False}
+
+
+def test_enterprise_seals_the_send_port_even_when_config_says_send_true(home, monkeypatch, caplog):
+    """The load-bearing guarantee: on the enterprise build the transmission port is shut
+    at the resolver, whatever config.yaml says. A hand-edited `send: true` cannot send."""
+    import logging
+
+    from hermes_cli.observability import shared_metrics_send_config as send_cfg
+
+    monkeypatch.setenv(consent.ENTERPRISE_ENV_VAR, "1")
+    monkeypatch.setattr(send_cfg, "_warned_enterprise_send", False, raising=False)
+
+    with caplog.at_level(logging.ERROR):
+        resolved = resolve_send_config(
+            {"telemetry": {"shared_metrics": {"enabled": True, "send": True}}}
+        )
+
+    assert resolved.send is False, "enterprise build must never resolve to a send"
+    assert resolved.enabled is True, "collection may stay on; only transmission is sealed"
+    # Loud, not silent: the override is logged so an operator can see why nothing sends.
+    assert any("Enterprise build" in r.getMessage() for r in caplog.records)
+
+
+def test_enterprise_send_seal_does_not_touch_upstream_builds(home, monkeypatch):
+    """With the marker absent, an explicit send: true still resolves to a send — the
+    upstream behaviour the enterprise override must not change."""
+    monkeypatch.delenv(consent.ENTERPRISE_ENV_VAR, raising=False)
+
+    resolved = resolve_send_config(
+        {"telemetry": {"shared_metrics": {"enabled": True, "send": True}}}
+    )
+    assert resolved.send is True

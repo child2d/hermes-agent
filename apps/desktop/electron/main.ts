@@ -3855,6 +3855,14 @@ function emitUpdateProgress(payload) {
 }
 
 async function checkUpdates(opts: { force?: boolean } = {}): Promise<UpdaterStatusWire> {
+  // Enterprise (Plankton): self-update is disabled. Internal distribution is a
+  // manual push of a new build (see ENTERPRISE.md "Distribution"), so this
+  // returns before resolving a strategy — no updater construction, no feed
+  // fetch. Upstream variants are unchanged (PRODUCT_IDENTITY.enterprise false).
+  if (PRODUCT_IDENTITY.enterprise) {
+    return { supported: false, reason: 'enterprise-disabled', fetchedAt: Date.now() }
+  }
+
   // A packaged install delegates to the update owner named by its stamp.
   let strategy: UpdaterStrategy | null = null
 
@@ -4926,6 +4934,11 @@ async function releaseBackendLock(updateRoot: string, tag: string): Promise<{ un
 // Detection (checkUpdates / commit changelog / "N behind") stays in the UI;
 // only this apply action changed.
 async function applyUpdates(): Promise<UpdaterApplyResultWire> {
+  // Enterprise (Plankton): self-update is disabled (see checkUpdates above).
+  if (PRODUCT_IDENTITY.enterprise) {
+    return { ok: false, error: 'enterprise-disabled', message: 'Self-update is disabled on this build.' }
+  }
+
   return updateOperation.apply(async (): Promise<UpdaterApplyResultWire> => {
     updateInFlight = true
     let handedOff: boolean = false
@@ -18385,7 +18398,12 @@ ipcMain.on('hermes:feature-flags', (event: IpcMainEvent): void => {
       argv: process.argv,
       canary: resolveUpdaterChannelFromStamp() === 'canary'
     }),
-    guestOnboarding: GUEST_ONBOARDING
+    guestOnboarding: GUEST_ONBOARDING,
+    // Enterprise fork marker (Plankton). The renderer needs it before first
+    // paint to drop surfaces that only exist for the upstream build (the
+    // shared-metrics "Send" row). Additive and always present; upstream
+    // variants receive `false` and never read it. See ENTERPRISE.md §5.
+    enterprise: PRODUCT_IDENTITY.enterprise === true
   }
 })
 
