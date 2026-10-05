@@ -1,0 +1,8 @@
+{
+  "name": "plankton-enterprise",
+  "label": "企业工具",
+  "description": "本机 shaoke-cli 工具目录（只读）——无执行入口、无开关。",
+  "icon": "Tools",
+  "version": "0.1.0",
+  "api": "plugin_api.py"
+}

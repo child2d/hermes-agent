@@ -1,3 +1,5 @@
+import { prependEnterpriseBinToPath } from './enterprise-cli'
+
 export const GUEST_ONBOARDING_ENV = 'HERMES_GUEST_ONBOARDING'
 export const GUEST_ONBOARDING_FLAG = '--guest-onboarding'
 
@@ -20,7 +22,7 @@ export function desktopBackendSpawnEnv(
   guestOnboarding: boolean,
   enterprise = false
 ): NodeJS.ProcessEnv {
-  return {
+  const env: NodeJS.ProcessEnv = {
     ...base,
     [GUEST_ONBOARDING_ENV]: guestOnboarding ? '1' : '0',
     // Stamped for BOTH states so an inherited value can never leak in either
@@ -34,4 +36,18 @@ export function desktopBackendSpawnEnv(
     // runtimes ignore the unknown variable and keep the historical exit behavior.
     GATEWAY_ON_ALL_ADAPTERS_DOWN: 'stay_alive'
   }
+
+  // Enterprise only: front-load `<HERMES_HOME>/bin` so the seeded `shaoke-cli`
+  // resolves ahead of a personal `~/.local/bin` copy (KI-PLANKTON-0013). The
+  // home is pinned in the base at every spawn site; with it absent we leave PATH
+  // untouched (upstream variants never set `enterprise`, so nothing changes).
+  if (enterprise && base?.HERMES_HOME) {
+    const key = Object.keys(env).find(name => name.toUpperCase() === 'PATH') || 'PATH'
+    env[key] = prependEnterpriseBinToPath(base[key] || '', {
+      hermesHome: String(base.HERMES_HOME),
+      delimiter: process.platform === 'win32' ? ';' : ':'
+    })
+  }
+
+  return env
 }

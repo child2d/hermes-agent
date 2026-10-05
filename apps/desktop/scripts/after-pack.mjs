@@ -41,6 +41,60 @@ export async function restoreLegacyMacIcon({ appOutDir, packager }, appDir = pat
   await copyFile(path.join(appDir, `${iconBase}.icns`), path.join(packager.getResourcesDir(appOutDir), 'icon.icns'))
 }
 
+/** electron-builder Arch enum → directory name (see before-pack.mjs). */
+const ARCH_NAMES = Object.freeze({ 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64', 4: 'universal' })
+
+/**
+ * R1 (PLANKTON-MIGRATION-BATCH2.md): FAIL-CLOSED when an enterprise
+ * extraResource is missing from the packed app.
+ *
+ * electron-builder SILENTLY skips an `extraResources` entry whose `from` does
+ * not exist, so one typo'd path ships an artifact with no CLI / no plugin and a
+ * completely green build (the KI-PLANKTON-0056 hazard class). This asserts each
+ * expected resource is present and throws otherwise, turning that into a RED
+ * build. Upstream variants (`enterprise` false) assert nothing, so their
+ * Resources stay bit-for-bit unchanged.
+ *
+ * @param {{ appOutDir: string, electronPlatformName: string, arch?: number|string, packager: { appInfo: { productFilename: string } } }} context
+ * @param {string} [appDir] the apps/desktop directory
+ * @returns {string[]} the verified resource-relative paths (empty for upstream)
+ */
+export function assertEnterpriseResourcesPresent(
+  { appOutDir, electronPlatformName, arch, packager },
+  appDir = path.resolve(import.meta.dirname, '..')
+) {
+  const identity = createRequire(import.meta.url)(path.join(appDir, 'product-identity.cjs'))
+  if (!identity.enterprise) {
+    return []
+  }
+
+  const resources = electronPlatformName === 'darwin'
+    ? path.join(appOutDir, `${packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
+    : path.join(appOutDir, 'resources')
+  const archName = typeof arch === 'number' ? ARCH_NAMES[arch] : arch
+  const exe = electronPlatformName === 'win32' ? 'shaoke-cli.exe' : 'shaoke-cli'
+  const expected = [
+    'LICENSE',
+    'THIRD-PARTY-NOTICES.md',
+    'enterprise/model-seed.json',
+    'enterprise/plankton-enterprise/plugin.yaml',
+    'enterprise/plankton-enterprise/dashboard/plugin_api.py',
+    'enterprise/plankton-enterprise/desktop/plugin.js',
+    `enterprise/cli/${electronPlatformName}-${archName}/${exe}`
+  ]
+
+  const missing = expected.filter(relative => !fs.existsSync(path.join(resources, relative)))
+  if (missing.length > 0) {
+    throw new Error(
+      `[after-pack] enterprise extraResources missing from ${resources}: ${missing.join(', ')} ` +
+        '— electron-builder skips a missing `from` silently, so the pack would ship without them ' +
+        '(fix the extraResources path or the staging step; see scripts/plankton-pack.sh)'
+    )
+  }
+
+  return expected
+}
+
 /**
  * Restore the empty app-level localizations dropped during Electron extraction.
  * Runs after language filtering and before signing; the markers come from the
@@ -75,6 +129,13 @@ export default async function afterPack(context) {
   const asarPath = resolvePackagedAsarPath(context)
   assertPackagedBackendReadyArtifact(asarPath)
   console.log(`[after-pack] verified backend readiness parser in ${asarPath}`)
+  // R1: prove every enterprise extraResource actually landed. electron-builder
+  // silently skips a missing `from`, so a typo'd path would otherwise ship a
+  // crippled artifact with a green build (KI-PLANKTON-0056 hazard class).
+  const verifiedResources = assertEnterpriseResourcesPresent(context)
+  if (verifiedResources.length > 0) {
+    console.log(`[after-pack] verified ${verifiedResources.length} enterprise resources present`)
+  }
   const resources = platform === 'darwin'
     ? path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
     : path.join(context.appOutDir, 'resources')

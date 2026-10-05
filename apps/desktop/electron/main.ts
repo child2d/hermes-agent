@@ -216,6 +216,7 @@ import {
 import { resolveDashboardWebDist } from './dashboard-web-dist'
 import { resolveDesktopHermesHome, resolveDesktopUserData } from './data-paths'
 import { seedEnterpriseModelConfig } from './enterprise-model-seed'
+import { seedEnterpriseAssets } from './enterprise-cli'
 import { enterpriseHermesHomeFor, enterpriseHomeIsolationIssue, enterpriseHomeSelection } from './enterprise-paths'
 import { createPlanktonAuth, planktonConfigResolver, type PlanktonAuth } from './plankton-auth'
 import { planktonGateDecision } from './plankton-session-gate'
@@ -1481,6 +1482,24 @@ function runPlanktonModelSeedIfSignedIn(): void {
 
   console.log(
     `[hermes] enterprise model seed: ${seed.seeded ? `wrote ${seed.configPath}` : `skipped (${seed.reason})`}`
+  )
+
+  // First-launch assets (batch 2): the bundled `shaoke-cli` and the
+  // `plankton-enterprise` engine plugin. Same login gate as the model seed —
+  // both write into the enterprise home, which a logged-out launch must not
+  // touch. Idempotent; a missing resource is logged, never fatal (the pack-time
+  // after-pack assertion is what keeps a missing resource from shipping).
+  const assets = seedEnterpriseAssets({
+    identity: PRODUCT_IDENTITY,
+    hermesHome: HERMES_HOME,
+    resourcesPath: process.resourcesPath,
+    log: (line: string) => console.log(`[hermes] ${line}`)
+  })
+
+  console.log(
+    `[hermes] enterprise assets: ${assets.reason}` +
+      (assets.cliPath ? ` cli=${assets.cliPath}` : '') +
+      (assets.pluginPath ? ` plugin=${assets.pluginPath}` : '')
   )
 }
 

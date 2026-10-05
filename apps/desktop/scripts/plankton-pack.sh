@@ -42,6 +42,48 @@ JSON
   echo "[plankton-pack] wrote keyless seed placeholder: $SEED"
 fi
 
+# --- bundled shaoke-cli (per-OS/arch) ----------------------------------------
+# The artifact carries a CLI copy that first launch drops into
+# <HERMES_HOME>/bin (see electron/enterprise-cli.ts). The binary must NOT live
+# in git, so it is staged here into the gitignored build/ tree. Source:
+#   $PLANKTON_SHAOKE_CLI_SRC (explicit), else the CLI on PATH.
+# after-pack independently asserts it landed in the app (R1, fail-closed).
+case "$(uname -s)" in
+  Darwin) PACK_OS=darwin ;;
+  Linux)  PACK_OS=linux ;;
+  *)      PACK_OS="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
+esac
+case "$(uname -m)" in
+  arm64|aarch64) PACK_ARCH=arm64 ;;
+  x86_64|amd64)  PACK_ARCH=x64 ;;
+  *)             PACK_ARCH="$(uname -m)" ;;
+esac
+CLI_DIR="build/enterprise/cli/${PACK_OS}-${PACK_ARCH}"
+CLI_DEST="$CLI_DIR/shaoke-cli"
+[ "$PACK_OS" = win32 ] && CLI_DEST="$CLI_DIR/shaoke-cli.exe"
+CLI_SRC="${PLANKTON_SHAOKE_CLI_SRC:-$(command -v shaoke-cli || true)}"
+if [ -z "$CLI_SRC" ] || [ ! -f "$CLI_SRC" ]; then
+  echo "[plankton-pack] ERROR: no shaoke-cli to bundle (set PLANKTON_SHAOKE_CLI_SRC, or put shaoke-cli on PATH)." >&2
+  echo "[plankton-pack]        The artifact must carry the CLI; refusing to pack without it." >&2
+  exit 1
+fi
+mkdir -p "$CLI_DIR"
+cp -f "$CLI_SRC" "$CLI_DEST"
+chmod 755 "$CLI_DEST"
+if [ ! -x "$CLI_DEST" ]; then
+  echo "[plankton-pack] ERROR: staged CLI is not executable: $CLI_DEST" >&2
+  exit 1
+fi
+echo "[plankton-pack] staged CLI: $CLI_DEST (from $CLI_SRC)"
+
+# The enterprise plugin payload is committed in-repo; assert it is present so a
+# packaging run cannot silently ship without it (after-pack asserts again).
+PLUGIN_PAYLOAD="enterprise/plankton-enterprise"
+if [ ! -f "$PLUGIN_PAYLOAD/plugin.yaml" ] || [ ! -f "$PLUGIN_PAYLOAD/dashboard/plugin_api.py" ] || [ ! -f "$PLUGIN_PAYLOAD/desktop/plugin.js" ]; then
+  echo "[plankton-pack] ERROR: enterprise plugin payload incomplete under $PLUGIN_PAYLOAD" >&2
+  exit 1
+fi
+
 # --- refresh the bundled engine payload from HEAD ----------------------------
 # build/agent-payload is a `git archive HEAD` snapshot (scripts/bundles/
 # native.py:_prepare_native), so uncommitted source never reaches the packaged

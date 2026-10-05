@@ -145,7 +145,16 @@ module.exports = {
           // so it lives under the gitignored build/ tree and never in git. The
           // pack script guarantees the file exists (a keyless placeholder when
           // no secret seed is present), so this entry never dangles.
-          { from: 'build/enterprise/model-seed.json', to: 'enterprise/model-seed.json' }
+          { from: 'build/enterprise/model-seed.json', to: 'enterprise/model-seed.json' },
+          // The enterprise plugin payload (agent half + dashboard backend +
+          // desktop half). Committed in-repo; first launch copies it into
+          // <HERMES_HOME>/plugins + <HERMES_HOME>/desktop-plugins (see
+          // electron/enterprise-cli.ts). after-pack asserts it landed.
+          { from: 'enterprise/plankton-enterprise', to: 'enterprise/plankton-enterprise' },
+          // The bundled shaoke-cli for THIS OS/arch. Staged under build/
+          // (gitignored, like the seed) by scripts/plankton-pack.sh, which also
+          // refuses to pack without it. after-pack asserts it landed.
+          { from: `build/enterprise/cli/${process.platform}-${process.arch}`, to: `enterprise/cli/${process.platform}-${process.arch}` }
         ]
       : []),
     {

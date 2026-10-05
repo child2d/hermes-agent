@@ -1,0 +1,4 @@
+name: plankton-enterprise
+version: 0.1.0
+description: "Plankton enterprise surface — the read-only local tool catalog (shaoke-cli), served through the engine backend at /api/plugins/plankton-enterprise/."
+author: "Shaoke"

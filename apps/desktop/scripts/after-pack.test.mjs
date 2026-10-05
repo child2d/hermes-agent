@@ -3,6 +3,7 @@ import {
   assertBackendReadyArtifactSourceAcceptsBothTokens,
   resolvePackagedAsarPath
 } from './backend-ready-artifact.mjs'
+import { assertEnterpriseResourcesPresent } from './after-pack.mjs'
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -107,6 +108,50 @@ it('leaves Linux alone and reports a missing framework without failing packaging
     expect(await readdir(ctx.packager.getResourcesDir(root))).toContain('icon.icns')
   } finally {
     warn.mockRestore()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+// R1 (PLANKTON-MIGRATION-BATCH2.md): electron-builder silently skips a missing
+// `extraResources.from`, so a typo'd enterprise resource path would otherwise
+// ship a crippled artifact with a green build. After-pack must FAIL the pack.
+it('R1: fails the pack when an enterprise extraResource is missing, passes when present', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'hermes-enterprise-res-'))
+  try {
+    const appDir = path.join(root, 'apps-desktop')
+    await mkdir(appDir, { recursive: true })
+    await writeFile(path.join(appDir, 'product-identity.cjs'), 'module.exports = { enterprise: true, iconBase: "assets/icon" }\n')
+
+    const appOutDir = path.join(root, 'out')
+    const resources = path.join(appOutDir, 'Plankton.app', 'Contents', 'Resources')
+    const expected = [
+      'LICENSE',
+      'THIRD-PARTY-NOTICES.md',
+      'enterprise/model-seed.json',
+      'enterprise/plankton-enterprise/plugin.yaml',
+      'enterprise/plankton-enterprise/dashboard/plugin_api.py',
+      'enterprise/plankton-enterprise/desktop/plugin.js',
+      'enterprise/cli/darwin-arm64/shaoke-cli'
+    ]
+    for (const relative of expected) {
+      const target = path.join(resources, relative)
+      await mkdir(path.dirname(target), { recursive: true })
+      await writeFile(target, 'x')
+    }
+
+    const ctx = { appOutDir, electronPlatformName: 'darwin', arch: 3, packager: { appInfo: { productFilename: 'Plankton' } } }
+    expect(assertEnterpriseResourcesPresent(ctx, appDir)).toEqual(expected)
+
+    // Counter-proof: the exact wrong-path hazard (missing CLI) → RED build.
+    await rm(path.join(resources, 'enterprise', 'cli', 'darwin-arm64'), { force: true, recursive: true })
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/enterprise\/cli\/darwin-arm64\/shaoke-cli/)
+
+    // Upstream variants assert NOTHING — their Resources stay untouched.
+    const upstreamDir = path.join(root, 'apps-desktop-upstream')
+    await mkdir(upstreamDir, { recursive: true })
+    await writeFile(path.join(upstreamDir, 'product-identity.cjs'), 'module.exports = { enterprise: false, iconBase: "assets/icon" }\n')
+    expect(assertEnterpriseResourcesPresent(ctx, upstreamDir)).toEqual([])
+  } finally {
     await rm(root, { recursive: true, force: true })
   }
 })
