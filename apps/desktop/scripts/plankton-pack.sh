@@ -79,10 +79,12 @@ echo "[plankton-pack] staged CLI: $CLI_DEST (from $CLI_SRC)"
 # The enterprise plugin payload is committed in-repo; assert it is present so a
 # packaging run cannot silently ship without it (after-pack asserts again).
 PLUGIN_PAYLOAD="enterprise/plankton-enterprise"
-if [ ! -f "$PLUGIN_PAYLOAD/plugin.yaml" ] || [ ! -f "$PLUGIN_PAYLOAD/dashboard/plugin_api.py" ] || [ ! -f "$PLUGIN_PAYLOAD/desktop/plugin.js" ]; then
-  echo "[plankton-pack] ERROR: enterprise plugin payload incomplete under $PLUGIN_PAYLOAD" >&2
-  exit 1
-fi
+for required in plugin.yaml __init__.py dashboard/manifest.json dashboard/plugin_api.py desktop/plugin.js; do
+  if [ ! -s "$PLUGIN_PAYLOAD/$required" ]; then
+    echo "[plankton-pack] ERROR: enterprise plugin payload incomplete under $PLUGIN_PAYLOAD (missing/empty: $required)" >&2
+    exit 1
+  fi
+done
 
 # --- refresh the bundled engine payload from HEAD ----------------------------
 # build/agent-payload is a `git archive HEAD` snapshot (scripts/bundles/

@@ -28,11 +28,14 @@
 //   * Enterprise-only: every entry point returns `not-enterprise` for any other
 //     variant, so upstream builds are untouched.
 //   * No secrets: nothing here reads or writes a token/credential file.
-//   * Never overwrites a config.yaml's unrelated content: the merge is a bounded,
-//     line-level edit (see mergePluginEnabled).
+//   * Never overwrites a config.yaml's unrelated content: the edit is made with
+//     a real YAML parser, scoped to `plugins.enabled` only (see
+//     mergePluginEnabled), and published atomically (temp-then-rename).
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
+import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
 
 export const ENTERPRISE_PLUGIN_ID = 'plankton-enterprise'
 export const ENTERPRISE_CLI_NAME = 'shaoke-cli'
@@ -64,10 +67,14 @@ export interface EnterpriseSeedFs {
   existsSync: (target: string) => boolean
   mkdirSync: (target: string, options?: { recursive?: boolean }) => unknown
   readFileSync: (target: string, encoding: BufferEncoding) => string
+  /** Raw bytes, for content-hash comparison (never decode text). */
+  readFileBuffer: (target: string) => Buffer
   readdirSync: typeof fs.readdirSync
   statSync: typeof fs.statSync
   writeFileSync: (target: string, data: string, options?: { mode?: number }) => void
   chmodSync: typeof fs.chmodSync
+  /** Atomic publish step for a temp-then-rename write. */
+  renameSync: (from: string, to: string) => void
 }
 
 const DEFAULT_FS: EnterpriseSeedFs = {
@@ -75,10 +82,12 @@ const DEFAULT_FS: EnterpriseSeedFs = {
   existsSync: fs.existsSync,
   mkdirSync: fs.mkdirSync,
   readFileSync: (target, encoding) => fs.readFileSync(target, encoding),
+  readFileBuffer: target => fs.readFileSync(target),
   readdirSync: fs.readdirSync,
   statSync: fs.statSync,
   writeFileSync: fs.writeFileSync,
-  chmodSync: fs.chmodSync
+  chmodSync: fs.chmodSync,
+  renameSync: fs.renameSync
 }
 
 function pathsFor(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {
@@ -125,86 +134,147 @@ export function prependEnterpriseBinToPath(
   return [bin, ...entries].join(options.delimiter)
 }
 
-/** True when `contents` already carries `pluginId` under `plugins.enabled`. */
-function pluginAlreadyEnabled(contents: string, pluginId: string): boolean {
-  return new RegExp(`^\\s*-\\s*['"]?${pluginId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]?\\s*$`, 'm').test(contents)
+/**
+ * Ensure `plugins.enabled` lists `pluginId`.
+ *
+ * Implemented with a REAL YAML parser (the repo's `yaml` dependency), never
+ * string splicing. The review found that a line-level splice produced
+ * structurally invalid YAML whenever the existing file used a style the
+ * hardcoded indentation did not match (the engine's own writer emits
+ * *indentless* block sequences, `enabled:` followed by `- item` at the SAME
+ * column — mixing that with an indented item makes the engine's loader raise
+ * `ParserError` → `InvalidUserConfigError`). Other line-level hazards the
+ * parser removes by construction:
+ *   - a flow `plugins: {}` / `plugins: &anchor {...}` no longer appends a
+ *     SECOND top-level `plugins:` key;
+ *   - a nested `enabled:` under some other submap is never mistaken for
+ *     `plugins.enabled`;
+ *   - `pluginAlreadyEnabled` is scoped to `plugins.enabled`, so a same-named
+ *     entry under `plugins.disabled` is no longer read as "already enabled".
+ *
+ * Scope discipline: it touches ONLY `plugins.enabled`. When the file cannot be
+ * parsed, or `plugins` / `plugins.enabled` exists in a shape we cannot turn
+ * into a list without guessing (a scalar, or a non-mapping `plugins`), it
+ * returns the ORIGINAL contents unchanged with an `error` — it never writes a
+ * half-guessed edit. Pure.
+ */
+export function mergePluginEnabled(
+  contents: string,
+  pluginId: string
+): { contents: string; changed: boolean; error?: string } {
+  const original = contents ?? ''
+  let doc
+  try {
+    doc = parseDocument(original)
+  } catch {
+    return { contents: original, changed: false, error: 'unparseable' }
+  }
+  if (doc.errors.length > 0) {
+    return { contents: original, changed: false, error: 'unparseable' }
+  }
+
+  const plugins = doc.has('plugins') ? doc.get('plugins') : undefined
+
+  // No `plugins:` key yet (or an empty `plugins:` → null) → write the mapping
+  // with just our allow-list entry. `setIn` cannot traverse a null, so set the
+  // whole key.
+  if (plugins === undefined || plugins === null) {
+    doc.set('plugins', doc.createNode({ enabled: [pluginId] }))
+    return { contents: doc.toString(), changed: true }
+  }
+
+  // A scalar / sequence `plugins:` cannot carry an `enabled:` list safely.
+  if (!isMap(plugins)) {
+    return { contents: original, changed: false, error: 'plugins-not-a-mapping' }
+  }
+
+  if (!plugins.has('enabled')) {
+    plugins.set('enabled', doc.createNode([pluginId]))
+    return { contents: doc.toString(), changed: true }
+  }
+
+  const enabled = plugins.get('enabled')
+  if (enabled === null || enabled === undefined || isSeq(enabled)) {
+    const seq = enabled as { items: unknown[]; add: (value: unknown) => void } | null
+    if (seq && seq.items.some(item => (isScalar(item) ? item.value : item) === pluginId)) {
+      return { contents: original, changed: false }
+    }
+    if (seq) {
+      seq.add(doc.createNode(pluginId))
+    } else {
+      plugins.set('enabled', doc.createNode([pluginId]))
+    }
+    return { contents: doc.toString(), changed: true }
+  }
+
+  // A scalar (e.g. `enabled: true`) — refuse rather than guess a list out of it.
+  return { contents: original, changed: false, error: 'enabled-not-a-sequence' }
 }
 
-const enabledBlock = (pluginId: string, indent: string): string[] => [`${indent}enabled:`, `${indent}  - ${pluginId}`]
+/** Content digest of a file (bytes, never decoded). Throws if unreadable. */
+function fileDigest(fsModule: EnterpriseSeedFs, file: string): string {
+  return createHash('sha256').update(fsModule.readFileBuffer(file)).digest('hex')
+}
+
+/** A sibling temp path used for an atomic temp-then-rename publish. */
+function tempSibling(target: string): string {
+  return `${target}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`
+}
 
 /**
- * Ensure `plugins.enabled` lists `pluginId`, editing only that block. Pure and
- * bounded — it never rewrites unrelated keys, and it refuses to guess when it
- * finds an `enabled:` that is not a block (a scalar/flow list) so a hand-edited
- * config is not corrupted. Returns the new contents plus whether it changed.
+ * Write `data` to `target` atomically: a full temp file is fsync'd by the OS on
+ * close, then renamed over the destination. A crash mid-write can therefore
+ * never leave a half-written config.yaml / cli. `mode` is applied to the temp
+ * file BEFORE the rename, so the destination is never briefly mis-permissioned.
  */
-export function mergePluginEnabled(contents: string, pluginId: string): { contents: string; changed: boolean } {
-  if (pluginAlreadyEnabled(contents, pluginId)) {
-    return { contents, changed: false }
-  }
-
-  const hadTrailingNewline = contents === '' || contents.endsWith('\n')
-  const lines = contents === '' ? [] : contents.replace(/\n$/, '').split('\n')
-
-  // Locate a top-level `plugins:` mapping (column 0, not commented).
-  const pluginsAt = lines.findIndex(line => /^plugins:\s*(?:#.*)?$/.test(line))
-
-  if (pluginsAt === -1) {
-    const block = ['plugins:', ...enabledBlock(pluginId, '  ')]
-    const next = lines.length === 0 ? `${block.join('\n')}\n` : `${lines.join('\n')}\n${block.join('\n')}\n`
-
-    return { contents: next, changed: true }
-  }
-
-  // End of the `plugins:` block = the next column-0 non-blank line.
-  let end = lines.length
-  for (let i = pluginsAt + 1; i < lines.length; i += 1) {
-    const line = lines[i]
-    if (line.trim() !== '' && !/^\s/.test(line)) {
-      end = i
-      break
+function atomicWriteFile(fsModule: EnterpriseSeedFs, target: string, data: string, mode?: number): void {
+  const tmp = tempSibling(target)
+  fsModule.writeFileSync(tmp, data, mode === undefined ? undefined : { mode })
+  if (mode !== undefined) {
+    try {
+      fsModule.chmodSync(tmp, mode)
+    } catch {
+      void 0
     }
   }
-
-  const enabledAt = lines.findIndex((line, i) => i > pluginsAt && i < end && /^\s+enabled:/.test(line))
-
-  if (enabledAt === -1) {
-    const indent = (/^(\s+)/.exec(lines.slice(pluginsAt + 1, end).find(line => /^\s/.test(line)) || '') || [])[1] || '  '
-    lines.splice(pluginsAt + 1, 0, ...enabledBlock(pluginId, indent))
-  } else {
-    // Only splice into a block list; a scalar/flow `enabled:` is left alone.
-    const after = lines[enabledAt].replace(/^\s+enabled:\s*/, '')
-    const isBlockList = after === '' || after.startsWith('#')
-    if (!isBlockList) {
-      return { contents, changed: false }
-    }
-    const indent = `${/^(\s*)/.exec(lines[enabledAt])![1]}  `
-    lines.splice(enabledAt + 1, 0, `${indent}- ${pluginId}`)
-  }
-
-  const joined = lines.join('\n')
-  return { contents: hadTrailingNewline ? `${joined}\n` : joined, changed: true }
+  fsModule.renameSync(tmp, target)
 }
 
+/**
+ * Copy `source` → `dest` only when the CONTENT differs (sha256), not on
+ * size+mtime. Size+mtime is a weak proxy: two different builds can share a size
+ * and a stale copy can carry a newer mtime, either of which silently keeps a
+ * wrong binary. The copy itself is atomic (temp-then-rename) so a reader never
+ * observes a partial file. Returns whether a copy happened.
+ */
 function copyIfChanged(fsModule: EnterpriseSeedFs, source: string, dest: string, mode?: number): boolean {
   try {
-    const [srcStat, destStat] = [fsModule.statSync(source), fsModule.existsSync(dest) ? fsModule.statSync(dest) : null]
-    if (destStat && destStat.size === srcStat.size && destStat.mtimeMs >= srcStat.mtimeMs) {
+    if (fsModule.existsSync(dest) && fileDigest(fsModule, source) === fileDigest(fsModule, dest)) {
+      // Content already matches; still make sure the mode (exec bit) is right.
+      if (mode !== undefined) {
+        try {
+          fsModule.chmodSync(dest, mode)
+        } catch {
+          void 0
+        }
+      }
       return false
     }
   } catch {
-    return false
+    // Unreadable dest/source — fall through and (re)write.
   }
 
   fsModule.mkdirSync(path.dirname(dest), { recursive: true })
-  fsModule.copyFileSync(source, dest)
+  const tmp = tempSibling(dest)
+  fsModule.copyFileSync(source, tmp)
   if (mode !== undefined) {
     try {
-      fsModule.chmodSync(dest, mode)
+      fsModule.chmodSync(tmp, mode)
     } catch {
       // best effort — a filesystem without POSIX modes (Windows) still has a runnable copy
     }
   }
+  fsModule.renameSync(tmp, dest)
 
   return true
 }
@@ -229,7 +299,7 @@ function ensurePluginEnabled(
   fsModule: EnterpriseSeedFs,
   configPath: string,
   pluginId: string
-): { changed: boolean; contents: string } {
+): { changed: boolean; contents: string; error?: string } {
   let current = ''
   try {
     current = fsModule.readFileSync(configPath, 'utf8')
@@ -238,17 +308,17 @@ function ensurePluginEnabled(
   }
 
   const merged = mergePluginEnabled(current, pluginId)
+  if (merged.error) {
+    // Refuse to touch an unparseable / ambiguous config: report it, leave the
+    // file exactly as it was. Better a loud no-op than a corrupted config.yaml.
+    return { changed: false, contents: current, error: merged.error }
+  }
   if (!merged.changed) {
     return { changed: false, contents: current }
   }
 
   fsModule.mkdirSync(path.dirname(configPath), { recursive: true })
-  fsModule.writeFileSync(configPath, merged.contents, { mode: 0o600 })
-  try {
-    fsModule.chmodSync(configPath, 0o600)
-  } catch {
-    void 0
-  }
+  atomicWriteFile(fsModule, configPath, merged.contents, 0o600)
 
   return { changed: true, contents: merged.contents }
 }
@@ -330,7 +400,11 @@ export function seedEnterpriseAssets(options: {
     const enabled = ensurePluginEnabled(fsModule, configPath, ENTERPRISE_PLUGIN_ID)
     result.configPath = configPath
     result.configUpdated = enabled.changed
-    notes.push(`plugins.enabled ${enabled.changed ? 'updated' : 'present'}: ${configPath}`)
+    if (enabled.error) {
+      notes.push(`plugins.enabled NOT updated (${enabled.error}); ${configPath} left unchanged`)
+    } else {
+      notes.push(`plugins.enabled ${enabled.changed ? 'updated' : 'present'}: ${configPath}`)
+    }
 
     result.seeded = Boolean(result.cliPath) && Boolean(result.pluginPath)
     result.reason = result.seeded ? 'seeded' : 'partial'

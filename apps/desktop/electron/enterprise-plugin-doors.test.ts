@@ -25,6 +25,16 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { PACKAGE_MARKER, reconcileUnifiedDesktopHalves } from './desktop-plugins-root'
 
+// The REAL activation decision, imported at run time. A *dynamic* (non-literal)
+// specifier is deliberate: the composite `tsconfig.electron.json` project
+// excludes `src/`, so a static cross-tree import trips TS6307 ("file not listed
+// in project"). vitest/resolve loads the actual module, so the test still
+// exercises the shipped `pluginActive` rather than a hand-copied mirror.
+const pluginsStorePath = '../src/contrib/plugins-store'
+const { pluginActive } = (await import(/* @vite-ignore */ pluginsStorePath)) as {
+  pluginActive: (id: string, defaultEnabled?: boolean) => boolean
+}
+
 const PLUGIN_ID = 'plankton-enterprise'
 const PLUGIN_SRC = `export default { id: '${PLUGIN_ID}', defaultEnabled: true, register() {} }\n`
 
@@ -43,17 +53,19 @@ function write(file: string, contents: string) {
 }
 
 /**
- * The runtime loader's EXACT activation decision, mirrored from
- * `src/contrib/runtime-loader.ts` (the disk scan) +
- * `src/contrib/plugins-store.ts` (`pluginActive`: a user decision, else the
- * default). On a first launch there is no user decision, so:
- *   optionsDefaultEnabled = marker ? false : undefined
- *   active = (plugin.defaultEnabled ?? true) && (optionsDefaultEnabled ?? true)
+ * The runtime loader's EXACT activation decision, computed with the REAL
+ * `pluginActive` from `src/contrib/plugins-store.ts` (not a hand-copied
+ * mirror). `src/contrib/runtime-loader.ts` calls:
+ *
+ *   pluginActive(plugin.id, (plugin.defaultEnabled ?? true) && (options.defaultEnabled ?? true))
+ *
+ * and, for a disk entry, `options.defaultEnabled = marker ? false : undefined`
+ * (runtime-loader.ts). On a first launch there is no user decision, so this
+ * reduces to `pluginDefaultEnabled && !hasMarker`. Any drift in `pluginActive`
+ * now flows through this test instead of being masked by a copy.
  */
 function effectiveActive(hasMarker: boolean, pluginDefaultEnabled = true): boolean {
-  const optionsDefaultEnabled = hasMarker ? false : undefined
-
-  return pluginDefaultEnabled && (optionsDefaultEnabled ?? true)
+  return pluginActive(PLUGIN_ID, pluginDefaultEnabled && !hasMarker)
 }
 
 afterEach(() => {

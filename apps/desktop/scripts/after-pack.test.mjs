@@ -4,7 +4,7 @@ import {
   resolvePackagedAsarPath
 } from './backend-ready-artifact.mjs'
 import { assertEnterpriseResourcesPresent } from './after-pack.mjs'
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -115,32 +115,45 @@ it('leaves Linux alone and reports a missing framework without failing packaging
 // R1 (PLANKTON-MIGRATION-BATCH2.md): electron-builder silently skips a missing
 // `extraResources.from`, so a typo'd enterprise resource path would otherwise
 // ship a crippled artifact with a green build. After-pack must FAIL the pack.
+const REQUIRED_ENTERPRISE = [
+  'LICENSE',
+  'THIRD-PARTY-NOTICES.md',
+  'enterprise/model-seed.json',
+  'enterprise/plankton-enterprise/plugin.yaml',
+  'enterprise/plankton-enterprise/__init__.py',
+  'enterprise/plankton-enterprise/dashboard/manifest.json',
+  'enterprise/plankton-enterprise/dashboard/plugin_api.py',
+  'enterprise/plankton-enterprise/desktop/plugin.js',
+  'enterprise/cli/darwin-arm64/shaoke-cli'
+]
+
+/** Write a complete, valid enterprise Resources tree (CLI executable). */
+async function seedEnterpriseResources(resources) {
+  for (const relative of REQUIRED_ENTERPRISE) {
+    const target = path.join(resources, relative)
+    await mkdir(path.dirname(target), { recursive: true })
+    await writeFile(target, 'x')
+  }
+  await chmod(path.join(resources, 'enterprise', 'cli', 'darwin-arm64', 'shaoke-cli'), 0o755)
+}
+
+async function enterpriseAppDir(root, name) {
+  const appDir = path.join(root, name)
+  await mkdir(appDir, { recursive: true })
+  await writeFile(path.join(appDir, 'product-identity.cjs'), 'module.exports = { enterprise: true, iconBase: "assets/icon" }\n')
+  return appDir
+}
+
 it('R1: fails the pack when an enterprise extraResource is missing, passes when present', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'hermes-enterprise-res-'))
   try {
-    const appDir = path.join(root, 'apps-desktop')
-    await mkdir(appDir, { recursive: true })
-    await writeFile(path.join(appDir, 'product-identity.cjs'), 'module.exports = { enterprise: true, iconBase: "assets/icon" }\n')
-
+    const appDir = await enterpriseAppDir(root, 'apps-desktop')
     const appOutDir = path.join(root, 'out')
     const resources = path.join(appOutDir, 'Plankton.app', 'Contents', 'Resources')
-    const expected = [
-      'LICENSE',
-      'THIRD-PARTY-NOTICES.md',
-      'enterprise/model-seed.json',
-      'enterprise/plankton-enterprise/plugin.yaml',
-      'enterprise/plankton-enterprise/dashboard/plugin_api.py',
-      'enterprise/plankton-enterprise/desktop/plugin.js',
-      'enterprise/cli/darwin-arm64/shaoke-cli'
-    ]
-    for (const relative of expected) {
-      const target = path.join(resources, relative)
-      await mkdir(path.dirname(target), { recursive: true })
-      await writeFile(target, 'x')
-    }
+    await seedEnterpriseResources(resources)
 
     const ctx = { appOutDir, electronPlatformName: 'darwin', arch: 3, packager: { appInfo: { productFilename: 'Plankton' } } }
-    expect(assertEnterpriseResourcesPresent(ctx, appDir)).toEqual(expected)
+    expect(assertEnterpriseResourcesPresent(ctx, appDir)).toEqual(REQUIRED_ENTERPRISE)
 
     // Counter-proof: the exact wrong-path hazard (missing CLI) → RED build.
     await rm(path.join(resources, 'enterprise', 'cli', 'darwin-arm64'), { force: true, recursive: true })
@@ -151,6 +164,46 @@ it('R1: fails the pack when an enterprise extraResource is missing, passes when 
     await mkdir(upstreamDir, { recursive: true })
     await writeFile(path.join(upstreamDir, 'product-identity.cjs'), 'module.exports = { enterprise: false, iconBase: "assets/icon" }\n')
     expect(assertEnterpriseResourcesPresent(ctx, upstreamDir)).toEqual([])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+// F6: an in-place (present-but-broken) resource is just as damaging as a missing
+// one and must also fail the pack: a 0-byte CLI, a CLI without its exec bit, and
+// a missing __init__.py / dashboard/manifest.json (which detaches the plugin's
+// dashboard API) each turn the build RED.
+it('F6: empty CLI, stripped exec bit, and missing required files each fail the pack', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'hermes-enterprise-broken-'))
+  try {
+    const appDir = await enterpriseAppDir(root, 'apps-desktop')
+    const appOutDir = path.join(root, 'out')
+    const resources = path.join(appOutDir, 'Plankton.app', 'Contents', 'Resources')
+    const cli = path.join(resources, 'enterprise', 'cli', 'darwin-arm64', 'shaoke-cli')
+    const ctx = { appOutDir, electronPlatformName: 'darwin', arch: 3, packager: { appInfo: { productFilename: 'Plankton' } } }
+
+    // Baseline: a fully valid tree passes.
+    await seedEnterpriseResources(resources)
+    expect(assertEnterpriseResourcesPresent(ctx, appDir)).toEqual(REQUIRED_ENTERPRISE)
+
+    // (1) zero-byte CLI → RED.
+    await writeFile(cli, '')
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/EMPTY/)
+
+    // (2) CLI present and non-empty but not executable → RED.
+    await writeFile(cli, 'x')
+    await chmod(cli, 0o644)
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/not executable/)
+
+    // (3) required file missing (dashboard/manifest.json) → RED.
+    await chmod(cli, 0o755)
+    await rm(path.join(resources, 'enterprise', 'plankton-enterprise', 'dashboard', 'manifest.json'))
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/dashboard\/manifest\.json/)
+
+    // (4) __init__.py missing → RED.
+    await writeFile(path.join(resources, 'enterprise', 'plankton-enterprise', 'dashboard', 'manifest.json'), 'x')
+    await rm(path.join(resources, 'enterprise', 'plankton-enterprise', '__init__.py'))
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/__init__\.py/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

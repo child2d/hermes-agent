@@ -51,9 +51,12 @@ const ARCH_NAMES = Object.freeze({ 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64',
  * electron-builder SILENTLY skips an `extraResources` entry whose `from` does
  * not exist, so one typo'd path ships an artifact with no CLI / no plugin and a
  * completely green build (the KI-PLANKTON-0056 hazard class). This asserts each
- * expected resource is present and throws otherwise, turning that into a RED
- * build. Upstream variants (`enterprise` false) assert nothing, so their
- * Resources stay bit-for-bit unchanged.
+ * expected resource is present, NON-EMPTY, and — for the CLI — carries the
+ * executable bit; a truncated (0-byte) seed, a lost mode, or a missing
+ * `__init__.py` / `dashboard/manifest.json` (which would detach the plugin's
+ * dashboard API while the build stays green) all turn the pack RED. Upstream
+ * variants (`enterprise` false) assert nothing, so their Resources stay
+ * bit-for-bit unchanged.
  *
  * @param {{ appOutDir: string, electronPlatformName: string, arch?: number|string, packager: { appInfo: { productFilename: string } } }} context
  * @param {string} [appDir] the apps/desktop directory
@@ -73,14 +76,17 @@ export function assertEnterpriseResourcesPresent(
     : path.join(appOutDir, 'resources')
   const archName = typeof arch === 'number' ? ARCH_NAMES[arch] : arch
   const exe = electronPlatformName === 'win32' ? 'shaoke-cli.exe' : 'shaoke-cli'
+  const cliRelative = `enterprise/cli/${electronPlatformName}-${archName}/${exe}`
   const expected = [
     'LICENSE',
     'THIRD-PARTY-NOTICES.md',
     'enterprise/model-seed.json',
     'enterprise/plankton-enterprise/plugin.yaml',
+    'enterprise/plankton-enterprise/__init__.py',
+    'enterprise/plankton-enterprise/dashboard/manifest.json',
     'enterprise/plankton-enterprise/dashboard/plugin_api.py',
     'enterprise/plankton-enterprise/desktop/plugin.js',
-    `enterprise/cli/${electronPlatformName}-${archName}/${exe}`
+    cliRelative
   ]
 
   const missing = expected.filter(relative => !fs.existsSync(path.join(resources, relative)))
@@ -90,6 +96,26 @@ export function assertEnterpriseResourcesPresent(
         '— electron-builder skips a missing `from` silently, so the pack would ship without them ' +
         '(fix the extraResources path or the staging step; see scripts/plankton-pack.sh)'
     )
+  }
+
+  const empty = expected.filter(relative => fs.statSync(path.join(resources, relative)).size === 0)
+  if (empty.length > 0) {
+    throw new Error(
+      `[after-pack] enterprise extraResources are EMPTY in ${resources}: ${empty.join(', ')} ` +
+        '— a zero-byte seed (truncated CLI / plugin payload) would ship a crippled artifact with a green build'
+    )
+  }
+
+  // A staged-but-chmod-stripped CLI is not runnable; POSIX only (Windows has no
+  // exec bit and relies on the .exe extension).
+  if (electronPlatformName !== 'win32') {
+    const cliPath = path.join(resources, cliRelative)
+    if ((fs.statSync(cliPath).mode & 0o111) === 0) {
+      throw new Error(
+        `[after-pack] enterprise CLI is not executable: ${cliPath} ` +
+          '— the staged shaoke-cli lost its exec bit (see scripts/plankton-pack.sh); a non-executable seed is unrunnable'
+      )
+    }
   }
 
   return expected

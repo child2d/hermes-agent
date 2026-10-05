@@ -13,6 +13,11 @@ Failure taxonomy (four distinguishable kinds, mirroring the old tool-catalog and
 PLK-REQ-0027): ``cli-missing`` / ``cli-failed`` / ``not-json`` / ``shape-mismatch``.
 An EMPTY catalog is a SUCCESS (``{ok: true, systems: []}``) — never conflated with
 a failure, so "no tools" and "CLI broken" are visually different.
+
+Resolution is enterprise-only: the CLI comes from ``<HERMES_HOME>/bin`` (or an
+explicit ``PLANKTON_SHAOKE_CLI`` override). A same-named binary on ``PATH`` is
+NEVER used as a working copy — its absence of the enterprise copy is reported as
+``cli-missing`` (KI-PLANKTON-0013), never silently downgraded.
 """
 
 from __future__ import annotations
@@ -56,11 +61,18 @@ def _hermes_home() -> Optional[Path]:
 
 
 def resolve_cli() -> Tuple[Optional[str], str]:
-    """Locate the enterprise ``shaoke-cli`` without ever reading credentials.
+    """Locate the ENTERPRISE ``shaoke-cli`` without ever reading credentials.
 
-    Precedence: explicit override → the enterprise copy at ``<HERMES_HOME>/bin``
-    (the one the desktop seeds and PATH-fronts) → whatever ``PATH`` resolves.
-    The enterprise copy is preferred so a stale personal CLI cannot shadow it.
+    Precedence: an explicit override → the enterprise copy at
+    ``<HERMES_HOME>/bin`` (the one the desktop seeds and PATH-fronts).
+
+    There is deliberately NO fallback to whatever ``PATH`` resolves. A personal
+    ``~/.local/bin/shaoke-cli`` is a DIFFERENT artifact with unknown provenance
+    and its own credentials; treating it as "the enterprise CLI" is a silent
+    downgrade (KI-PLANKTON-0013). When the enterprise copy is absent this
+    returns ``(None, "missing")`` so the caller reports an explicit
+    ``cli-missing`` — a same-named binary found on PATH is surfaced only as a
+    diagnostic hint (``personal_cli_path``), never used.
     """
     override = (os.environ.get("PLANKTON_SHAOKE_CLI") or "").strip()
     if override:
@@ -74,11 +86,17 @@ def resolve_cli() -> Tuple[Optional[str], str]:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate), "enterprise"
 
-    found = shutil.which(CLI_NAME)
-    if found:
-        return found, "path"
-
     return None, "missing"
+
+
+def personal_cli_path() -> Optional[str]:
+    """A same-named CLI found on ``PATH`` — DIAGNOSTIC ONLY.
+
+    Never returned by :func:`resolve_cli` as a working copy: it exists solely so
+    a ``cli-missing`` failure can tell the user a personal copy was seen and
+    ignored (so the message is not a bare "not found" when one *is* on PATH).
+    """
+    return shutil.which(CLI_NAME)
 
 
 def _excerpt(text: str) -> str:
@@ -105,12 +123,21 @@ def list_tools() -> dict:
     cli_path, cli_source = resolve_cli()
 
     if cli_path is None:
-        return _failure(
+        payload = _failure(
             "cli-missing",
             "找不到本机 shaoke-cli（企业副本应在引擎 home 的 bin 目录下）",
             None,
             cli_source,
         )
+        stray = personal_cli_path()
+        if stray:
+            home = _hermes_home()
+            expected = (home / "bin" / CLI_NAME) if home is not None else None
+            payload["note"] = (
+                f"PATH 上存在同名 CLI（个人副本）{stray}，已按企业口径忽略"
+                + (f"；企业副本应为 {expected}" if expected is not None else "")
+            )
+        return payload
 
     try:
         completed = subprocess.run(

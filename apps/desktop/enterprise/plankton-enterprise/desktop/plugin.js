@@ -58,7 +58,7 @@ function riskColor(risk) {
 function ToolRow({ tool }) {
   return jsxs('div', { style: S.row, children: [
     jsx('span', { style: S.toolName, children: tool.full_name || tool.name }),
-    jsx('span', { style: riskColor(tool.risk), children: jsx('span', { style: S.badge, children: tool.risk || '?' }) }),
+    jsx('span', { style: { color: riskColor(tool.risk) }, children: jsx('span', { style: S.badge, children: tool.risk || '?' }) }),
     jsx('span', { style: S.toolDesc, children: tool.description || '' })
   ] })
 }
@@ -81,6 +81,7 @@ function FailureBox({ data, onRetry }) {
   return jsxs('div', { style: S.notice, children: [
     jsx('div', { children: `${FAILURE_COPY[kind] || '读取失败'}${kind ? ` — ${kind}` : ''}` }),
     data && data.cliPath ? jsx('div', { style: S.meta, children: `CLI: ${data.cliPath}（来源 ${data.cliSource}）` }) : null,
+    data && data.note ? jsx('div', { style: S.meta, children: data.note }) : null,
     data && data.rawExcerpt ? jsx('pre', { style: S.pre, children: data.rawExcerpt }) : null,
     jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: onRetry, children: '重试' }) })
   ] })
