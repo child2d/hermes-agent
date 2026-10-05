@@ -379,9 +379,23 @@ needs — `HERMES_PYTHON=/opt/homebrew/bin/python3`,
 `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`,
 `HERMES_DESKTOP_VARIANT=plankton`, `CSC_IDENTITY_AUTO_DISCOVERY=false` — makes
 sure `build/enterprise/model-seed.json` exists (keyless placeholder when no
-secret seed is present), then runs `npm run pack`. It assumes
-`build/agent-payload` is already staged (step 1 below); re-staging is only
-needed when the runtime payload itself changes.
+secret seed is present), **refreshes the bundled engine payload source tree
+from HEAD**, then runs `npm run pack`.
+
+> **The engine payload is a `git archive HEAD` snapshot** (upstream
+> `scripts/bundles/native.py:_prepare_native`). Uncommitted source never reaches
+> the packaged engine, so `pack:plankton` refuses to run on a dirty tree and
+> re-extracts `build/agent-payload/hermes-agent` from HEAD before packing. Commit
+> first; the artifact is then pinned to that commit (build stamp `dirty=false`).
+> The staged `tools/`, `venv/` and `pm-runtime/` under `build/agent-payload` stay
+> as-is (step 1 below); re-staging is only needed when the runtime *toolchain*
+> itself changes.
+
+> **Do not run another Plankton instance from the build output while packing.**
+> macOS denies writes into a running app's bundle, so a leftover
+> `release/mac-arm64/Plankton.app` process makes `after-pack` fail with
+> `EPERM: Operation not permitted` (e.g. on `payload.py rehash`). Quit every
+> instance first.
 
 ### The two underlying steps
 
