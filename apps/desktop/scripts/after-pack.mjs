@@ -15,9 +15,11 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { copyFile, mkdir, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { parseDocument } from 'yaml'
 import { runPython } from '../../../scripts/build/python.mjs'
 
 import { assertPackagedBackendReadyArtifact, resolvePackagedAsarPath } from './backend-ready-artifact.mjs'
+import { assertCliBinaryFormat } from './plankton-cli-format.mjs'
 import { batchSignAppTree } from './batch-sign-binaries.mjs'
 import { rehashPayloadDigests } from './payload-digests.mjs'
 import { resolveSigningIdentity, signNestedChromium } from './sign-nested-chromium.mjs'
@@ -46,17 +48,22 @@ const ARCH_NAMES = Object.freeze({ 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64',
 
 /**
  * R1 (PLANKTON-MIGRATION-BATCH2.md): FAIL-CLOSED when an enterprise
- * extraResource is missing from the packed app.
+ * extraResource is missing — or present-but-broken — in the packed app.
  *
  * electron-builder SILENTLY skips an `extraResources` entry whose `from` does
  * not exist, so one typo'd path ships an artifact with no CLI / no plugin and a
  * completely green build (the KI-PLANKTON-0056 hazard class). This asserts each
- * expected resource is present, NON-EMPTY, and — for the CLI — carries the
- * executable bit; a truncated (0-byte) seed, a lost mode, or a missing
- * `__init__.py` / `dashboard/manifest.json` (which would detach the plugin's
- * dashboard API while the build stays green) all turn the pack RED. Upstream
- * variants (`enterprise` false) assert nothing, so their Resources stay
- * bit-for-bit unchanged.
+ * expected resource is:
+ *   - present and NON-EMPTY;
+ *   - a REGULAR FILE (a directory at a file path is non-empty and 0755 — it must
+ *     not read as a valid resource);
+ *   - for the CLI: executable (POSIX) AND the right CONTAINER FORMAT +
+ *     ARCHITECTURE for the target platform (Mach-O/ELF/PE magic + embedded CPU);
+ *   - for `plugin.yaml` / `dashboard/manifest.json`: parseable as YAML / JSON.
+ * A truncated seed, a lost mode, a directory, a wrong-arch CLI, a text
+ * placeholder or an invalid manifest each turn the pack RED. Upstream variants
+ * (`enterprise` false) assert nothing, so their Resources stay bit-for-bit
+ * unchanged.
  *
  * @param {{ appOutDir: string, electronPlatformName: string, arch?: number|string, packager: { appInfo: { productFilename: string } } }} context
  * @param {string} [appDir] the apps/desktop directory
@@ -98,6 +105,23 @@ export function assertEnterpriseResourcesPresent(
     )
   }
 
+  // Present but not a regular file (e.g. a DIRECTORY staged at the CLI path):
+  // existsSync/statSync.size/statSync.mode all read green for a 0755 directory,
+  // so every content check below would be meaningless. Fail first.
+  const notFiles = expected.filter(relative => {
+    try {
+      return !fs.statSync(path.join(resources, relative)).isFile()
+    } catch {
+      return true
+    }
+  })
+  if (notFiles.length > 0) {
+    throw new Error(
+      `[after-pack] enterprise extraResource is not a regular file in ${resources}: ${notFiles.join(', ')} ` +
+        '— a directory (or other non-file) at a resource path is non-empty and 0755 and must not pass as a valid seed'
+    )
+  }
+
   const empty = expected.filter(relative => fs.statSync(path.join(resources, relative)).size === 0)
   if (empty.length > 0) {
     throw new Error(
@@ -106,16 +130,47 @@ export function assertEnterpriseResourcesPresent(
     )
   }
 
+  const cliPath = path.join(resources, cliRelative)
   // A staged-but-chmod-stripped CLI is not runnable; POSIX only (Windows has no
   // exec bit and relies on the .exe extension).
-  if (electronPlatformName !== 'win32') {
-    const cliPath = path.join(resources, cliRelative)
-    if ((fs.statSync(cliPath).mode & 0o111) === 0) {
-      throw new Error(
-        `[after-pack] enterprise CLI is not executable: ${cliPath} ` +
-          '— the staged shaoke-cli lost its exec bit (see scripts/plankton-pack.sh); a non-executable seed is unrunnable'
-      )
+  if (electronPlatformName !== 'win32' && (fs.statSync(cliPath).mode & 0o111) === 0) {
+    throw new Error(
+      `[after-pack] enterprise CLI is not executable: ${cliPath} ` +
+        '— the staged shaoke-cli lost its exec bit (see scripts/plankton-pack.sh); a non-executable seed is unrunnable'
+    )
+  }
+
+  // Format + architecture: a non-empty, executable file is still a crippled
+  // artifact if it is a different OS/arch binary, a text placeholder, or a
+  // truncated stub. Read the magic and prove it matches the target.
+  assertCliBinaryFormat({
+    file: cliPath,
+    platform: electronPlatformName,
+    arch: archName,
+    label: '[after-pack] enterprise CLI'
+  })
+
+  // Content legality for the two structured payloads: an invalid YAML/JSON seed
+  // detaches the plugin's dashboard API while the build would otherwise stay green.
+  const pluginYaml = path.join(resources, 'enterprise/plankton-enterprise/plugin.yaml')
+  try {
+    const doc = parseDocument(fs.readFileSync(pluginYaml, 'utf8'))
+    if (doc.errors.length > 0) {
+      throw doc.errors[0]
     }
+  } catch (error) {
+    throw new Error(
+      `[after-pack] enterprise plugin.yaml is not valid YAML (${pluginYaml}): ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+
+  const manifest = path.join(resources, 'enterprise/plankton-enterprise/dashboard/manifest.json')
+  try {
+    JSON.parse(fs.readFileSync(manifest, 'utf8'))
+  } catch (error) {
+    throw new Error(
+      `[after-pack] enterprise dashboard/manifest.json is not valid JSON (${manifest}): ${error instanceof Error ? error.message : String(error)}`
+    )
   }
 
   return expected

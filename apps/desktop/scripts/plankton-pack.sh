@@ -74,6 +74,12 @@ if [ ! -x "$CLI_DEST" ]; then
   echo "[plankton-pack] ERROR: staged CLI is not executable: $CLI_DEST" >&2
   exit 1
 fi
+# Format + architecture: present+executable is not enough — a wrong-OS or
+# wrong-arch binary (e.g. PLANKTON_SHAOKE_CLI_SRC pointing at another platform's
+# build) is just as unrunnable. Prove the staged SOURCE's magic matches the
+# target before it is packed (after-pack re-checks the packaged copy).
+node scripts/plankton-cli-format.mjs assert --platform "$PACK_OS" --arch "$PACK_ARCH" --file "$CLI_DEST" \
+  || { echo "[plankton-pack] ERROR: staged CLI failed format/arch validation (see above)." >&2; exit 1; }
 echo "[plankton-pack] staged CLI: $CLI_DEST (from $CLI_SRC)"
 
 # The enterprise plugin payload is committed in-repo; assert it is present so a

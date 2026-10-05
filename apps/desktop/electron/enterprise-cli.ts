@@ -71,6 +71,10 @@ export interface EnterpriseSeedFs {
   readFileBuffer: (target: string) => Buffer
   readdirSync: typeof fs.readdirSync
   statSync: typeof fs.statSync
+  /** `lstat` (never follow) — used to detect a symlinked destination. */
+  lstatSync: typeof fs.lstatSync
+  /** Resolve a symlink to its real target path (engine `atomic_replace` parity). */
+  realpathSync: typeof fs.realpathSync
   writeFileSync: (target: string, data: string, options?: { mode?: number }) => void
   chmodSync: typeof fs.chmodSync
   /** Atomic publish step for a temp-then-rename write. */
@@ -85,6 +89,8 @@ const DEFAULT_FS: EnterpriseSeedFs = {
   readFileBuffer: target => fs.readFileSync(target),
   readdirSync: fs.readdirSync,
   statSync: fs.statSync,
+  lstatSync: fs.lstatSync,
+  realpathSync: fs.realpathSync,
   writeFileSync: fs.writeFileSync,
   chmodSync: fs.chmodSync,
   renameSync: fs.renameSync
@@ -173,42 +179,59 @@ export function mergePluginEnabled(
     return { contents: original, changed: false, error: 'unparseable' }
   }
 
-  const plugins = doc.has('plugins') ? doc.get('plugins') : undefined
-
-  // No `plugins:` key yet (or an empty `plugins:` → null) → write the mapping
-  // with just our allow-list entry. `setIn` cannot traverse a null, so set the
-  // whole key.
-  if (plugins === undefined || plugins === null) {
-    doc.set('plugins', doc.createNode({ enabled: [pluginId] }))
-    return { contents: doc.toString(), changed: true }
+  // A NON-EMPTY document whose root is not a mapping (a bare scalar or a
+  // sequence) cannot carry `plugins.enabled`: `doc.has` / `doc.get` / `doc.set`
+  // throw on it (`assertCollection` / `Expected a valid index`). The caller runs
+  // at the Electron main module's TOP LEVEL, so an uncaught throw there aborts
+  // app startup entirely. Refuse with the file untouched instead. An empty
+  // document (`contents === null`) is fine — `doc.set('plugins', …)` seeds it.
+  if (doc.contents !== null && !isMap(doc.contents)) {
+    return { contents: original, changed: false, error: 'top-level-not-a-mapping' }
   }
 
-  // A scalar / sequence `plugins:` cannot carry an `enabled:` list safely.
-  if (!isMap(plugins)) {
-    return { contents: original, changed: false, error: 'plugins-not-a-mapping' }
-  }
+  try {
+    const plugins = doc.has('plugins') ? doc.get('plugins') : undefined
 
-  if (!plugins.has('enabled')) {
-    plugins.set('enabled', doc.createNode([pluginId]))
-    return { contents: doc.toString(), changed: true }
-  }
-
-  const enabled = plugins.get('enabled')
-  if (enabled === null || enabled === undefined || isSeq(enabled)) {
-    const seq = enabled as { items: unknown[]; add: (value: unknown) => void } | null
-    if (seq && seq.items.some(item => (isScalar(item) ? item.value : item) === pluginId)) {
-      return { contents: original, changed: false }
+    // No `plugins:` key yet (or an empty `plugins:` → null) → write the mapping
+    // with just our allow-list entry. `setIn` cannot traverse a null, so set the
+    // whole key.
+    if (plugins === undefined || plugins === null) {
+      doc.set('plugins', doc.createNode({ enabled: [pluginId] }))
+      return { contents: doc.toString(), changed: true }
     }
-    if (seq) {
-      seq.add(doc.createNode(pluginId))
-    } else {
+
+    // A scalar / sequence `plugins:` cannot carry an `enabled:` list safely.
+    if (!isMap(plugins)) {
+      return { contents: original, changed: false, error: 'plugins-not-a-mapping' }
+    }
+
+    if (!plugins.has('enabled')) {
       plugins.set('enabled', doc.createNode([pluginId]))
+      return { contents: doc.toString(), changed: true }
     }
-    return { contents: doc.toString(), changed: true }
-  }
 
-  // A scalar (e.g. `enabled: true`) — refuse rather than guess a list out of it.
-  return { contents: original, changed: false, error: 'enabled-not-a-sequence' }
+    const enabled = plugins.get('enabled')
+    if (enabled === null || enabled === undefined || isSeq(enabled)) {
+      const seq = enabled as { items: unknown[]; add: (value: unknown) => void } | null
+      if (seq && seq.items.some(item => (isScalar(item) ? item.value : item) === pluginId)) {
+        return { contents: original, changed: false }
+      }
+      if (seq) {
+        seq.add(doc.createNode(pluginId))
+      } else {
+        plugins.set('enabled', doc.createNode([pluginId]))
+      }
+      return { contents: doc.toString(), changed: true }
+    }
+
+    // A scalar (e.g. `enabled: true`) — refuse rather than guess a list out of it.
+    return { contents: original, changed: false, error: 'enabled-not-a-sequence' }
+  } catch {
+    // Any other shape the parser tolerates but the editor cannot traverse safely
+    // (a node kind we did not anticipate). Never throw — same discipline as the
+    // explicit guards above: refuse and leave the original bytes alone.
+    return { contents: original, changed: false, error: 'unexpected-shape' }
+  }
 }
 
 /** Content digest of a file (bytes, never decoded). Throws if unreadable. */
@@ -222,13 +245,35 @@ function tempSibling(target: string): string {
 }
 
 /**
+ * The path an atomic publish should rename ONTO: a symlink's real target, else
+ * the target itself. Mirrors the engine's `utils._publish_path` so a symlinked
+ * `config.yaml` is updated through the link and stays a link — a bare
+ * `renameSync` onto the link path would replace it with a regular file.
+ */
+function resolvePublishPath(fsModule: EnterpriseSeedFs, target: string): string {
+  try {
+    if (fsModule.lstatSync(target).isSymbolicLink()) {
+      return fsModule.realpathSync(target)
+    }
+  } catch {
+    // Missing / not a link — publish to the path as given.
+  }
+  return target
+}
+
+/**
  * Write `data` to `target` atomically: a full temp file is fsync'd by the OS on
  * close, then renamed over the destination. A crash mid-write can therefore
  * never leave a half-written config.yaml / cli. `mode` is applied to the temp
  * file BEFORE the rename, so the destination is never briefly mis-permissioned.
+ *
+ * A symlinked destination is resolved first (and its temp staged beside the
+ * real target) so the link survives — parity with the engine's `atomic_replace`
+ * / `mkstemp_beside` pair.
  */
 function atomicWriteFile(fsModule: EnterpriseSeedFs, target: string, data: string, mode?: number): void {
-  const tmp = tempSibling(target)
+  const resolved = resolvePublishPath(fsModule, target)
+  const tmp = tempSibling(resolved)
   fsModule.writeFileSync(tmp, data, mode === undefined ? undefined : { mode })
   if (mode !== undefined) {
     try {
@@ -237,7 +282,7 @@ function atomicWriteFile(fsModule: EnterpriseSeedFs, target: string, data: strin
       void 0
     }
   }
-  fsModule.renameSync(tmp, target)
+  fsModule.renameSync(tmp, resolved)
 }
 
 /**
@@ -264,8 +309,11 @@ function copyIfChanged(fsModule: EnterpriseSeedFs, source: string, dest: string,
     // Unreadable dest/source — fall through and (re)write.
   }
 
-  fsModule.mkdirSync(path.dirname(dest), { recursive: true })
-  const tmp = tempSibling(dest)
+  // Resolve a symlinked destination so the copy lands in the real file and the
+  // link survives (engine parity); the temp stages beside the resolved target.
+  const resolvedDest = resolvePublishPath(fsModule, dest)
+  fsModule.mkdirSync(path.dirname(resolvedDest), { recursive: true })
+  const tmp = tempSibling(resolvedDest)
   fsModule.copyFileSync(source, tmp)
   if (mode !== undefined) {
     try {
@@ -274,7 +322,7 @@ function copyIfChanged(fsModule: EnterpriseSeedFs, source: string, dest: string,
       // best effort — a filesystem without POSIX modes (Windows) still has a runnable copy
     }
   }
-  fsModule.renameSync(tmp, dest)
+  fsModule.renameSync(tmp, resolvedDest)
 
   return true
 }
@@ -303,8 +351,20 @@ function ensurePluginEnabled(
   let current = ''
   try {
     current = fsModule.readFileSync(configPath, 'utf8')
-  } catch {
-    current = ''
+  } catch (error) {
+    // Distinguish an ABSENT file (fine — we then create it) from any OTHER read
+    // failure (permissions, EIO, a broken mount). Collapsing the latter to ''
+    // makes `mergePluginEnabled('')` report `changed: true`, and the atomic
+    // write then REPLACES the user's recoverable config.yaml with only our
+    // plugin entry — silent data loss behind a "success" log line. The engine's
+    // own writer fails closed on exactly this
+    // (hermes_cli/config.py: require_readable_config_before_write), so mirror
+    // it: refuse and leave the original bytes untouched.
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    const absent = code === 'ENOENT' || (code === undefined && !fsModule.existsSync(configPath))
+    if (!absent) {
+      return { changed: false, contents: current, error: 'unreadable' }
+    }
   }
 
   const merged = mergePluginEnabled(current, pluginId)
@@ -317,8 +377,14 @@ function ensurePluginEnabled(
     return { changed: false, contents: current }
   }
 
-  fsModule.mkdirSync(path.dirname(configPath), { recursive: true })
-  atomicWriteFile(fsModule, configPath, merged.contents, 0o600)
+  try {
+    fsModule.mkdirSync(path.dirname(configPath), { recursive: true })
+    atomicWriteFile(fsModule, configPath, merged.contents, 0o600)
+  } catch {
+    // A failed publish (read-only home, disk full, lost race) must NOT read as
+    // success; report it and never claim the config was updated.
+    return { changed: false, contents: current, error: 'write-failed' }
+  }
 
   return { changed: true, contents: merged.contents }
 }

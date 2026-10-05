@@ -234,6 +234,19 @@ describe('mergePluginEnabled', () => {
     const source = 'a: [1, 2\n'
     expect(mergePluginEnabled(source, id)).toEqual({ contents: source, changed: false, error: 'unparseable' })
   })
+
+  // ── P2: a top-level NON-mapping must be a refusal, never a thrown exception ─
+  // (the caller runs at the Electron main module's top level; a throw there
+  // aborts app startup). Covers the seven shapes the second review exercised.
+  const NON_MAPPING_ROOTS = ['just a scalar', 'null', '~', 'true', '42', '- a', '[]']
+  it.each(NON_MAPPING_ROOTS)('P2: top-level non-mapping %s is refused (no throw, bytes intact)', source => {
+    expect(() => mergePluginEnabled(source, id)).not.toThrow()
+    expect(mergePluginEnabled(source, id)).toEqual({
+      contents: source,
+      changed: false,
+      error: 'top-level-not-a-mapping'
+    })
+  })
 })
 
 describe('seedEnterpriseAssets', () => {
@@ -314,6 +327,76 @@ describe('seedEnterpriseAssets', () => {
 
     expect(result.configUpdated).toBe(false)
     expect(fs.readFileSync(config, 'utf8')).toBe(original)
+  })
+
+  it('P1: an UNREADABLE config.yaml is refused — bytes unchanged and NO success reported', () => {
+    const home = tempDir('plankton-home-')
+    const resources = fakeResources(tempDir('plankton-res-'))
+    const config = path.join(home, 'config.yaml')
+    // Other keys present: the collapse-to-'' bug replaced the whole file with
+    // only the plugin entry (silent data loss) while logging success.
+    const original =
+      'model:\n  provider: deepseek\nmcp_servers:\n  local:\n    command: foo\nplugins:\n  enabled:\n    - keep-me\n'
+    write(config, original)
+    fs.chmodSync(config, 0o000)
+    // Premise: the file really is unreadable to the seeder right now.
+    expect(() => fs.readFileSync(config, 'utf8')).toThrow()
+
+    const notes: string[] = []
+    const result = seedEnterpriseAssets({
+      identity: { enterprise: true },
+      hermesHome: home,
+      resourcesPath: resources,
+      log: line => notes.push(line)
+    })
+
+    try {
+      expect(result.configUpdated).toBe(false)
+      expect(notes.join('\n')).toMatch(/plugins\.enabled NOT updated \(unreadable\)/)
+    } finally {
+      // Restore read permission so the byte-for-byte proof can be read back.
+      fs.chmodSync(config, 0o600)
+    }
+    // Byte-for-byte identical: model / mcp_servers / existing enabled all survive.
+    expect(fs.readFileSync(config, 'utf8')).toBe(original)
+  })
+
+  it.each(['just a scalar', 'null', '~', 'true', '42', '- a', '[]'])(
+    'P2: seeding against top-level non-mapping %s does not throw and leaves the bytes intact',
+    source => {
+      const home = tempDir('plankton-home-')
+      const resources = fakeResources(tempDir('plankton-res-'))
+      const config = path.join(home, 'config.yaml')
+      write(config, source)
+
+      let result: ReturnType<typeof seedEnterpriseAssets> | undefined
+      expect(() => {
+        result = seedEnterpriseAssets({ identity: { enterprise: true }, hermesHome: home, resourcesPath: resources })
+      }).not.toThrow()
+
+      expect(result?.configUpdated).toBe(false)
+      expect(fs.readFileSync(config, 'utf8')).toBe(source)
+    }
+  )
+
+  it('P4: a symlinked config.yaml is written through the link and stays a symlink', () => {
+    const home = tempDir('plankton-home-')
+    const resources = fakeResources(tempDir('plankton-res-'))
+    const real = path.join(home, 'real-config.yaml')
+    write(real, 'model:\n  provider: deepseek\n')
+    const link = path.join(home, 'config.yaml')
+    fs.symlinkSync(real, link)
+
+    const result = seedEnterpriseAssets({ identity: { enterprise: true }, hermesHome: home, resourcesPath: resources })
+
+    expect(result.configUpdated).toBe(true)
+    // The link survives (a bare rename would have replaced it with a regular file).
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true)
+    // The edit landed in the real target through the link.
+    const doc = parseDocument(fs.readFileSync(real, 'utf8'))
+    expect(doc.errors).toHaveLength(0)
+    const enabled = (doc.getIn(['plugins', 'enabled']) as { items: Array<{ value: string }> }).items.map(i => i.value)
+    expect(enabled).toContain(ENTERPRISE_PLUGIN_ID)
   })
 
   it('F8: a same-size but different CLI is re-copied (content hash, not size+mtime)', () => {

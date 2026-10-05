@@ -127,14 +127,38 @@ const REQUIRED_ENTERPRISE = [
   'enterprise/cli/darwin-arm64/shaoke-cli'
 ]
 
-/** Write a complete, valid enterprise Resources tree (CLI executable). */
+const VALID_PLUGIN_YAML =
+  'name: plankton-enterprise\nversion: 0.1.0\ndescription: x\nauthor: Shaoke\n'
+const VALID_MANIFEST_JSON = JSON.stringify({ name: 'plankton-enterprise', api: 'plugin_api.py' })
+
+/**
+ * A minimal but FORMAT-VALID Mach-O executable header for the given arch, so the
+ * after-pack format/arch check accepts the fixture (a bare 'x' no longer does).
+ */
+function macho(arch) {
+  const buffer = Buffer.alloc(32)
+  buffer.writeUInt32LE(0xfeedfacf, 0) // MH_MAGIC_64, little-endian
+  buffer.writeUInt32LE(arch === 'x64' ? 0x01000007 : 0x0100000c, 4) // cputype
+  buffer.writeUInt32LE(0, 8) // cpusubtype
+  buffer.writeUInt32LE(2, 12) // filetype = MH_EXECUTE
+  return buffer
+}
+
+/** Write a complete, valid enterprise Resources tree (CLI executable + parseable payloads). */
 async function seedEnterpriseResources(resources) {
+  const contents = {
+    'enterprise/plankton-enterprise/plugin.yaml': VALID_PLUGIN_YAML,
+    'enterprise/plankton-enterprise/dashboard/manifest.json': VALID_MANIFEST_JSON,
+    'enterprise/model-seed.json': '{"provider":"deepseek"}'
+  }
   for (const relative of REQUIRED_ENTERPRISE) {
     const target = path.join(resources, relative)
     await mkdir(path.dirname(target), { recursive: true })
-    await writeFile(target, 'x')
+    await writeFile(target, contents[relative] ?? 'x')
   }
-  await chmod(path.join(resources, 'enterprise', 'cli', 'darwin-arm64', 'shaoke-cli'), 0o755)
+  const cli = path.join(resources, 'enterprise', 'cli', 'darwin-arm64', 'shaoke-cli')
+  await writeFile(cli, macho('arm64'))
+  await chmod(cli, 0o755)
 }
 
 async function enterpriseAppDir(root, name) {
@@ -204,6 +228,68 @@ it('F6: empty CLI, stripped exec bit, and missing required files each fail the p
     await writeFile(path.join(resources, 'enterprise', 'plankton-enterprise', 'dashboard', 'manifest.json'), 'x')
     await rm(path.join(resources, 'enterprise', 'plankton-enterprise', '__init__.py'))
     expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/__init__\.py/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+// P3 (second review): present + non-empty + exec is NOT enough. A directory, a
+// garbage/wrong-arch binary, an invalid plugin.yaml and an invalid
+// dashboard/manifest.json each shipped GREEN before — every one must now be RED.
+it('P3: a directory at the CLI path, a non-binary CLI, and a wrong-arch CLI each fail the pack', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'hermes-enterprise-cli-fmt-'))
+  try {
+    const appDir = await enterpriseAppDir(root, 'apps-desktop')
+    const appOutDir = path.join(root, 'out')
+    const resources = path.join(appOutDir, 'Plankton.app', 'Contents', 'Resources')
+    const ctx = { appOutDir, electronPlatformName: 'darwin', arch: 3, packager: { appInfo: { productFilename: 'Plankton' } } }
+    const cli = path.join(resources, 'enterprise', 'cli', 'darwin-arm64', 'shaoke-cli')
+
+    // Baseline: a valid Mach-O arm64 passes.
+    await seedEnterpriseResources(resources)
+    expect(assertEnterpriseResourcesPresent(ctx, appDir)).toEqual(REQUIRED_ENTERPRISE)
+
+    // (1) a DIRECTORY at the CLI path (non-empty, 0755) → RED.
+    await rm(cli, { force: true })
+    await mkdir(path.join(cli, 'inside'), { recursive: true })
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/not a regular file/)
+    await rm(cli, { force: true, recursive: true })
+
+    // (2) present, non-empty, executable, but NOT a binary (text placeholder) → RED.
+    await writeFile(cli, 'this is not a mach-o executable')
+    await chmod(cli, 0o755)
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/not a darwin executable/)
+
+    // (3) a well-formed Mach-O of the WRONG arch (x64 under darwin-arm64) → RED.
+    await writeFile(cli, macho('x64'))
+    await chmod(cli, 0o755)
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/architecture x64/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it('P3: an invalid plugin.yaml and an invalid dashboard/manifest.json each fail the pack', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'hermes-enterprise-content-'))
+  try {
+    const appDir = await enterpriseAppDir(root, 'apps-desktop')
+    const appOutDir = path.join(root, 'out')
+    const resources = path.join(appOutDir, 'Plankton.app', 'Contents', 'Resources')
+    const ctx = { appOutDir, electronPlatformName: 'darwin', arch: 3, packager: { appInfo: { productFilename: 'Plankton' } } }
+
+    await seedEnterpriseResources(resources)
+    expect(assertEnterpriseResourcesPresent(ctx, appDir)).toEqual(REQUIRED_ENTERPRISE)
+
+    // (4) plugin.yaml that does not parse as YAML → RED.
+    const pluginYaml = path.join(resources, 'enterprise', 'plankton-enterprise', 'plugin.yaml')
+    await writeFile(pluginYaml, 'name: [unterminated\n')
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/plugin\.yaml is not valid YAML/)
+    await writeFile(pluginYaml, VALID_PLUGIN_YAML)
+
+    // (5) dashboard/manifest.json that does not parse as JSON → RED.
+    const manifest = path.join(resources, 'enterprise', 'plankton-enterprise', 'dashboard', 'manifest.json')
+    await writeFile(manifest, '{ this is not json')
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/manifest\.json is not valid JSON/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

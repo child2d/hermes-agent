@@ -1478,29 +1478,44 @@ function runPlanktonModelSeedIfSignedIn(): void {
     return
   }
 
-  const seed = seedEnterpriseModelConfig({ identity: PRODUCT_IDENTITY, hermesHome: HERMES_HOME })
+  // SECOND LINE OF DEFENCE for startup safety. This function is called at the
+  // Electron main module's TOP LEVEL (see the call site below), so an uncaught
+  // throw here — a malformed config.yaml the seeder cannot parse, an unwritable
+  // home, a syntax-level surprise in either seed — would abort module evaluation
+  // and the app would never start. Seeding is best-effort first-launch convenience;
+  // a failure is logged and swallowed, never fatal. The seeders themselves also
+  // refuse-and-report (fail closed) rather than throw.
+  try {
+    const seed = seedEnterpriseModelConfig({ identity: PRODUCT_IDENTITY, hermesHome: HERMES_HOME })
 
-  console.log(
-    `[hermes] enterprise model seed: ${seed.seeded ? `wrote ${seed.configPath}` : `skipped (${seed.reason})`}`
-  )
+    console.log(
+      `[hermes] enterprise model seed: ${seed.seeded ? `wrote ${seed.configPath}` : `skipped (${seed.reason})`}`
+    )
 
-  // First-launch assets (batch 2): the bundled `shaoke-cli` and the
-  // `plankton-enterprise` engine plugin. Same login gate as the model seed —
-  // both write into the enterprise home, which a logged-out launch must not
-  // touch. Idempotent; a missing resource is logged, never fatal (the pack-time
-  // after-pack assertion is what keeps a missing resource from shipping).
-  const assets = seedEnterpriseAssets({
-    identity: PRODUCT_IDENTITY,
-    hermesHome: HERMES_HOME,
-    resourcesPath: process.resourcesPath,
-    log: (line: string) => console.log(`[hermes] ${line}`)
-  })
+    // First-launch assets (batch 2): the bundled `shaoke-cli` and the
+    // `plankton-enterprise` engine plugin. Same login gate as the model seed —
+    // both write into the enterprise home, which a logged-out launch must not
+    // touch. Idempotent; a missing resource is logged, never fatal (the pack-time
+    // after-pack assertion is what keeps a missing resource from shipping).
+    const assets = seedEnterpriseAssets({
+      identity: PRODUCT_IDENTITY,
+      hermesHome: HERMES_HOME,
+      resourcesPath: process.resourcesPath,
+      log: (line: string) => console.log(`[hermes] ${line}`)
+    })
 
-  console.log(
-    `[hermes] enterprise assets: ${assets.reason}` +
-      (assets.cliPath ? ` cli=${assets.cliPath}` : '') +
-      (assets.pluginPath ? ` plugin=${assets.pluginPath}` : '')
-  )
+    console.log(
+      `[hermes] enterprise assets: ${assets.reason}` +
+        (assets.cliPath ? ` cli=${assets.cliPath}` : '') +
+        (assets.pluginPath ? ` plugin=${assets.pluginPath}` : '')
+    )
+  } catch (error) {
+    console.error(
+      `[hermes] enterprise first-launch seed failed (non-fatal, app continues): ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+  }
 }
 
 /**

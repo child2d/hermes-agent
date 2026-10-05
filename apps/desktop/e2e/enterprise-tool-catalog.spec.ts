@@ -26,6 +26,19 @@ test.describe.configure({ timeout: 180_000 })
 const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const ENTERPRISE = path.join(DESKTOP_ROOT, 'enterprise', 'plankton-enterprise')
 
+// Variant gate: this spec exercises the ENTERPRISE (Plankton) build's tool page.
+// Nothing here proves enterprise behavior on a non-enterprise build — the page
+// and the SSO gate only exist for `HERMES_DESKTOP_VARIANT=plankton` — so running
+// it against upstream (where the nav row is absent) is either a false pass or a
+// flaky failure, i.e. a "fake guarantee". Skip unless the variant is plankton;
+// `buildAppEnv` passes `HERMES_DESKTOP_VARIANT` through to the app, so the gate
+// and the launched app agree on the variant. CI's enterprise lane sets it.
+const ENTERPRISE_VARIANT = process.env.HERMES_DESKTOP_VARIANT === 'plankton'
+test.skip(
+  !ENTERPRISE_VARIANT,
+  'enterprise-only UI: run with HERMES_DESKTOP_VARIANT=plankton (see scripts/plankton-pack.sh)'
+)
+
 const CATALOG = {
   ok: true,
   data: {
@@ -87,6 +100,15 @@ test('enterprise tool catalog renders the real shaoke-cli catalog', async () => 
 
   try {
     await waitForAppReady({ page, app } as unknown as Parameters<typeof waitForAppReady>[0], 90_000)
+
+    // Make the variant gate a REAL guarantee: prove the launched artifact is the
+    // enterprise build (the preload bridge flag the renderer gates on). If the
+    // app were built without the variant, this fails loudly here rather than
+    // letting the spec pass on an upstream artifact.
+    expect(
+      await page.evaluate(() => (window as unknown as { hermesDesktop?: { enterpriseEnabled?: boolean } }).hermesDesktop?.enterpriseEnabled === true),
+      'the launched app must be the enterprise (plankton) variant for this spec to be meaningful'
+    ).toBe(true)
 
     const nav = page.locator('[data-slot="sidebar"] button', { hasText: '企业工具' }).first()
     await nav.waitFor({ state: 'visible', timeout: 30_000 })
