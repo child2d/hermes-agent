@@ -32,9 +32,13 @@ Failure taxonomy (each kind is INDEPENDENTLY visible in the UI — never
 silently collapsed into "no skills"):
   ``cli-missing`` / ``unauthorized`` / ``network-failed`` / ``not-json`` /
   ``shape-mismatch`` / ``no-bundle`` / ``download-failed`` / ``extract-failed``
-  / ``write-failed`` / ``needs-confirm`` / ``blocked-personal-dir`` /
-  ``enterprise-home-unavailable`` / ``hash-unavailable``.
+  / ``write-failed`` / ``needs-confirm`` / ``unsafe-path`` / ``install-overlap``
+  / ``blocked-personal-dir`` / ``enterprise-home-unavailable`` /
+  ``hash-unavailable`` / ``no-record`` / ``remove-failed`` / ``essential-skill``
+  / ``not-effective`` / ``engine-unavailable`` / ``unreadable-config``.
 An EMPTY catalog is a SUCCESS (``{ok: true, catalog: {ok: true, count: 0}}``).
+A catalog capped at the page limit is a SUCCESS that carries ``truncated: true``
+— never silently read as the whole catalog.
 
 Hash parity: the local content hash is computed by importing the engine's own
 ``tools.skills_guard.content_hash`` — the exact function the engine uses. There
@@ -91,9 +95,17 @@ FAILURE_KINDS = (
     "write-failed",
     "needs-confirm",
     "bad-input",
+    "unsafe-path",
+    "install-overlap",
     "blocked-personal-dir",
     "enterprise-home-unavailable",
     "hash-unavailable",
+    "no-record",
+    "remove-failed",
+    "essential-skill",
+    "not-effective",
+    "engine-unavailable",
+    "unreadable-config",
 )
 
 # Tokens that mark a CLI failure as an AUTH problem (distinct from a network or
@@ -552,12 +564,16 @@ def parse_skill_page(parsed: dict) -> dict:
 def fetch_catalog(cli_path: str, page_size: int = PAGE_SIZE, max_pages: int = MAX_PAGES) -> dict:
     """Page through ``skillhub +list`` to completion.
 
-    Returns ``{ok: True, skills, pages}`` or ``{ok: False, kind, detail}``.
-    An empty catalog is ``ok: True, skills: []`` — a real, successful answer.
+    Returns ``{ok: True, skills, pages, truncated}`` or ``{ok: False, kind,
+    detail}``. An empty catalog is ``ok: True, skills: []`` — a real, successful
+    answer. ``truncated`` is an EXPLICIT flag (F6): when the CLI still reports a
+    next cursor after ``max_pages`` the caller must not read the capped list as
+    the whole catalog.
     """
     skills: list = []
     pages = 0
     page = 1
+    more = False
     while page <= max_pages:
         res = _run_cli_json(cli_path, ["skillhub", "+list", "--page", str(page), "--page-size", str(page_size)])
         if not res["ok"]:
@@ -567,10 +583,11 @@ def fetch_catalog(cli_path: str, page_size: int = PAGE_SIZE, max_pages: int = MA
             return {"ok": False, "kind": parsed["kind"], "detail": parsed.get("detail"), "page": page}
         skills.extend(parsed["skills"])
         pages += 1
-        if not parsed["nextCursor"]:
+        more = bool(parsed["nextCursor"])
+        if not more:
             break
         page += 1
-    return {"ok": True, "skills": skills, "pages": pages}
+    return {"ok": True, "skills": skills, "pages": pages, "truncated": more}
 
 
 def fetch_disabled(cli_path: Optional[str] = None) -> dict:
@@ -696,7 +713,14 @@ def list_skills() -> dict:
     else:
         fetched = fetch_catalog(cli_path)
         if fetched["ok"]:
-            catalog = {"ok": True, "count": len(fetched["skills"]), "pages": fetched.get("pages", 0)}
+            catalog = {
+                "ok": True,
+                "count": len(fetched["skills"]),
+                "pages": fetched.get("pages", 0),
+                "truncated": bool(fetched.get("truncated")),
+                "pageSize": PAGE_SIZE,
+                "maxPages": MAX_PAGES,
+            }
             catalog_skills = fetched["skills"]
         else:
             catalog = {"ok": False, "kind": fetched["kind"], "detail": fetched.get("detail")}
@@ -822,7 +846,115 @@ def _resolve_inside(skills_path: Path, install_path: str) -> Optional[Path]:
     return absolute
 
 
-def _install_skill(data: InstallRequest) -> dict:
+def _rel_segments(install_path: str) -> list:
+    """Normalize a relative install path into segments, or ``[]`` when illegal.
+
+    Mirrors the engine's landing rules (``_normalize_bundle_path``): non-empty,
+    relative, no ``..``, no ``:``; ``\\`` → ``/``; empty/``.`` segments dropped.
+    """
+    normalized = _normalize_bundle_path(install_path, allow_nested=True)
+    return normalized.split("/") if normalized else []
+
+
+def assert_safe_landing(skills_path: Path, install_path: str) -> Path:
+    """Resolve a landing with NO symlink anywhere on its chain (F1 / F7).
+
+    Unlike a bare ``(skills_path / install_path).resolve()`` — which happily
+    follows a symlinked component and then reports a path that is "inside" the
+    store only because the escape was erased — this walks each component from
+    the RESOLVED skills root and refuses the whole write when any existing
+    component is a symlink. It then re-checks the RESOLVED landing for both
+    containment (strictly under ``<HERMES_HOME>/skills``) and the personal-tree
+    red line (PLK-REQ-0023). Raises ``ValueError``; there is no fallback.
+    """
+    root = Path(skills_path).resolve()
+    parts = _rel_segments(install_path)
+    if not parts:
+        raise ValueError(f"落点路径不合法（拒绝取用）：{install_path!r}")
+
+    acc = root
+    for part in parts:
+        acc = acc / part
+        if acc.is_symlink():
+            raise ValueError(f"落点链上存在符号链接，拒绝取用：{acc}")
+
+    resolved = acc.resolve()
+    if resolved != root and not str(resolved).startswith(str(root) + os.sep):
+        raise ValueError(f"落点解析后越出技能目录，拒绝取用：{resolved}")
+    assert_outside_personal_trees(resolved)
+    return resolved
+
+
+def _safe_mkdir_chain(root: Path, parts: list) -> Path:
+    """Create ``parts`` under ``root`` one level at a time, refusing symlinks.
+
+    The per-level ``lstat`` (via ``is_symlink``) is what keeps a bundle entry
+    like ``sub/SKILL.md`` from following a pre-existing ``sub -> …`` symlink out
+    of the landing. A non-directory occupant is refused too (never folded).
+    ``root`` itself is created when absent (it is the validated store/landing).
+    """
+    acc = Path(root)
+    if acc.is_symlink():
+        raise ValueError(f"落点根是符号链接，拒绝写入：{acc}")
+    if not acc.exists():
+        acc.mkdir(parents=True, exist_ok=True)
+    for part in parts:
+        acc = acc / part
+        if acc.is_symlink():
+            raise ValueError(f"落点链上存在符号链接，拒绝写入：{acc}")
+        if acc.exists():
+            if not acc.is_dir():
+                raise ValueError(f"落点被非目录占用，拒绝写入：{acc}")
+        else:
+            acc.mkdir()
+    return acc
+
+
+def _landing_overlap(planned: str, records: list, ref_of: Callable[[dict], str]) -> Optional[dict]:
+    """Detect a parent/child overlap between ``planned`` and an existing record.
+
+    Both directions are refused (F2): landing UNDER another skill's directory
+    would let a later uninstall of that parent rmtree this skill too; landing
+    ABOVE another skill's directory would let uninstall of this one swallow it.
+    """
+    for record in records:
+        other = str(record.get("installPath") or "").strip()
+        if not other or other == planned:
+            continue
+        if planned.startswith(other + "/"):
+            return {"plannedPath": planned, "conflictsWith": other, "direction": "under",
+                    "reference": ref_of(record), "name": str(record.get("name") or "")}
+        if other.startswith(planned + "/"):
+            return {"plannedPath": planned, "conflictsWith": other, "direction": "above",
+                    "reference": ref_of(record), "name": str(record.get("name") or "")}
+    return None
+
+
+def _nested_landings(
+    skills_path: Path, landing: str, records: list, ref_of: Callable[[dict], str]
+) -> list:
+    """Records whose landing sits strictly INSIDE ``landing`` and still exists.
+
+    Deleting ``landing`` would take them with it (F2), so uninstall refuses.
+    A deeper path that is itself unsafe (or unreadable) counts as present —
+    the conservative branch, never a silent pass.
+    """
+    nested: list = []
+    for record in records:
+        other = str(record.get("installPath") or "").strip()
+        if not other or other == landing or not other.startswith(landing + "/"):
+            continue
+        try:
+            deeper: Optional[Path] = assert_safe_landing(skills_path, other)
+        except ValueError:
+            deeper = None
+        if deeper is None or deeper.is_dir():
+            nested.append({"reference": ref_of(record), "installPath": other,
+                           "name": str(record.get("name") or "")})
+    return nested
+
+
+def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> dict:
     slug = (data.slug or "").strip()
     if not slug:
         return {"ok": False, "kind": "bad-input", "detail": {"reason": "slug 为空"}}
@@ -830,6 +962,15 @@ def _install_skill(data: InstallRequest) -> dict:
     planned = plan_install_path(data.name, data.category)
     if not planned:
         return {"ok": False, "kind": "bad-input", "detail": {"reason": "技能名缺失，无法确定落点"}}
+
+    # F4: an UPDATE overwrites an occupied slot by definition, so ``confirm:true``
+    # is mandatory for it (not only for the "someone else owns the slot" branch).
+    if require_confirm and not data.confirm:
+        return {
+            "ok": False,
+            "kind": "needs-confirm",
+            "detail": {"reason": "更新会覆盖既有落点，必须带 confirm:true", "plannedPath": planned},
+        }
 
     home = _hermes_home()
     if home is None:
@@ -843,15 +984,36 @@ def _install_skill(data: InstallRequest) -> dict:
     if not usable:
         return {"ok": False, "kind": "enterprise-home-unavailable", "detail": {"reason": reason, "home": str(home)}}
 
+    # F1: validate the RESOLVED landing (per-component lstat + containment +
+    # personal-tree) BEFORE any download/write. A `skills/<x>` that is a symlink
+    # — to anywhere — refuses the whole install rather than writing through it.
+    try:
+        target = assert_safe_landing(skills_path, planned)
+    except ValueError as exc:
+        return {"ok": False, "kind": "unsafe-path", "detail": {"reason": str(exc), "installPath": planned}}
+
     cli_path, cli_source = resolve_cli()
     if cli_path is None:
         return {"ok": False, "kind": "cli-missing", "detail": {"message": "找不到企业副本 shaoke-cli"}}
 
-    target = skills_path / planned
     ledger_records, _ = read_ledger(home)
 
     def ref_of(record: dict) -> str:
         return str(record.get("reference") or record.get("slug") or "")
+
+    # F2: refuse to CREATE a parent/child overlap with any existing record. An
+    # install must never nest inside or swallow another skill's landing —
+    # otherwise a later uninstall of one rmtree's the other's files.
+    overlap = _landing_overlap(planned, ledger_records, ref_of)
+    if overlap:
+        return {
+            "ok": False,
+            "kind": "install-overlap",
+            "detail": {
+                "reason": f"落点 {planned} 与已有技能记录 {overlap['conflictsWith']} 重叠（{overlap['direction']}），拒绝取用以免卸载连坐",
+                **overlap,
+            },
+        }
 
     owner = next((r for r in ledger_records if str(r.get("installPath") or "") == planned and ref_of(r) != ref), None)
     mine = next((r for r in ledger_records if ref_of(r) == ref and str(r.get("installPath") or "") == planned), None)
@@ -908,9 +1070,18 @@ def _install_skill(data: InstallRequest) -> dict:
 
     written = 0
     try:
+        # F1: create the landing chain and every entry's parent chain ONE level
+        # at a time, refusing any symlink component. `mkdir(parents=True)` would
+        # follow a pre-existing `sub -> …` symlink and write through it.
+        target = _safe_mkdir_chain(skills_path.resolve(), _rel_segments(planned))
         for rel, data_bytes in entries:
-            dest = target / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
+            if not parts:
+                continue
+            parent = _safe_mkdir_chain(target, parts[:-1])
+            dest = parent / parts[-1]
+            if dest.is_symlink():
+                raise ValueError(f"落点文件是符号链接，拒绝写入：{dest}")
             dest.write_bytes(data_bytes)
             written += 1
     except Exception as exc:
@@ -989,9 +1160,42 @@ def _uninstall_skill(data: UninstallRequest) -> dict:
     if record is None:
         return {"ok": False, "kind": "no-record", "detail": {"reason": "台账里没有这条取用记录，本模块只卸载自己取用过的技能", "reference": ref}}
 
-    target = _resolve_inside(skills_path, str(record.get("installPath") or ""))
-    if target is None:
-        return {"ok": False, "kind": "unsafe-path", "detail": {"reason": "记录的落点不在技能目录内，已拒绝", "installPath": str(record.get("installPath") or "")}}
+    recorded_path = str(record.get("installPath") or "").strip()
+
+    # F7: the recorded landing must be EXACTLY what our own install rules produce
+    # for this record. A tampered ledger (e.g. installPath="." or "cat") must not
+    # become an arbitrary delete inside <HERMES_HOME>/skills.
+    expected = plan_install_path(str(record.get("name") or ""), str(record.get("category") or ""))
+    if not expected or expected != recorded_path:
+        return {
+            "ok": False,
+            "kind": "unsafe-path",
+            "detail": {
+                "reason": "台账记录的落点不符合本模块安装规则，拒绝卸载（疑似台账被改动）",
+                "installPath": recorded_path,
+                "expected": expected,
+            },
+        }
+
+    # F1/F7: resolve with the per-component symlink rejection (never follow a
+    # symlinked landing out of the store, and never into a personal tree).
+    try:
+        target = assert_safe_landing(skills_path, recorded_path)
+    except ValueError as exc:
+        return {"ok": False, "kind": "unsafe-path", "detail": {"reason": str(exc), "installPath": recorded_path}}
+
+    # F2: never rmtree a directory that still holds another record's landing.
+    nested = _nested_landings(skills_path, recorded_path, ledger_records, ref_of)
+    if nested:
+        return {
+            "ok": False,
+            "kind": "unsafe-path",
+            "detail": {
+                "reason": "落点内部仍含其它台账记录的技能目录，拒绝删除以免连坐",
+                "installPath": recorded_path,
+                "contains": nested,
+            },
+        }
 
     exists = target.is_dir()
     current = engine_content_hash(target) if exists else None
@@ -1045,6 +1249,7 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
     try:
         from hermes_cli.config import load_config  # type: ignore
         from hermes_cli.skills_config import get_disabled_skills, save_disabled_skills  # type: ignore
+        from agent.skill_utils import ESSENTIAL_SKILLS  # type: ignore
     except Exception as exc:
         return {"ok": False, "kind": "engine-unavailable", "detail": {"message": f"引擎技能配置模块不可用：{exc}"}}
 
@@ -1063,10 +1268,34 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
             else:
                 disabled.add(skill_name)
             save_disabled_skills(config, disabled)
+            # F5: re-read the PERSISTED state. The engine silently drops
+            # essential skills (``ESSENTIAL_SKILLS``) from this key, so a
+            # "disable hermes-agent" write is a no-op — reporting ok would be a
+            # false green. Report the state that actually landed on disk.
+            persisted = get_disabled_skills(load_config())
     except Exception as exc:
         return {"ok": False, "kind": "write-failed", "detail": {"message": str(exc)}}
 
-    return {"ok": True, "name": skill_name, "enabled": bool(enabled), "disabled": sorted(disabled)}
+    achieved = (skill_name in persisted) == (not enabled)
+    if not achieved:
+        if not enabled and skill_name in ESSENTIAL_SKILLS:
+            reason = f"「{skill_name}」是引擎的必备技能（essential），引擎拒绝停用；已确认配置未被改动"
+            kind = "essential-skill"
+        else:
+            reason = f"写入未生效：请求 {'启用' if enabled else '停用'}「{skill_name}」，但持久化的停用清单未反映该状态"
+            kind = "not-effective"
+        return {
+            "ok": False,
+            "kind": kind,
+            "detail": {
+                "message": reason,
+                "name": skill_name,
+                "requestedEnabled": bool(enabled),
+                "persistedDisabled": sorted(persisted),
+            },
+        }
+
+    return {"ok": True, "name": skill_name, "enabled": bool(enabled), "disabled": sorted(persisted)}
 
 
 @router.post("/skills/install")
@@ -1077,8 +1306,12 @@ def install_skill(data: InstallRequest) -> dict:
 
 @router.post("/skills/update")
 def update_skill(data: InstallRequest) -> dict:
-    """Update = re-install from the catalog (same landing rules)."""
-    return _install_skill(data)
+    """Update = re-install from the catalog (same landing rules).
+
+    An update overwrites an occupied slot by definition, so it REQUIRES
+    ``confirm:true`` (F4) — matching what the docs claim, not just the UI.
+    """
+    return _install_skill(data, require_confirm=True)
 
 
 @router.post("/skills/uninstall")

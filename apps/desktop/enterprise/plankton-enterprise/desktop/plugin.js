@@ -65,7 +65,11 @@ const SKILL_FAILURE_COPY = {
   'enterprise-home-unavailable': '企业侧引擎目录不可用，已拒绝取用',
   'hash-unavailable': '内容哈希取不到，判等无法成立',
   'remove-failed': '删除落点失败',
-  'unsafe-path': '记录的落点不在技能目录内，已拒绝',
+  'unsafe-path': '落点不安全（越出技能目录、链上有符号链接，或不符合安装规则），已拒绝',
+  'install-overlap': '落点与已有技能记录重叠，为免卸载连坐已拒绝',
+  'essential-skill': '这是引擎的必备技能（essential），无法停用',
+  'not-effective': '写入未生效：引擎持久化的状态未变成请求的状态',
+  'request-failed': '请求失败（网络或后端异常）',
   'no-record': '台账里没有这条取用记录，本模块只管理自己取用过的技能',
   'unreadable-config': '引擎配置读取失败，启停开关已禁用',
   'engine-unavailable': '引擎技能配置模块不可用，无法改启停'
@@ -263,6 +267,34 @@ function InstalledRow({ item }) {
   ] })
 }
 
+/**
+ * Fold per-item batch-update outcomes into ONE honest banner (F3).
+ *
+ * Honest = a failure is never swallowed into "完成": each item's `result.ok` is
+ * checked (a backend that answers HTTP 200 with `{ok:false}` still counts as a
+ * failure), and a rejected request is recorded as a failure too. Exported so the
+ * rejection paths can be exercised directly by a test.
+ */
+export function summarizeBatchUpdate(results) {
+  const list = Array.isArray(results) ? results : []
+  const failed = list.filter(entry => !(entry && entry.result && entry.result.ok))
+  if (failed.length === 0) {
+    return { ok: true, tone: 'ok', text: `批量更新完成（${list.length} 条）。默认在下一个会话生效。` }
+  }
+  const detail = failed
+    .map(entry => {
+      const skill = (entry && entry.skill) || {}
+      const kind = (entry && entry.result && entry.result.kind) || 'request-failed'
+      return `${skill.name || skill.installPath || skill.slug || '?'}（${kind}）`
+    })
+    .join('、')
+  return {
+    ok: false,
+    tone: 'error',
+    text: `批量更新：成功 ${list.length - failed.length} 条、失败 ${failed.length} 条。失败项：${detail}`
+  }
+}
+
 function SkillMarketPage({ ctx }) {
   const [state, setState] = useState({ phase: 'loading' })
   const [query, setQuery] = useState('')
@@ -359,20 +391,39 @@ function SkillMarketPage({ ctx }) {
       title: `批量更新 ${skills.length} 条技能？`,
       description: `将依次重新下载并覆盖以下落点：${skills.map(s => s.installPath || s.name).join('、')}。批量写入不会静默执行，需你在此确认。`,
       destructive: false,
-      run: () =>
-        // Sequential on purpose: one failure must not abort the rest silently —
-        // each result is folded into a single, honest banner.
-        skills.reduce(
-          (chain, skill) => chain.then(() => call('/skills/update', {
-            slug: skill.slug || '',
-            reference: skill.reference || '',
-            name: skill.name || '',
-            category: skill.category || '',
-            version: skill.version || '',
-            confirm: true
-          })),
-          Promise.resolve()
-        ).then(() => { setBanner({ tone: 'ok', text: `批量更新完成（${skills.length} 条）。默认在下一个会话生效。` }); load() })
+      run: () => {
+        // Sequential on purpose. EACH item's outcome (a resolved `{ok:false}`
+        // OR a rejected request) is recorded, so the aggregate banner is
+        // honest: a partial failure is never reported as "完成" (F3).
+        const results = []
+        return skills
+          .reduce(
+            (chain, skill) =>
+              chain.then(() =>
+                call('/skills/update', {
+                  slug: skill.slug || '',
+                  reference: skill.reference || '',
+                  name: skill.name || '',
+                  category: skill.category || '',
+                  version: skill.version || '',
+                  confirm: true
+                }).then(
+                  result => { results.push({ skill, result }) },
+                  error => {
+                    results.push({
+                      skill,
+                      result: { ok: false, kind: 'request-failed', detail: { message: String((error && error.message) || error) } }
+                    })
+                  }
+                )
+              ),
+            Promise.resolve()
+          )
+          .then(() => {
+            setBanner(summarizeBatchUpdate(results))
+            load()
+          })
+      }
     })
   }
 
@@ -419,6 +470,12 @@ function SkillMarketPage({ ctx }) {
           jsx('div', { style: S.meta, children: '这是「取不到目录」，不是「目录为空」。本机已装技能仍列在下方。' }),
           catalog.detail && catalog.detail.raw ? jsx('pre', { style: S.pre, children: catalog.detail.raw }) : null
         ] }),
+
+    // F6: a catalog capped at the page limit is SUCCESS but NOT the whole
+    // catalog — say so instead of silently presenting a truncated list.
+    catalog.ok && catalog.truncated
+      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: `目录已达分页上限（${catalog.pages} 页 × 每页 ${catalog.pageSize} 条 = 共 ${catalog.count} 条），结果已截断——上面列出的不是全量已审技能。` })
+      : null,
     data.personalCliPath ? jsx('div', { style: S.meta, children: `PATH 上存在同名 CLI（个人副本）${data.personalCliPath}，已按企业口径忽略。` }) : null,
 
     disabledNotice

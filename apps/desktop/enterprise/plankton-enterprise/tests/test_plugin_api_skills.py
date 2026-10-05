@@ -115,7 +115,10 @@ def test_empty_catalog_is_a_success_not_a_failure(api):
     _fake_exec(api, rc=0, out=_list_page([]), err="")
     result = api.list_skills()
     assert result["ok"] is True
-    assert result["catalog"] == {"ok": True, "count": 0, "pages": 1}
+    assert result["catalog"]["ok"] is True
+    assert result["catalog"]["count"] == 0
+    assert result["catalog"]["pages"] == 1
+    assert result["catalog"]["truncated"] is False
     assert result["count"] == 0
 
 
@@ -312,3 +315,204 @@ def test_assert_outside_personal_trees_rejects_hermes(tmp_path):
 def test_ledger_lives_under_the_enterprise_home(api):
     home = api._TEST_HOME
     assert api._ledger_path(home) == home / "plankton" / "skill-ledger.json"
+
+
+# ── F1: the write path may not escape the landing through a symlink ─────────
+
+
+def _install_with_bundle(api, bundle: bytes, **kwargs):
+    api._exec_cli = lambda cli_path, args, timeout_s: (
+        0,
+        json.dumps({"ok": True, "data": {"url": "https://example.invalid/x.zip"}}),
+        "",
+    )  # type: ignore[assignment]
+    api._http_get = lambda url, timeout_s=60: bundle  # type: ignore[assignment]
+    return api._install_skill(api.InstallRequest(**kwargs))
+
+
+def test_install_refuses_a_landing_that_is_a_symlink_out_of_the_store(api, tmp_path):
+    """F1: `skills/esc -> <outside>` must refuse the install, not write through it."""
+    home = api._TEST_HOME
+    (home / "skills").mkdir(parents=True, exist_ok=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (home / "skills" / "esc").symlink_to(outside, target_is_directory=True)
+
+    result = api._install_skill(api.InstallRequest(slug="esc", reference="u/esc", name="esc", category="", confirm=True))
+
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert list(outside.iterdir()) == [], "nothing may be written through the symlink"
+    assert not (outside / "SKILL.md").exists()
+
+
+def test_install_refuses_a_landing_that_is_a_symlink_into_a_personal_tree(api, tmp_path, monkeypatch):
+    """F1 (PLK-REQ-0023): a symlink into `~/.hermes` must refuse, never write there."""
+    home = api._TEST_HOME
+    (home / "skills").mkdir(parents=True, exist_ok=True)
+    personal_home = tmp_path / "personalhome"
+    victim = personal_home / ".hermes" / "skills" / "esc"
+    victim.mkdir(parents=True)
+    (home / "skills" / "esc").symlink_to(victim, target_is_directory=True)
+    monkeypatch.setenv("HOME", str(personal_home))
+
+    result = api._install_skill(api.InstallRequest(slug="esc", reference="u/esc", name="esc", category="", confirm=True))
+
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert list(victim.iterdir()) == [], "the personal tree must stay untouched"
+
+
+def test_install_refuses_a_bundle_entry_that_follows_an_inner_symlink(api, tmp_path):
+    """F1: a pre-existing `skills/good/sub -> outside` must not be followed."""
+    home = api._TEST_HOME
+    target = home / "skills" / "good"
+    target.mkdir(parents=True)
+    outside = tmp_path / "outside2"
+    outside.mkdir()
+    (target / "sub").symlink_to(outside, target_is_directory=True)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("top/sub/SKILL.md", "escaped")
+
+    result = _install_with_bundle(
+        api, buf.getvalue(), slug="good", reference="u/good", name="good", category="", confirm=True
+    )
+
+    assert result["ok"] is False
+    assert result["kind"] in ("write-failed", "unsafe-path")
+    assert list(outside.iterdir()) == [], "the entry must not be written through the symlink"
+
+
+# ── F2 / F7: uninstall and install must never scatter sibling skills ────────
+
+
+def test_uninstall_refuses_to_delete_a_dir_holding_another_record(api):
+    """F2: uninstalling `cat` must not rmtree the sibling record `cat/x`."""
+    home = api._TEST_HOME
+    a = _seed_skill(home, "cat/x")
+    b = _seed_skill(home, "cat")  # a parent dir that also holds a/x
+    api.write_ledger(home, [
+        {"reference": "u/a", "slug": "a", "name": "x", "category": "cat", "version": "1",
+         "contentHash": api.engine_content_hash(a), "installPath": "cat/x"},
+        {"reference": "u/b", "slug": "b", "name": "cat", "category": "", "version": "1",
+         "contentHash": api.engine_content_hash(b), "installPath": "cat"},
+    ])
+
+    result = api.uninstall_skill(api.UninstallRequest(reference="u/b", confirm=True))
+
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert (a / "SKILL.md").exists(), "the sibling skill must survive"
+    records, _ = api.read_ledger(home)
+    kept = next(r for r in records if r["reference"] == "u/b")
+    assert not kept.get("uninstalledAt"), "the ledger must not go dangling"
+
+
+def test_install_refuses_to_nest_under_an_existing_record(api):
+    """F2: a landing UNDER another skill's directory is refused."""
+    home = api._TEST_HOME
+    _seed_skill(home, "cat")
+    api.write_ledger(home, [
+        {"reference": "u/cat", "slug": "cat", "name": "cat", "category": "", "version": "1",
+         "contentHash": api.engine_content_hash(home / "skills" / "cat"), "installPath": "cat"},
+    ])
+    result = api._install_skill(api.InstallRequest(slug="x", reference="u/x", name="x", category="cat", confirm=True))
+    assert result["ok"] is False
+    assert result["kind"] == "install-overlap"
+    assert result["detail"]["direction"] == "under"
+
+
+def test_install_refuses_to_swallow_an_existing_record(api):
+    """F2: a landing ABOVE another skill's directory is refused."""
+    home = api._TEST_HOME
+    _seed_skill(home, "cat/x")
+    api.write_ledger(home, [
+        {"reference": "u/a", "slug": "a", "name": "x", "category": "cat", "version": "1",
+         "contentHash": api.engine_content_hash(home / "skills" / "cat" / "x"), "installPath": "cat/x"},
+    ])
+    result = api._install_skill(api.InstallRequest(slug="cat", reference="u/cat", name="cat", category="", confirm=True))
+    assert result["ok"] is False
+    assert result["kind"] == "install-overlap"
+    assert result["detail"]["direction"] == "above"
+
+
+def test_uninstall_refuses_a_tampered_landing(api):
+    """F7: a ledger whose landing is not the install rule's output is refused."""
+    home = api._TEST_HOME
+    _seed_skill(home, "x")
+    api.write_ledger(home, [
+        {"reference": "u/x", "slug": "x", "name": "x", "category": "", "version": "1",
+         "contentHash": None, "installPath": "other-place"},
+    ])
+    result = api.uninstall_skill(api.UninstallRequest(reference="u/x", confirm=True))
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert (home / "skills" / "x").is_dir()
+
+
+# ── F4: update must require confirm (docs claim it; code now enforces it) ────
+
+
+def test_update_requires_confirm(api):
+    result = api.update_skill(api.InstallRequest(slug="x", reference="u/x", name="x", category=""))
+    assert result["ok"] is False
+    assert result["kind"] == "needs-confirm"
+
+
+def test_update_with_confirm_proceeds(api):
+    home = api._TEST_HOME
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("x/SKILL.md", "updated-body")
+    result = _install_with_bundle(
+        api, buf.getvalue(), slug="x", reference="u/x", name="x", category="", confirm=True
+    )
+    assert result["ok"] is True, result
+    assert (home / "skills" / "x" / "SKILL.md").read_text() == "updated-body"
+
+
+# ── F5: an essential skill's disable is a no-op that must not report ok ──────
+
+
+def test_disabling_an_essential_skill_reports_the_engine_state(api):
+    from hermes_cli.config import load_config
+    from hermes_cli.skills_config import get_disabled_skills
+
+    result = api._set_skill_enabled("hermes-agent", False)
+
+    assert result["ok"] is False
+    assert result["kind"] == "essential-skill"
+    assert "hermes-agent" not in get_disabled_skills(load_config()), "the engine state must not change"
+
+
+# ── F6: the page-limit cap is an explicit, visible fact ─────────────────────
+
+
+def test_fetch_catalog_flags_truncation_at_the_page_cap(api):
+    def exec_cli(cli_path, args, timeout_s):
+        page = int(args[args.index("--page") + 1])
+        return 0, _list_page([{"slug": f"s{page}", "name": f"n{page}"}], next_cursor="more"), ""
+
+    api._exec_cli = exec_cli  # type: ignore[assignment]
+    result = api.fetch_catalog("cli", page_size=50, max_pages=3)
+
+    assert result["ok"] is True
+    assert result["pages"] == 3
+    assert result["truncated"] is True, "a capped scan must say it was capped"
+    assert len(result["skills"]) == 3
+
+
+def test_fetch_catalog_not_truncated_when_cursor_ends(api):
+    api._exec_cli = lambda cli_path, args, timeout_s: (0, _list_page([{"slug": "only"}], next_cursor=None), "")  # type: ignore[assignment]
+    result = api.fetch_catalog("cli", page_size=50, max_pages=3)
+    assert result["truncated"] is False
+
+
+def test_list_skills_surfaces_catalog_truncation(api, monkeypatch):
+    monkeypatch.setattr(api, "MAX_PAGES", 2)
+    api._exec_cli = lambda cli_path, args, timeout_s: (0, _list_page([{"slug": "s"}], next_cursor="more"), "")  # type: ignore[assignment]
+    result = api.list_skills()
+    assert result["catalog"]["ok"] is True
+    assert result["catalog"]["truncated"] is True

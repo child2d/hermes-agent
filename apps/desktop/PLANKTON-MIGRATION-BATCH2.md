@@ -299,3 +299,15 @@
 
 **验收证据（实测）**：见本仓提交说明与 `e2e/packaged/enterprise-tool-catalog.spec.ts`（在打包产物上断言技能市场页渲染、
 四类失败可辨、`哈希不符` 可见、页面哈希 == 引擎 `content_hash`（独立进程）、写动作弹确认框）。
+
+### 8.1 第二轮复核后的收紧（同批）
+
+- **F1 写路径符号链接逃逸**：落点不再用 `(skills_path / planned)` 裸拼，改 `assert_safe_landing()`——对落点链**每个中间目录** `lstat`，
+  命中符号链接即拒（`unsafe-path`）；再对**解析后的落点**做「在 `<HERMES_HOME>/skills` 内 + 不在个人树内」双重校验。落盘时按层
+  `_safe_mkdir_chain`（非 `mkdir(parents=True)`）创建，包内条目 `sub/file` 也不会穿过既有 `sub -> …` 链接。
+- **F2 卸载连坐 / 落点重叠**：卸载前要求 `落点 == plan_install_path(record.name, record.category)` 且为目录，并拒绝删除**内部仍含
+  其它台账落点**的目录；安装时两个方向都拒（挂到已有记录子树下 / 把已有记录包进去），报 `install-overlap`。
+- **F4 update 强制确认**：`/skills/update` 一律要求 `confirm:true`（`require_confirm=True`），文档声称与代码一致。
+- **F5 essential 停用如实上报**：写后**重读持久化结果**（引擎静默丢弃 `ESSENTIAL_SKILLS`），未达成即报 `essential-skill` / `not-effective`，不再假成功。
+- **F6 截断显式化**：`fetch_catalog` 返回 `truncated`，`catalog` 块携带 `truncated/pageSize/maxPages`，页面显式提示「结果已截断」。
+- **F7 卸载落点限制**：卸载落点必须在 `skills` 内且符合本模块安装规则（同 F2 的 `plan_install_path` 判据）。
