@@ -403,3 +403,49 @@ npx vitest run --project electron \
   electron/user-launcher-install.test.ts \
   electron/ssh-connection.test.ts
 ```
+
+
+---
+
+## Status in Simplified Technical English (ASD-STE100)
+
+Use this section for handover and for reviews. Write new status text in the same style.
+
+### What works now
+
+1. The app is Plankton. Plankton is a modified copy of the open-source Hermes desktop.
+2. The license is MIT. The app contains the license text and a third-party notice.
+3. The app contains its own engine. You do not install the engine on the computer.
+4. The app keeps its data in the enterprise folder. The app does not touch the personal folder.
+5. The app shows the 8 sessions that are already in the enterprise folder.
+6. The app does not send usage data to Nous. All network connections stay on the local computer.
+7. The size of the app is 3.0 GB. Before, the size was 4.9 GB.
+
+### What does not work now
+
+8. **Privacy switch.** The Privacy page has a switch. The name of the switch is "Send". A user can turn on this switch. The app must hide this switch. To hide the switch, the screen part needs a signal. The signal must say "this app is the enterprise app". This signal is not available today.
+9. **Signature.** The app has no code signature. The app has no notarization. macOS stops the app on a colleague's computer. Sign and notarize the app before you give it to a colleague. You must have an Apple Developer account for this step.
+10. **Model key.** The app writes the provider, the base URL and the model name. The app does not write the model key. Decide where the key comes from. Two examples: the app downloads the key from an enterprise server, or a person types the key one time.
+11. **Update source.** The app can look for updates on the Nous cloud. Turn off this function. Or point the function to an enterprise server.
+12. **Build steps.** A person must set the HERMES_PYTHON variable before the build. A person must also set the mirror address for Electron. The build is not a one-command build today.
+13. **Network for plugins.** The app does not contain the uv cache. The cache had a size of 1.9 GB. Without the cache, the app needs the network to add a plugin.
+14. **Two apps.** The /Applications folder contains the old Plankton build. The new build stays in the build folder. Do not mix the two apps.
+15. **Chat area.** The chat area shows "Waking up". The session list is complete. The message is a readiness note for the model.
+
+### Rules for this section
+
+- Put one topic in one sentence. Use a maximum of 20 words in a sentence.
+- Use the active voice. Use the simple present tense.
+- Use one word for one meaning. Use these words: app, folder, switch, key.
+- Use "must" for a requirement. Use "can" for a capability.
+- Do not write "and/or". Give one action.
+- Keep technical names as they are: Plankton, Hermes, MIT, macOS, HERMES_PYTHON, uv cache.
+- Add each new technical name to the project glossary.
+
+### 中文对照
+
+**现在能做到的**：它就是我们自己改的 Plankton（基于 MIT 许可的开源 Hermes 桌面端，包内附许可原文与第三方声明）；引擎内置于包内，不需要额外安装；数据只落在企业目录、不碰个人目录；界面上能看到已有的 8 条会话；不向 Nous 发送使用数据、网络只在本机内；包体积 3.0G（原 4.9G）。
+
+**还没做到的（八项）**：① 设置里的隐私页仍有一个「发送」开关，要藏掉它需要给界面一个「这是企业版」的身份信号，目前没有；② 没有代码签名与公证，发给同事会被 macOS 拦下，需要 Apple 开发者账号；③ 模型密钥还没定来源（目前只写了 provider/地址/模型名）；④ 自动更新仍指向 Nous 云，要关掉或改指企业服务器；⑤ 构建需要人手指定解释器与下载镜像，还不是一条命令；⑥ 为了瘦身删掉了 1.9G 缓存，代价是加装插件要联网；⑦ `/Applications` 里还是旧版本，新版在构建目录，别混用；⑧ 聊天区显示的「Waking up」是模型就绪提示（不影响会话列表）。
+
+**本节写法规则**：一句一个主题、不超过 20 词；主动语态、一般现在时；一个词一个意思（app/folder/switch/key）；要求用 must、能力用 can；不写「和/或」，只给一个动作；产品名与技术名保持原样，并登记进术语表。
