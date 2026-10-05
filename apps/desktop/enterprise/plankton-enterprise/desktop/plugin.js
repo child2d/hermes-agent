@@ -451,6 +451,21 @@ function SkillMarketPage({ ctx }) {
         ] })
       : null,
 
+    // The confirmation dialog. EVERY write is routed through it — a write never
+    // fires on the first click. `onConfirm` runs the already-chosen action.
+    confirm
+      ? jsx(ConfirmDialog, {
+          open: true,
+          onClose: () => setConfirm(null),
+          onConfirm: () => Promise.resolve(confirm.run()).then(() => setConfirm(null)),
+          title: confirm.title,
+          description: confirm.description,
+          destructive: Boolean(confirm.destructive),
+          confirmLabel: '确认',
+          cancelLabel: '取消'
+        })
+      : null,
+
     jsxs('div', { style: S.meta, children: [
       jsx(icons.Info, { size: 11, style: { verticalAlign: '-1px' } }),
       ' 技能哈希与引擎同源（引擎 tools.skills_guard.content_hash）。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。'

@@ -280,10 +280,17 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     const skillsNav = page.locator('[data-slot="sidebar"] button', { hasText: '企业技能' }).first()
     await skillsNav.waitFor({ state: 'visible', timeout: 60_000 })
     await skillsNav.click()
-    await expect(page.getByText('企业技能市场', { exact: false }).first()).toBeVisible({ timeout: 30_000 })
+
+    // Wait for POST-LOAD content, not the loading text (which itself contains
+    // "企业技能市场" — matching it would read the page mid-load and see neither
+    // the catalog banner nor the failure banner).
+    await expect(
+      page.getByText(/企业已审技能目录已就绪|这是「取不到目录」，不是「目录为空」|读取技能市场失败/).first()
+    ).toBeVisible({ timeout: 60_000 })
 
     const marketText = await page.locator('body').innerText()
     expect(marketText, 'the skill market must not render a minified React error').not.toContain('Minified React error')
+    expect(marketText).toContain('企业技能市场')
 
     // The catalog is EITHER listed OR a distinguishable failure — never a silent
     // empty page (PLK-REQ-0018: "取不到" ≠ "没有").
