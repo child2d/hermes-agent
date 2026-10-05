@@ -15,7 +15,7 @@ const translucencySupport = ipcRenderer.sendSync('hermes:translucency:support')
 const hudWindowing = ipcRenderer.sendSync('hermes:hud:windowing')
 const hudNativeDrag = hudWindowing?.nativeDrag === true
 
-const launchFlags: { localModels?: boolean; guestOnboarding?: boolean; enterprise?: boolean } | undefined =
+const launchFlags: { localModels?: boolean; guestOnboarding?: boolean; enterprise?: boolean; planktonAuthRequired?: boolean } | undefined =
   ipcRenderer.sendSync('hermes:feature-flags')
 
 // Local, sanitized skin payload for the first renderer theme paint. This does
@@ -39,6 +39,19 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   // Additive and false on every upstream variant; the renderer uses it to drop
   // upstream-only surfaces (the shared-metrics "Send" row). See ENTERPRISE.md §5.
   enterpriseEnabled: launchFlags?.enterprise === true,
+  // Enterprise SSO gate bridge — present ONLY on an enterprise build, so every
+  // upstream variant's bridge object is byte-for-byte the same as before.
+  // The renderer runs the login gate while `planktonAuthRequired` is true.
+  ...(launchFlags?.enterprise === true
+    ? {
+        planktonAuthRequired: launchFlags?.planktonAuthRequired === true,
+        planktonAuth: {
+          status: () => ipcRenderer.invoke('plankton:sso-status'),
+          login: (provider?: string) => ipcRenderer.invoke('plankton:sso-login', provider),
+          logout: () => ipcRenderer.invoke('plankton:sso-logout')
+        }
+      }
+    : {}),
   localSkin: localSkin && typeof localSkin === 'object' ? localSkin : null,
   getConnection: (profile, opts) => ipcRenderer.invoke('hermes:connection', profile, opts),
   // Loopback origin that hosts YouTube's player for the file:// renderer.

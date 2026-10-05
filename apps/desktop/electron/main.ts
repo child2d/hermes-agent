@@ -217,6 +217,8 @@ import { resolveDashboardWebDist } from './dashboard-web-dist'
 import { resolveDesktopHermesHome, resolveDesktopUserData } from './data-paths'
 import { seedEnterpriseModelConfig } from './enterprise-model-seed'
 import { enterpriseHermesHomeFor, enterpriseHomeIsolationIssue, enterpriseHomeSelection } from './enterprise-paths'
+import { createPlanktonAuth, planktonConfigResolver, type PlanktonAuth } from './plankton-auth'
+import { planktonGateDecision } from './plankton-session-gate'
 import { loadOrCreateInstallationId, sshOwnershipId } from './desktop-installation'
 import { formatDesktopLogLine, formatLogStamp } from './desktop-log-line'
 import {
@@ -1369,6 +1371,81 @@ if (PRODUCT_IDENTITY.enterprise) {
   console.log(
     `[hermes] enterprise model seed: ${seed.seeded ? `wrote ${seed.configPath}` : `skipped (${seed.reason})`}`
   )
+}
+
+// ── Enterprise (Plankton) SSO identity + fail-closed gate ────────────────
+//
+// Ported from the old plankton shell's `session-gate.js` + SSO block (batch 1
+// of PLANKTON-MIGRATION.md). Variant-driven: the instance and every IPC channel
+// below exist ONLY for `plankton`. Upstream variants register nothing here, so
+// their surface is unchanged.
+//
+// The gate is enforced at two seams (see plankton-session-gate.ts):
+//   1. `hermes:api` — refuse before any backend data request (no session list);
+//   2. `ensureBackend` — refuse before a local spawn, so an unauthenticated
+//      build never reads or writes the enterprise engine home.
+// Login runs in the system browser against shaoke 240 SSO (loopback callback);
+// the desktop session lives at `<userData>/plankton-state/sso/session.json`,
+// mode 0600, and never carries the access token.
+
+let planktonAuth: PlanktonAuth | null = null
+
+/** POST an x-www-form-urlencoded body and parse JSON (token exchange). */
+async function planktonPostForm(
+  url: string,
+  form: Record<string, string>,
+  headers: Record<string, string>
+): Promise<{ status: number; body: any }> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
+    body: new URLSearchParams(form).toString()
+  })
+
+  return { status: res.status, body: await res.json().catch(() => ({})) }
+}
+
+/** GET JSON with headers (userinfo). */
+async function planktonGetJson(url: string, headers: Record<string, string>): Promise<{ status: number; body: any }> {
+  const res = await fetch(url, { headers })
+
+  return { status: res.status, body: await res.json().catch(() => ({})) }
+}
+
+function getPlanktonAuth(): PlanktonAuth {
+  if (!planktonAuth) {
+    const stateDir = path.join(app.getPath('userData'), 'plankton-state')
+
+    planktonAuth = createPlanktonAuth({
+      resolveConfig: planktonConfigResolver({
+        stateDir,
+        configDir: __dirname,
+        isPackaged: app.isPackaged
+      }),
+      sessionDir: path.join(stateDir, 'sso'),
+      openExternal: url => shell.openExternal(url),
+      postForm: planktonPostForm,
+      getJson: planktonGetJson,
+      log: line => rememberLog(line)
+    })
+  }
+
+  return planktonAuth
+}
+
+/** True only while the enterprise build has a live SSO session. */
+function planktonSignedIn(): boolean {
+  return PRODUCT_IDENTITY.enterprise === true && getPlanktonAuth().isLoggedIn()
+}
+
+if (PRODUCT_IDENTITY.enterprise) {
+  ipcMain.handle('plankton:sso-status', () => getPlanktonAuth().status())
+  ipcMain.handle('plankton:sso-login', async (_event, provider: unknown) => getPlanktonAuth().login(provider))
+  ipcMain.handle('plankton:sso-logout', () => {
+    getPlanktonAuth().logout()
+
+    return { ok: true }
+  })
 }
 
 // #77311: `desktop.electron_flags` and the renderer heap ceiling
@@ -11159,6 +11236,14 @@ async function ensureBackend(
     spawnPriority?: LocalBackendSpawnPriority
   } = {}
 ): Promise<Awaited<ReturnType<typeof backendConnectionState.getPromise>>> {
+  // Enterprise fail-closed gate (Plankton): no live SSO session ⇒ never resolve
+  // or spawn a backend. This is what keeps the enterprise engine home
+  // (~/.plankton/engine/home) untouched while the user is logged out — no
+  // state.db read, no session write. See plankton-session-gate.ts.
+  if (PRODUCT_IDENTITY.enterprise === true && !getPlanktonAuth().isLoggedIn()) {
+    throw new Error('not-authenticated: 未登录 SSO，不启动企业引擎（fail-closed）')
+  }
+
   const key = profile && String(profile).trim() ? String(profile).trim() : primaryProfileKey()
   const spawnPriority = spawnPriorityFrom(opts.spawnPriority)
   poolRetirer.assertCanOpen(key, spawnPriority)
@@ -17856,6 +17941,15 @@ function formatApiRequestFailure(
 }
 
 ipcMain.handle('hermes:api', async (_event, request) => {
+  // Enterprise fail-closed gate (Plankton): while no SSO session is live, NO
+  // data request reaches the backend — the renderer's session list, chats and
+  // config all ride this one transport. The renderer already shows the login
+  // gate and never mounts the app, so this is the belt to that braces; it also
+  // covers a renderer that is bypassed or reloaded into a stale state.
+  if (PRODUCT_IDENTITY.enterprise === true && !getPlanktonAuth().isLoggedIn()) {
+    return planktonGateDecision({ channel: 'hermes:api', loggedIn: false }).payload
+  }
+
   // Hold the deletion gate for BOTH profile deletes and renames: a concurrent
   // renderer reconnect entering ensureBackend() mid-mutation would otherwise
   // respawn the old-name backend and recreate its HERMES_HOME (#45474).
@@ -18403,7 +18497,10 @@ ipcMain.on('hermes:feature-flags', (event: IpcMainEvent): void => {
     // paint to drop surfaces that only exist for the upstream build (the
     // shared-metrics "Send" row). Additive and always present; upstream
     // variants receive `false` and never read it. See ENTERPRISE.md §5.
-    enterprise: PRODUCT_IDENTITY.enterprise === true
+    enterprise: PRODUCT_IDENTITY.enterprise === true,
+    // Enterprise SSO gate fact: the renderer must run the login gate before
+    // mounting the app. False on every upstream variant (which never reads it).
+    planktonAuthRequired: PRODUCT_IDENTITY.enterprise === true
   }
 })
 

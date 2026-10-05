@@ -366,6 +366,65 @@ changed. Both are emitted **by the build**, not copied into a `.app` by hand:
 To change what ships, edit the extraResources entries or the notice file — no manual
 copy step exists, and every `npm run pack` reproduces them.
 
+## 7. Enterprise identity + fail-closed gate (batch 1)
+
+Ported from the old plankton shell (batch 1 of `PLANKTON-MIGRATION.md`): SSO
+login, the unauthenticated gate, and session-identity injection. Implemented as
+pure modules + a thin driver, variant-gated on `plankton` only.
+
+### Reuse decision (why not upstream's OAuth wholesale)
+
+Upstream already has RFC 8252 native OAuth (`electron/native-oauth*.ts`: system
+browser + loopback redirect + PKCE + safeStorage token store) — **against a
+Hermes gateway** (`/auth/native/{authorize,token}`). shaoke 240 SSO is a
+different authorization server (`<issuer>/oidc/{authorize,token,userinfo}`) that
+today authenticates with `client_secret` (Basic), not PKCE (KI-PLANKTON-0001,
+0005). So upstream's endpoints cannot be reused verbatim.
+
+What **is** reused:
+
+- **The loopback mechanism.** Plankton's redirect URI is already a loopback
+  callback (`http://127.0.0.1:18922/callback`), so we keep the loopback-server
+  shape and drop the old shell's embedded-BrowserWindow interception — whose
+  `ERR_ABORTED` race on the cancelled redirect was a real, twice-shipped defect.
+- **Pure helpers** from `native-oauth.ts`: `generateState` (CSRF state) and
+  `parseTokenResponse` (token-response normalization).
+
+Everything else is a small Plankton-specific layer, because it has to be.
+
+### Where it lives
+
+| Piece | File | Role |
+|-------|------|------|
+| Config + URL + callback logic (pure) | `electron/plankton-sso.ts` | env → `<userData>/plankton-state/sso-config.local.json` → (dev only) bundled; packaged never reads a bundled secret |
+| Gate contract (pure) | `electron/plankton-session-gate.ts` | `PLANKTON_PUBLIC_CHANNELS` / `PLANKTON_GATED_CHANNELS`, `planktonGateDecision`, identity injection |
+| Login driver + session store | `electron/plankton-auth.ts` | loopback listener, `client_secret` exchange, `session.json` at **0600** (no access token) |
+| Wiring | `electron/main.ts` | `plankton:sso-{login,status,logout}` (plankton only); `hermes:api` refuses before the backend; `ensureBackend` refuses before spawn |
+| Bridge | `electron/preload.ts` (`planktonAuth`), `src/global.d.ts` | present only on an enterprise build |
+| Login UI | `src/app/plankton-auth-gate.tsx`, `src/main.tsx` | replaces the app until a session is live (pass-through upstream) |
+
+### The gate is enforced at two seams
+
+1. **`hermes:api`** — every session/chat/config read rides it; while logged out
+   it returns `{ok:false, code:'not-authenticated'}` instead of forwarding.
+2. **`ensureBackend`** — throws before a local spawn, so an unauthenticated build
+   reads/writes **no** enterprise engine home (`~/.plankton/engine/home`).
+3. The renderer never mounts the app while logged out, so the session list is
+   never requested in the first place.
+
+### Tests
+
+`npx vitest run --project electron electron/plankton-session-gate.test.ts
+electron/plankton-sso.test.ts electron/plankton-auth.test.ts` — 31 behavior
+tests, including a **local stub OIDC service** that drives the full chain
+(发起 → 回调正确/错误 → 令牌落盘 0600 → 门禁放行/拒绝) over real HTTP.
+
+### Still to verify here
+
+Packaging the artifact and re-running the clean-environment fail-closed check
+(`env -i … Plankton.app`) is a separate step; the human browser login cannot be
+automated and must be validated by an operator against the production IdP.
+
 ## Build / pack / rollback
 
 ### One command (the supported entry point)

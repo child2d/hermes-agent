@@ -384,6 +384,20 @@ declare global {
       localModelsEnabled?: boolean
       /** Build-identity fact: this artifact is the enterprise (Plankton) build. */
       enterpriseEnabled?: boolean
+      /** Enterprise SSO gate fact: run the login gate before mounting the app. */
+      planktonAuthRequired?: boolean
+      /** Enterprise SSO bridge — present only when `planktonAuthRequired`. */
+      planktonAuth?: {
+        status: () => Promise<{
+          ok: true
+          loginReady: boolean
+          loginBlockedReason: string | null
+          loggedIn: boolean
+          whoami: { subject: string; displayName: string | null; email: string | null } | null
+        }>
+        login: (provider?: string) => Promise<{ ok: boolean; error?: string; whoami?: unknown }>
+        logout: () => Promise<{ ok: boolean }>
+      }
       /** Launch flag shared with every backend the app starts. */
       guestOnboardingEnabled?: boolean
       /** Sanitized local `display.skin`, available before any gateway connects. */
