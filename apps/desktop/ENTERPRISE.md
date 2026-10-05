@@ -273,6 +273,62 @@ byte-for-identical (`bin`, `enabled-features.json`, `hermes-agent`, `manifest.js
 `pm-runtime`, `tools`, `venv`), so the app boots with no external Python exactly
 as before.
 
+## 5. Shared metrics — local-only, and the send-to-Nous offer is never shown
+
+Upstream's first run asks *"Help improve Hermes?"* with three equal answers —
+**Send to Nous** / **Local only** / **No thanks** — and `AGENTS.md` requires outbound
+telemetry to stay behind a user-facing opt-in. The enterprise edition inverts the
+default: **collection stays local, transmission is off, and the "send to Nous" choice
+is never presented.**
+
+This reuses upstream's own mechanism and keys. There is **no second consent system**:
+
+- The two config keys are the same ones the offer and `hermes setup telemetry` write:
+  `telemetry.shared_metrics.enabled` (collect locally) and `.send` (upload daily).
+- A profile counts as *decided* once either key is written, and **only a decided answer
+  suppresses the offer** — on every surface (the desktop composer strip, the CLI offer,
+  the dashboard banner). So the enterprise build settles those keys to **`enabled: true`,
+  `send: false`** before the UI can ask; the strip/dialog never render and no transmission
+  is possible (`resolve_send_config` resolves `send=False`).
+
+Where it lives (variant-driven — the other four variants are bit-for-bit unchanged):
+
+| Piece | File | Role |
+|-------|------|------|
+| Identity stamp into the backend env | `electron/guest-onboarding.ts` → `desktopBackendSpawnEnv(base, guestOnboarding, enterprise)` | writes `HERMES_ENTERPRISE=1` for `plankton`, `=0` for every other variant (stamped for both states so an inherited value cannot leak) |
+| Passing the identity | `electron/main.ts` (both `hermes serve` spawn sites) | passes `PRODUCT_IDENTITY.enterprise` as the third argument |
+| Materializing the default | `hermes_cli/observability/shared_metrics_consent.py` → `apply_enterprise_consent_default()` | enterprise-only; no-op on any upstream build. If the profile already carries an explicit answer it is **respected verbatim** (even `send: true`) and logged; otherwise writes `enabled: true`, `send: false` through the existing `save_consent()` writer |
+| Calling it at startup | `hermes_cli/web_server.py` (`_lifespan`) | runs once on backend start, before the UI's first `shared_metrics.status` read; best-effort (a failure is logged, never fatal) |
+
+`HERMES_ENTERPRISE` is an **identity marker set by the launcher** (the same family as
+`HERMES_DESKTOP`, `HERMES_MANAGED`), not user-facing behavioural config — the behavioural
+setting stays in `config.yaml`, exactly as `AGENTS.md` requires. The engine has no build
+selector of its own (the variant is baked into the Electron main), so this is the one
+signal it can trust.
+
+Return values of `apply_enterprise_consent_default()`: `not-enterprise` (upstream — nothing
+read or written), `decided` (explicit existing answer kept), `seeded` (local-only default
+written). Behaviour tests: `tests/hermes_cli/test_shared_metrics_consent_enterprise.py`;
+the identity stamp is covered by `electron/backend-spawn-env.test.ts`.
+
+## 6. License and third-party notice in the artifact
+
+A modified distribution must carry the upstream license and a notice of what was
+changed. Both are emitted **by the build**, not copied into a `.app` by hand:
+
+- `electron-builder.config.cjs` (`extraResources`) adds, for the `plankton` variant only:
+  - `../../LICENSE` (the repo-root, unmodified upstream MIT license) → `Contents/Resources/LICENSE`
+  - `THIRD-PARTY-NOTICES.md` (this directory) → `Contents/Resources/THIRD-PARTY-NOTICES.md`
+- Gated on `HERMES_DESKTOP_VARIANT === 'plankton'`, so the other four variants' Resources
+  stay bit-for-bit unchanged.
+- `THIRD-PARTY-NOTICES.md` states the upstream project (hermes-agent, MIT,
+  Copyright (c) 2025 Nous Research), points at the bundled verbatim `LICENSE`, and lists the
+  material changes in this distribution (variant identity, enterprise data roots + isolation,
+  embedded engine, packaging slimming, sidebar fix, telemetry localization).
+
+To change what ships, edit the two extraResources entries or the notice file — no manual
+copy step exists, and every `npm run pack` reproduces them.
+
 ## Build / pack / rollback
 
 Two steps, mirroring upstream `dist:bundled`. Step 1 stages the in-artifact

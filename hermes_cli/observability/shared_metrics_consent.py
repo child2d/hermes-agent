@@ -60,6 +60,57 @@ def consent_decided() -> bool:
     return consent_state(read_raw_config())["decided"]
 
 
+# ---- enterprise (Plankton) default ------------------------------------------------------------
+#
+# The enterprise desktop build does not ask "Help improve Hermes / send to Nous". The engine has
+# no build selector of its own (the identity is baked into the Electron main), so the app stamps
+# this marker into the spawned backend's environment: '1' for the enterprise build, '0' for every
+# upstream variant (so their backend env is unchanged). See
+# apps/desktop/ENTERPRISE.md §5.
+ENTERPRISE_ENV_VAR = "HERMES_ENTERPRISE"
+
+#: The enterprise answer when the profile never chose: collect locally, never upload.
+ENTERPRISE_DEFAULT_ENABLED = True
+ENTERPRISE_DEFAULT_SEND = False
+
+
+def enterprise_identity() -> bool:
+    """True when this engine process was spawned by the enterprise (Plankton) app."""
+    return os.environ.get(ENTERPRISE_ENV_VAR) == "1"
+
+
+def apply_enterprise_consent_default(config: dict | None = None) -> str:
+    """Materialize the enterprise shared-metrics default: local collection only, never sent.
+
+    Called once by the desktop backend's startup lifespan. It writes the SAME two config keys the
+    first-run offer and ``hermes setup telemetry`` write (``telemetry.shared_metrics.enabled`` /
+    ``.send``), so every surface — the composer strip, the CLI offer, the sender — reads one
+    decided opt-in and the "send to Nous" question is never shown. Returns:
+
+    ``not-enterprise``  an upstream build (marker absent): nothing is read or written.
+    ``decided``         the profile already carries an explicit answer; it is respected verbatim
+                        (even ``send: true``) and logged.
+    ``seeded``          the local-only default was written.
+    """
+    if not enterprise_identity():
+        return "not-enterprise"
+
+    from hermes_cli.config import read_raw_config
+
+    if consent_decided():
+        logger.info("Enterprise shared metrics: explicit consent kept as %s", consent_state(read_raw_config()))
+        return "decided"
+
+    save_consent(ENTERPRISE_DEFAULT_ENABLED, ENTERPRISE_DEFAULT_SEND, config)
+    logger.info(
+        "Enterprise shared metrics: defaulted to local-only (enabled=%s, send=%s); the "
+        "send-to-Nous option is not offered on this build.",
+        ENTERPRISE_DEFAULT_ENABLED,
+        ENTERPRISE_DEFAULT_SEND,
+    )
+    return "seeded"
+
+
 def _set_answer(target: dict, enabled: bool, send: bool) -> None:
     telemetry = target.get("telemetry")
     if not isinstance(telemetry, dict):

@@ -12482,7 +12482,8 @@ async function runPoolBackendStart(
           HERMES_WEB_DIST: webDist,
           ...(readyFile ? { HERMES_DESKTOP_READY_FILE: readyFile } : {})
         },
-        GUEST_ONBOARDING
+        GUEST_ONBOARDING,
+        PRODUCT_IDENTITY.enterprise
       ),
       shell: backend.shell,
       stdio: ['ignore', 'pipe', 'pipe']
@@ -13396,7 +13397,8 @@ async function runHermesStart({ supervisorRecovery = false }: { supervisorRecove
             HERMES_WEB_DIST: webDist,
             ...(readyFile ? { HERMES_DESKTOP_READY_FILE: readyFile } : {})
           },
-          GUEST_ONBOARDING
+          GUEST_ONBOARDING,
+          PRODUCT_IDENTITY.enterprise
         ),
         shell: backend.shell,
         stdio: ['ignore', 'pipe', 'pipe']

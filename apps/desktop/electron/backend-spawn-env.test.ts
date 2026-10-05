@@ -43,3 +43,19 @@ test('desktopBackendSpawnEnv stamps the launch decision last and never lets an i
     assert.equal(env.GATEWAY_ON_ALL_ADAPTERS_DOWN, 'stay_alive')
   }
 })
+
+// Enterprise (Plankton) identity: the engine has no build selector of its own, so the
+// spawn stamps HERMES_ENTERPRISE ('1' only for the enterprise variant) and the backend
+// turns it into the local-only shared-metrics default. Stamped for BOTH states so an
+// inherited value can never leak in either direction.
+test('desktopBackendSpawnEnv stamps the enterprise identity for exactly the enterprise build', () => {
+  const base = { HERMES_HOME: '/tmp/home', HERMES_DESKTOP: '1', PATH: '/usr/bin' }
+
+  assert.equal(desktopBackendSpawnEnv(base, false, true).HERMES_ENTERPRISE, '1')
+  assert.equal(desktopBackendSpawnEnv(base, false, false).HERMES_ENTERPRISE, '0')
+  // Default (no third argument) is upstream: never enterprise.
+  assert.equal(desktopBackendSpawnEnv(base, false).HERMES_ENTERPRISE, '0')
+  // A stray inherited marker must not leak in either direction.
+  assert.equal(desktopBackendSpawnEnv({ ...base, HERMES_ENTERPRISE: '1' }, false, false).HERMES_ENTERPRISE, '0')
+  assert.equal(desktopBackendSpawnEnv({ ...base, HERMES_ENTERPRISE: '0' }, false, true).HERMES_ENTERPRISE, '1')
+})

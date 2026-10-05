@@ -133,6 +133,15 @@ module.exports = {
     ...(['bundled', 'store', 'plankton'].includes(process.env.HERMES_DESKTOP_VARIANT || '')
       ? [{ from: 'build/agent-payload', to: 'agent-payload' }]
       : []),
+    // Enterprise distribution: ship the upstream MIT license and a third-party
+    // notice beside the app. Gated to the enterprise variant so every upstream
+    // artifact's Resources stay bit-for-bit unchanged. See ENTERPRISE.md §6.
+    ...((process.env.HERMES_DESKTOP_VARIANT || '') === 'plankton'
+      ? [
+          { from: '../../LICENSE', to: 'LICENSE' },
+          { from: 'THIRD-PARTY-NOTICES.md', to: 'THIRD-PARTY-NOTICES.md' }
+        ]
+      : []),
     {
       from: `${iconBase}.ico`,
       to: 'icon.ico'

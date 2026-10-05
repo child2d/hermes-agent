@@ -214,6 +214,17 @@ async def _lifespan(app: "FastAPI"):
 
     record_boot_fingerprint()
 
+    # Enterprise (Plankton) build: settle the shared-metrics consent to the local-only default
+    # before the UI can ask, so the first-run "send to Nous" offer never appears and nothing is
+    # ever uploaded. A no-op for every upstream build (the marker is absent) and for a profile
+    # that already answered; both are logged. See apps/desktop/ENTERPRISE.md §5.
+    try:
+        from hermes_cli.observability.shared_metrics_consent import apply_enterprise_consent_default
+
+        apply_enterprise_consent_default()
+    except Exception:
+        _log.warning("Enterprise shared-metrics default not applied", exc_info=True)
+
     # Hosted Bot rooms belong to the backend process. Recovery may need a
     # contended state.db migration, so keep it off the pre-yield path: Group
     # Chat must degrade on its own rather than block every Desktop feature.
