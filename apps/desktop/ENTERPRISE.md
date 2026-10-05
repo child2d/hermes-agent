@@ -67,11 +67,30 @@ and, when no ambient `HERMES_HOME` exists, exports it to `process.env` so the
 spawned backend and the pure PATH helpers agree. `electron/entry.ts` does the
 same for the Linux pre-launch config read.
 
-**Override preserved:** an explicit `HERMES_HOME` or
-`HERMES_DESKTOP_USER_DATA_DIR` always wins (multi-instance, sandbox tests,
-fresh-install rehearsals). `resolveDesktopHermesHome`'s upstream platform
-default (`~/.hermes`) is unchanged whenever `defaultHome` is absent, so every
-upstream variant resolves bit-for-bit as before.
+**Override preserved:** a *legitimate* explicit `HERMES_HOME` (one outside the
+personal root) or `HERMES_DESKTOP_USER_DATA_DIR` always wins (multi-instance,
+sandbox tests, fresh-install rehearsals). `resolveDesktopHermesHome`'s upstream
+platform default (`~/.hermes`) is unchanged whenever `defaultHome` is absent, so
+every upstream variant resolves bit-for-bit as before.
+
+### The inherited-`HERMES_HOME` hole (fixed)
+
+An `HERMES_HOME` in the environment beats the enterprise default in
+`resolveDesktopHermesHome`'s first branch. Every process descended from a
+Hermes CLI shell — and the Hermes desktop app itself, which exports
+`HERMES_HOME=<personal root>` to its children — carries exactly
+`HERMES_HOME=~/.hermes`. A double-clicked artifact launched from such a context
+(`open`, a terminal, an installer that inherits the user's shell env) therefore
+inherits it, and the app starts on the **personal** root with no variable the
+user consciously passed.
+
+`enterpriseHomeSelection()` (`electron/enterprise-paths.ts`, behavior-tested in
+`enterprise-paths.test.ts`) closes it: for an enterprise build, a requested home
+that **is** the personal root (`~/.hermes`, or `~/.hermes<suffix>` under a
+`HERMES_DATA_DIR_SUFFIX` run) is discarded and the enterprise default is used,
+and `main.ts` overwrites the inherited value in `process.env` so spawned
+children cannot re-inherit it. A home *strictly inside* the personal root is a
+deliberate override into personal state and is left alone for the check below.
 
 ### ⚠️ The isolation trap: `HERMES_HOME` must live OUTSIDE `~/.hermes`
 
@@ -121,14 +140,28 @@ Unsafe (silently falls back to personal state): `~/.hermes`,
 `~/.hermes/anything`, `~/.hermes/profiles/<name>`, and the same under a
 `HERMES_DATA_DIR_SUFFIX` root such as `~/.hermes-canary/...`.
 
-**Startup self-check (implemented).** Home isolation is now
-verified at launch, not left to discipline: `enterpriseHomeIsolationIssue()`
+**Startup self-check (implemented, fail-closed).** Home isolation is verified at
+launch, not left to discipline: `enterpriseHomeIsolationIssue()`
 (`electron/enterprise-paths.ts`, behavior-tested in
-`electron/enterprise-paths.test.ts`) compares the *effective* home against the
+`enterprise-paths.test.ts`) compares the *effective* home against the
 personal root and, on an enterprise build, main.ts logs a loud
 `ENTERPRISE HOME ISOLATION FAILURE` and — for a packaged artifact — shows a
-blocking `dialog.showErrorBox`. It never silently falls back: the app still
-starts, but the misconfiguration is impossible to miss.
+blocking `dialog.showErrorBox`.
+
+**Decision: the app then REFUSES TO START.** On a hit, main.ts calls
+`app.exit(1)` (plus a hard `throw` as belt-and-braces) *before* the model seed,
+the desktop log, the SSH control dir and the backend spawn — so a
+misconfigured launch reads and writes **no** home at all. Booting anyway would
+mean running against personal `state.db`/`config.yaml`/sessions, which is the
+one thing this fork exists to prevent; a path preference never outranks that
+red line. The error box is the operator's only signal, which is why it is shown
+before the exit.
+
+The fail-closed path is reachable only by an home **strictly inside** the
+personal root: a home that *is* the personal root is the ambient
+CLI/desktop value and is discarded up front (see above), so the ordinary
+double-click from a Hermes-configured shell boots on
+`~/.plankton/engine/home` instead of exiting.
 
 ### Two ambient personal-path leaks, closed
 

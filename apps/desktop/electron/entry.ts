@@ -5,7 +5,7 @@ import path from 'node:path'
 import { app } from 'electron'
 
 import { resolveDesktopHermesHome } from './data-paths'
-import { enterpriseHermesHomeFor } from './enterprise-paths'
+import { enterpriseHermesHomeFor, enterpriseHomeSelection } from './enterprise-paths'
 import { readDesktopLaunchConfig } from './renderer-heap-flags'
 import { wslgLaunchArgs } from './wslg-launch'
 import { spawnWslgLaunch } from './wslg-launch-process'
@@ -26,7 +26,13 @@ function configuredElectronFlags(env: NodeJS.ProcessEnv): string[] {
   // HERMES_DATA_DIR_SUFFIX channel installs and profiles/-rooted HERMES_HOME
   // values must pick the same config.yaml before the relaunch and inside the
   // app, or desktop.electron_flags silently never reaches the relaunch.
-  const home = resolveDesktopHermesHome({
+  const identity = bakedEnterpriseIdentity()
+  const enterpriseDefault = enterpriseHermesHomeFor(identity, {
+    home: os.homedir(),
+    platform: process.platform,
+    env
+  })
+  const requestedHome = resolveDesktopHermesHome({
     home: os.homedir(),
     env,
     // Linux-only pre-launch path; the win32 legacy-migration probe is never
@@ -35,12 +41,18 @@ function configuredElectronFlags(env: NodeJS.ProcessEnv): string[] {
     readWindowsHome: () => null,
     // Enterprise builds read config.yaml from the enterprise home here too, so
     // pre-launch flags and the running app agree.
-    defaultHome: enterpriseHermesHomeFor(bakedEnterpriseIdentity(), {
-      home: os.homedir(),
-      platform: process.platform,
-      env
-    })
+    defaultHome: enterpriseDefault
   })
+  // Same ambient-personal-root guard as main.ts: an inherited HERMES_HOME of
+  // ~/.hermes must not make this pre-launch read open the personal config.yaml.
+  const home = enterpriseHomeSelection({
+    identity,
+    requestedHome,
+    enterpriseDefault,
+    home: os.homedir(),
+    platform: process.platform,
+    env
+  }).home
 
   try {
     return readDesktopLaunchConfig(readFileSync(path.join(home, 'config.yaml'), 'utf8')).electronFlags

@@ -216,7 +216,7 @@ import {
 import { resolveDashboardWebDist } from './dashboard-web-dist'
 import { resolveDesktopHermesHome, resolveDesktopUserData } from './data-paths'
 import { seedEnterpriseModelConfig } from './enterprise-model-seed'
-import { enterpriseHermesHomeFor, enterpriseHomeIsolationIssue } from './enterprise-paths'
+import { enterpriseHermesHomeFor, enterpriseHomeIsolationIssue, enterpriseHomeSelection } from './enterprise-paths'
 import { loadOrCreateInstallationId, sshOwnershipId } from './desktop-installation'
 import { formatDesktopLogLine, formatLogStamp } from './desktop-log-line'
 import {
@@ -1262,22 +1262,53 @@ const ENTERPRISE_HERMES_HOME_DEFAULT: string | null = enterpriseHermesHomeFor(PR
   platform: process.platform
 })
 
-const HERMES_HOME: string = resolveDesktopHermesHome({
+const REQUESTED_HERMES_HOME: string = resolveDesktopHermesHome({
   home: app.getPath('home'),
   directoryExists,
   readWindowsHome: (): string | null => readWindowsUserEnvVar('HERMES_HOME'),
   defaultHome: ENTERPRISE_HERMES_HOME_DEFAULT
 })
 
+// Enterprise fork: an INHERITED `HERMES_HOME` that is the personal root wins in
+// `resolveDesktopHermesHome`'s first branch and would drop the app onto personal
+// state. Every process descended from a Hermes CLI shell (and the Hermes desktop
+// app itself) exports exactly that value, so a double-clicked artifact launched
+// from such a context inherits it with no variable the user chose to pass. It
+// cannot be an enterprise intent — discard it and use the enterprise default.
+// A home strictly INSIDE the personal root stays untouched so the isolation
+// check below fail-closes on it.
+const ENTERPRISE_HOME_SELECTION: { home: string; discardedAmbientPersonalRoot: string | null } =
+  enterpriseHomeSelection({
+    identity: PRODUCT_IDENTITY,
+    requestedHome: REQUESTED_HERMES_HOME,
+    enterpriseDefault: ENTERPRISE_HERMES_HOME_DEFAULT,
+    home: app.getPath('home'),
+    platform: process.platform
+  })
+
+const HERMES_HOME: string = ENTERPRISE_HOME_SELECTION.home
+
+if (ENTERPRISE_HOME_SELECTION.discardedAmbientPersonalRoot) {
+  console.log(
+    `[hermes] ignoring inherited HERMES_HOME=${ENTERPRISE_HOME_SELECTION.discardedAmbientPersonalRoot} ` +
+      `(it is the personal Hermes root, not an enterprise home); using ${HERMES_HOME}`
+  )
+}
+
 // Make the resolved home visible to every child process and to the pure
 // helpers (backend-env storeFirstPath, bootstrap) that re-resolve it from
 // process.env — so the enterprise app never reaches for personal ~/.hermes.
-// Skip when the environment already set one (override / multi-instance).
-if (ENTERPRISE_HERMES_HOME_DEFAULT && !process.env.HERMES_HOME) {
+// Skip when the environment already set a legitimate one (override /
+// multi-instance); overwrite a discarded ambient personal root, or the spawned
+// backend would inherit it and open personal state anyway.
+if (
+  ENTERPRISE_HERMES_HOME_DEFAULT &&
+  (ENTERPRISE_HOME_SELECTION.discardedAmbientPersonalRoot || !process.env.HERMES_HOME)
+) {
   process.env.HERMES_HOME = HERMES_HOME
 }
 
-// Enterprise isolation SELF-CHECK (fail loud, never silent).
+// Enterprise isolation SELF-CHECK (fail loud AND fail closed).
 //
 // The engine resolves its real root through
 // `hermes_constants.get_default_hermes_root()`, which treats any `HERMES_HOME`
@@ -1287,11 +1318,14 @@ if (ENTERPRISE_HERMES_HOME_DEFAULT && !process.env.HERMES_HOME) {
 // read and write the user's PERSONAL state.db, config and sessions. That is
 // the one failure this fork exists to prevent, and it must never be quiet.
 //
-// Warn loudly on every enterprise launch and, for a packaged artifact, put a
-// blocking error box in front of the operator. The app still starts (a hard
-// exit would strand a working app over a path preference), but nothing about
-// the misconfiguration is silent.
+// FAIL-CLOSED (see apps/desktop/ENTERPRISE.md §2): on a hit we log, put a
+// blocking error box in front of the operator for a packaged artifact, and
+// EXIT before any home is read or written and before the backend is spawned.
+// Continuing would mean running against personal state — the red line — so the
+// app refuses to start rather than booting on the wrong home.
 if (PRODUCT_IDENTITY.enterprise) {
+  console.log(`[hermes] enterprise engine home: ${HERMES_HOME}`)
+
   const isolationIssue = enterpriseHomeIsolationIssue(HERMES_HOME, {
     home: app.getPath('home'),
     platform: process.platform
@@ -1311,6 +1345,13 @@ if (PRODUCT_IDENTITY.enterprise) {
       // showErrorBox is safe before `ready` and does not need a window.
       dialog.showErrorBox('Plankton: Hermes home is not isolated', message)
     }
+
+    // Fail closed: no backend, no seed, no log file, no home access at all.
+    app.exit(1)
+    // Belt and braces: if `app.exit` ever fails to take effect (a harness with
+    // a stubbed app, a platform quirk), abort the module so nothing below can
+    // reach personal state.
+    throw new Error(`enterprise home isolation failure: ${isolationIssue}`)
   }
 }
 
