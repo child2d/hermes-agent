@@ -293,7 +293,7 @@
 - **四类失败可辨**：`unauthorized` / `network-failed` / `not-json`+`shape-mismatch`（格式不符）/ `hashState: 'mismatch'`（哈希不符），
   另含 `cli-missing` / `no-bundle` / `download-failed` / `extract-failed` / `write-failed` / `needs-confirm` / `blocked-personal-dir` /
   `enterprise-home-unavailable` / `hash-unavailable`。**空目录是成功**（`catalog.ok && count===0`）。
-- **写动作人工确认**：后端对 `uninstall`/`update` 及「落点被占」的覆盖一律要求 `confirm:true`，否则回 `needs-confirm`；UI 每次写都过 `ConfirmDialog`，批量更新另有显式确认对话框。
+- **写动作人工确认**：后端对**全部五个写路由**（`install`/`update`/`uninstall`/`enable`/`disable`）一律要求 `confirm:true`，否则回 `needs-confirm`；UI 每次写都过 `ConfirmDialog`（并在请求体里带 `confirm:true`），批量更新另有显式确认对话框。文档与代码一致（见 §8.2 N4）。
 
 **前端**（`desktop/plugin.js`）：新增 `/plankton-skills` 整页 + 侧栏导航行；状态徽章、版本对照、本地哈希、失败文案（每类独立）、确认对话框齐备。
 
@@ -311,3 +311,36 @@
 - **F5 essential 停用如实上报**：写后**重读持久化结果**（引擎静默丢弃 `ESSENTIAL_SKILLS`），未达成即报 `essential-skill` / `not-effective`，不再假成功。
 - **F6 截断显式化**：`fetch_catalog` 返回 `truncated`，`catalog` 块携带 `truncated/pageSize/maxPages`，页面显式提示「结果已截断」。
 - **F7 卸载落点限制**：卸载落点必须在 `skills` 内且符合本模块安装规则（同 F2 的 `plan_install_path` 判据）。
+
+### 8.2 第三轮复核后的收紧（同批，P1–P4 / N1–N5）
+
+上一轮修的三条主路径（F1 符号链接逃逸 / F2 台账嵌套连坐 / F3 批量假绿灯）经复核确认修好，但同类语义里还有四条确定性可触发缺陷
+与五条次要项，本轮逐条收紧（仍全部在外置插件内，**上游零改动**）。
+
+- **P1 硬链接写逃逸**：`dest.is_symlink()` 看不出**硬链接**——`Path.write_bytes()` 会**写穿**硬链接，把**链接另一端**的内容改掉
+  （实测把 `<HERMES_HOME>/config.yaml` 硬链到落点内文件名后，安装**静默覆写引擎配置**并返回 `ok:true`）。修法三件套：
+  ① 写前对既有 `dest` 判 `lstat().st_nlink > 1` 即拒；② 改为**临时文件 + `os.replace`**写入（替换目录项、不跟随既有文件，
+  链接另一端保持原内容）；③ 对「落点内已存在的、**非本台账记录**的文件」直接拒写（不再静默覆盖）。落点整体先在**同级暂存目录**
+  建好再**原子换入**（见 N1）。
+- **P2 `skills` 根自身是符号链接仍逃逸**：旧 `assert_safe_landing()` **先 `resolve()` 再逐段 lstat**，`resolve` 已把链接抹掉，**根自身
+  从不被检**——安装与卸载都落到 `<HERMES_HOME>/skills` **之外**（实测仓外文件被写、仓外目录被删）。修法：新增
+  `assert_no_symlink_chain()`，对**未 resolve** 的 `skills_path`（含其上的 `HERMES_HOME` 链与**根自身**）逐段 `lstat` 拒链接；
+  `resolve()` 只用于包含性数学。
+- **P3 大小写 / Unicode 归一化兄弟目录**：macOS 默认大小写不敏感 + 规范化，`cat/x` 与 `CAT/x`、NFC↔NFD 是**同一物理目录**，而重叠 /
+  嵌套判定用**裸字符串前缀比较** → `CAT/x` 不被识别为 `cat` 的子目录 → **卸载连坐删兄弟** + **台账悬挂**。修法：新增
+  `_landing_key()`（NFC 归一 + `casefold` 的目录段键）与 `_key_is_under()`，**重叠 / 嵌套 / 同落点**判定一律走键，覆盖安装与卸载
+  两个方向及台账嵌套判定。
+- **P4 F7 只限形状不限归属**：F7 只校验「`name`+`installPath` 拼出的形状合法」，篡改台账后（`contentHash:null` 也不拦）即可删掉
+  `skills` 下**任意合法形状的既有目录**（实测删掉不相关的引擎技能目录）。修法：要求落点是**本台账记录的叶子**——记录存在、
+  `name/category` 与落点一致、**且 `contentHash` 非空**（本模块安装必然写入哈希，无哈希即非本模块所装），仅凭形状不得删除。
+- **N1 部分写入残留**：改为**同级暂存目录建整棵树 → 原子换入**；任何失败都清理暂存目录，store 内不留半成品。换入前若已存在
+  旧落点，先移开、失败再还原。
+- **N2 落点是普通文件时假绿**：旧行为返回 `ok:true/removed:false` 却把台账标已卸载。改为如实：落点被非目录占用时回
+  `remove-failed`，**不删除、台账不动**。
+- **N3 `ESSENTIAL_SKILLS` import 与写函数分离**：该符号**只用于给失败命名**，原与配置读写同处一个 `try`——缺符号会把启停整体退化为
+  `engine-unavailable`。改为单独 `try`，缺符号退化为空集（仍照常读写引擎配置；确因引擎自身失败则如实报 `write-failed`）。
+- **N4 确认闩覆盖不全**：旧代码后端只在 `update`/`uninstall`/「落点被占」要求 `confirm:true`，与「写动作人工确认」的声称不完全一致。
+  选**给剩余写路径补齐**：`/skills/install` 与 `/skills/enable`、`/skills/disable` 也一律要求 `confirm:true`（UI 三个写请求均带
+  `confirm:true`），文档声称与代码一致（见 §8 与 §8.2）。
+- **N5 测试注释运行命令写错**：`node --test <目录>` 在 Node 26 下按模块解析而报 `MODULE_NOT_FOUND`，改为**指向文件**的可跑命令
+  `node --test apps/desktop/enterprise/plankton-enterprise/tests/batch-update.test.mjs`。

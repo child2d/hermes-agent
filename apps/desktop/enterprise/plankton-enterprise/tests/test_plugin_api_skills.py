@@ -17,6 +17,9 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
+import sys
+import types
 import zipfile
 from pathlib import Path
 
@@ -516,3 +519,384 @@ def test_list_skills_surfaces_catalog_truncation(api, monkeypatch):
     result = api.list_skills()
     assert result["catalog"]["ok"] is True
     assert result["catalog"]["truncated"] is True
+
+
+# ── P1: a hard link (or foreign file) at the landing must not be overwritten ─
+#
+# Second-review round 2. `dest.is_symlink()` does NOT see a HARD link: writing
+# through one silently rewrites the OTHER name's content (e.g. an engine
+# config file), and the write still reported ok:true. The store now refuses a
+# hard-linked destination, refuses foreign files, and writes atomically.
+
+
+def test_atomic_write_does_not_clobber_a_hardlink(tmp_path, api):
+    """The write mechanism itself: rename replaces the entry, not the inode."""
+    config = tmp_path / "config.yaml"
+    config.write_text("original-config", encoding="utf-8")
+    dest = tmp_path / "SKILL.md"
+    os.link(config, dest)
+    assert os.stat(config).st_ino == os.stat(dest).st_ino
+
+    api._atomic_write_bytes(dest, b"EVIL")
+
+    assert config.read_text(encoding="utf-8") == "original-config", "the other link must be untouched"
+    assert dest.read_bytes() == b"EVIL"
+    assert os.stat(config).st_ino != os.stat(dest).st_ino, "dest is now a NEW inode, not the shared one"
+
+
+def test_install_refuses_a_hardlinked_destination(api):
+    """P1 counterexample: config.yaml hard-linked into the landing → refuse."""
+    home = api._TEST_HOME
+    (home / "config.yaml").write_text("original-config", encoding="utf-8")
+    target = home / "skills" / "x"
+    target.mkdir(parents=True)
+    os.link(home / "config.yaml", target / "SKILL.md")
+
+    # A well-formed record (with a hash) so ownership passes and the HARD-LINK
+    # check — not the foreign-file check — is the gate being proven.
+    api.write_ledger(home, [{
+        "reference": "u/x", "slug": "x", "name": "x", "category": "",
+        "version": "1", "contentHash": "sha256:deadbeefdeadbeef", "installPath": "x",
+    }])
+
+    result = _install_with_bundle(
+        api, _skill_zip(), slug="x", reference="u/x", name="x", category="", confirm=True
+    )
+
+    assert result["ok"] is False, result
+    assert result["kind"] == "write-failed"
+    assert "硬链接" in result["detail"]["message"]
+    assert (home / "config.yaml").read_text(encoding="utf-8") == "original-config", "目标未被覆写"
+    assert os.stat(home / "config.yaml").st_ino == os.stat(target / "SKILL.md").st_ino
+
+
+def test_install_refuses_a_foreign_file_in_the_landing(api):
+    """P1: an existing landing this module did not record is not overwritten."""
+    home = api._TEST_HOME
+    foreign = _seed_skill(home, "x", "foreign-body")  # no ledger record
+
+    result = _install_with_bundle(
+        api, _skill_zip(), slug="x", reference="u/x", name="x", category="", confirm=True
+    )
+
+    assert result["ok"] is False
+    assert result["kind"] == "write-failed"
+    assert "非本台账" in result["detail"]["message"]
+    assert (foreign / "SKILL.md").read_text(encoding="utf-8") == "foreign-body"
+
+
+def test_install_hardlinked_destination_outside_a_recorded_landing(api):
+    """P1: same escape WITHOUT a record — also refused (foreign-file branch)."""
+    home = api._TEST_HOME
+    (home / "config.yaml").write_text("original-config", encoding="utf-8")
+    target = home / "skills" / "x"
+    target.mkdir(parents=True)
+    os.link(home / "config.yaml", target / "SKILL.md")
+
+    result = _install_with_bundle(
+        api, _skill_zip(), slug="x", reference="u/x", name="x", category="", confirm=True
+    )
+
+    assert result["ok"] is False
+    assert result["kind"] == "write-failed"
+    assert (home / "config.yaml").read_text(encoding="utf-8") == "original-config"
+
+
+# ── P2: the `skills` ROOT itself being a symlink must refuse ─────────────────
+#
+# `assert_safe_landing` used to resolve() FIRST, erasing a symlinked root, so
+# only the ROOT was never checked: installs landed, and uninstalls deleted,
+# OUTSIDE <HERMES_HOME>/skills. The root chain is now lstat-ed on the literal
+# path, in both directions.
+
+
+def test_install_refuses_when_the_skills_root_is_a_symlink(api, tmp_path):
+    home = api._TEST_HOME
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (home / "skills").symlink_to(outside, target_is_directory=True)
+
+    result = _install_with_bundle(
+        api, _skill_zip(), slug="x", reference="u/x", name="x", category="", confirm=True
+    )
+
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert list(outside.iterdir()) == [], "仓外不得有任何写入"
+
+
+def test_uninstall_refuses_when_the_skills_root_is_a_symlink(api, tmp_path):
+    home = api._TEST_HOME
+    outside = tmp_path / "outside2"
+    victim = outside / "x"
+    victim.mkdir(parents=True)
+    (victim / "SKILL.md").write_text("victim", encoding="utf-8")
+    (home / "skills").symlink_to(outside, target_is_directory=True)
+    api.write_ledger(home, [{
+        "reference": "u/x", "slug": "x", "name": "x", "category": "",
+        "version": "1", "contentHash": api.engine_content_hash(victim), "installPath": "x",
+    }])
+
+    result = api.uninstall_skill(api.UninstallRequest(reference="u/x", confirm=True))
+
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert (victim / "SKILL.md").exists(), "仓外不得有任何删除"
+
+
+def test_assert_safe_landing_rejects_a_symlinked_root_directly(api, tmp_path):
+    home = tmp_path / "h"
+    (home).mkdir()
+    outside = tmp_path / "o"
+    outside.mkdir()
+    (home / "skills").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError):
+        api.assert_safe_landing(home / "skills", "x")
+
+
+def test_safe_landing_allows_a_symlinked_system_ancestor(api, tmp_path):
+    """A symlink ABOVE HERMES_HOME (macOS `/var -> /private/var`) is out of scope.
+
+    The chain walk is bounded at HERMES_HOME's parent, so a legitimate home under
+    a symlinked ancestor must NOT be refused (that would break TMPDIR installs).
+    """
+    real = tmp_path / "real"
+    (real / "home").mkdir(parents=True)
+    link = tmp_path / "lnk"
+    link.symlink_to(real, target_is_directory=True)  # an ancestor symlink
+    home = link / "home"
+    skills = home / "skills"
+    skills.mkdir(parents=True)
+
+    resolved = api.assert_safe_landing(skills, "x")
+
+    assert str(resolved).endswith("x"), resolved
+
+
+# ── P3: case / Unicode-variant siblings are ONE directory on macOS ───────────
+#
+# Raw-string prefix tests missed `CAT/x` living inside `cat`, so an uninstall
+# rmtree'd a sibling and left the ledger dangling. All overlap/nesting tests now
+# use an NFC-normalized, case-folded segment key.
+
+
+def test_landing_key_folds_case_and_unicode(api):
+    assert api._landing_key("CAT/X") == api._landing_key("cat/x")
+    assert api._landing_key("cafe\u0301/x") == api._landing_key("caf\u00e9/x")
+    assert api._key_is_under(api._landing_key("CAT/x"), api._landing_key("cat"))
+    assert not api._key_is_under(api._landing_key("cat"), api._landing_key("cat"))
+
+
+def test_uninstall_does_not_cascade_a_case_variant_sibling(api):
+    home = api._TEST_HOME
+    skills = home / "skills"
+    skills.mkdir(parents=True, exist_ok=True)
+    probe = skills / "CaseProbe"
+    probe.write_text("x", encoding="utf-8")
+    if not (skills / "caseprobe").exists():
+        probe.unlink()
+        pytest.skip("filesystem is case-sensitive; the macOS collapse cannot occur")
+
+    a = _seed_skill(home, "cat/x")  # physically skills/cat/x
+    api.write_ledger(home, [
+        {"reference": "u/cat", "slug": "cat", "name": "cat", "category": "", "version": "1",
+         "contentHash": api.engine_content_hash(skills / "cat"), "installPath": "cat"},
+        {"reference": "u/x", "slug": "x", "name": "x", "category": "CAT", "version": "1",
+         "contentHash": api.engine_content_hash(a), "installPath": "CAT/x"},
+    ])
+
+    result = api.uninstall_skill(api.UninstallRequest(reference="u/cat", confirm=True))
+
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert (a / "SKILL.md").exists(), "the case-variant sibling must survive"
+    records, _ = api.read_ledger(home)
+    kept = next(r for r in records if r["reference"] == "u/cat")
+    assert not kept.get("uninstalledAt"), "the ledger must not go dangling"
+
+
+def test_install_overlap_detects_a_case_variant_parent(api):
+    home = api._TEST_HOME
+    parent = _seed_skill(home, "cat")
+    api.write_ledger(home, [
+        {"reference": "u/cat", "slug": "cat", "name": "cat", "category": "", "version": "1",
+         "contentHash": api.engine_content_hash(parent), "installPath": "cat"},
+    ])
+
+    result = api._install_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="CAT", confirm=True)
+    )
+
+    assert result["ok"] is False
+    assert result["kind"] == "install-overlap"
+    assert result["detail"]["direction"] == "under"
+
+
+# ── P4: shape is not ownership — a tampered ledger cannot delete a stranger ──
+
+
+def test_uninstall_refuses_a_tampered_ledger_without_a_hash(api):
+    """A legal-looking name/installPath with contentHash:null must NOT delete."""
+    home = api._TEST_HOME
+    stranger = _seed_skill(home, "engine-skill")  # an unrelated, legal-shaped dir
+    api.write_ledger(home, [{
+        "reference": "u/evil", "slug": "engine-skill", "name": "engine-skill", "category": "",
+        "version": "1", "contentHash": None, "installPath": "engine-skill",
+    }])
+
+    result = api.uninstall_skill(api.UninstallRequest(reference="u/evil", confirm=True))
+
+    assert result["ok"] is False
+    assert result["kind"] == "unsafe-path"
+    assert "内容哈希" in result["detail"]["reason"]
+    assert (stranger / "SKILL.md").exists(), "指向无关目录也不得删除"
+    records, _ = api.read_ledger(home)
+    kept = next(r for r in records if r["reference"] == "u/evil")
+    assert not kept.get("uninstalledAt")
+
+
+def test_uninstall_refuses_a_tampered_ledger_with_an_empty_hash(api):
+    home = api._TEST_HOME
+    stranger = _seed_skill(home, "engine-skill")
+
+    for bogus in ("", "   "):
+        api.write_ledger(home, [{
+            "reference": "u/evil", "slug": "engine-skill", "name": "engine-skill", "category": "",
+            "version": "1", "contentHash": bogus, "installPath": "engine-skill",
+        }])
+        result = api.uninstall_skill(api.UninstallRequest(reference="u/evil", confirm=True))
+        assert result["ok"] is False and result["kind"] == "unsafe-path"
+    assert (stranger / "SKILL.md").exists()
+
+
+# ── N1: a failed install leaves NO residue in the store ─────────────────────
+
+
+def test_install_failure_leaves_no_residue(api):
+    home = api._TEST_HOME
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("x/SKILL.md", "a")
+        zf.writestr("x/extra.txt", "b")
+
+    api._exec_cli = lambda cli_path, args, timeout_s: (
+        0, json.dumps({"ok": True, "data": {"url": "https://example.invalid/x.zip"}}), ""
+    )  # type: ignore[assignment]
+    api._http_get = lambda url, timeout_s=60: buf.getvalue()  # type: ignore[assignment]
+
+    calls = {"n": 0}
+    real = api._atomic_write_bytes
+
+    def flaky(dest, data):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("simulated disk full")
+        return real(dest, data)
+
+    api._atomic_write_bytes = flaky  # type: ignore[assignment]
+    result = api._install_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="", confirm=True)
+    )
+
+    assert result["ok"] is False
+    assert result["kind"] == "write-failed"
+    skills = home / "skills"
+    assert not (skills / "x").exists(), "no half-written landing"
+    assert [p.name for p in skills.iterdir() if p.name.startswith(".plankton-staging-")] == [], "no staging residue"
+
+
+# ── N2: a landing occupied by a regular file is reported truthfully ─────────
+
+
+def test_uninstall_refuses_a_landing_that_is_a_regular_file(api):
+    home = api._TEST_HOME
+    (home / "skills").mkdir(parents=True, exist_ok=True)
+    (home / "skills" / "x").write_text("not a directory", encoding="utf-8")
+    api.write_ledger(home, [{
+        "reference": "u/x", "slug": "x", "name": "x", "category": "",
+        "version": "1", "contentHash": "sha256:deadbeefdeadbeef", "installPath": "x",
+    }])
+
+    result = api.uninstall_skill(api.UninstallRequest(reference="u/x", confirm=True))
+
+    assert result["ok"] is False
+    assert result["kind"] == "remove-failed"
+    assert (home / "skills" / "x").read_text(encoding="utf-8") == "not a directory"
+    records, _ = api.read_ledger(home)
+    kept = next(r for r in records if r["reference"] == "u/x")
+    assert not kept.get("uninstalledAt"), "the ledger must not be stamped uninstalled"
+
+
+# ── N3: a missing ESSENTIAL_SKILLS symbol must not kill enable/disable ──────
+#
+# Our import of ``ESSENTIAL_SKILLS`` is only used to LABEL a failure. The
+# engine's own modules import the same symbol, so the isolation is done by
+# stubbing the engine's config functions (which then need no symbol) and
+# removing the symbol from ``agent.skill_utils`` — what must NOT happen is our
+# whole toggle path degrading to ``engine-unavailable``.
+
+
+def _stub_engine_config(monkeypatch, *, on_save=None):
+    state: set = set()
+
+    config_mod = types.ModuleType("hermes_cli.config")
+    config_mod.load_config = lambda: {"skills": {"disabled": sorted(state)}}  # type: ignore[attr-defined]
+
+    skills_mod = types.ModuleType("hermes_cli.skills_config")
+    skills_mod.get_disabled_skills = lambda config: set(config.get("skills", {}).get("disabled", []))  # type: ignore[attr-defined]
+
+    def save_disabled_skills(config, names):  # noqa: ANN001
+        if on_save is not None:
+            on_save()
+        state.clear()
+        state.update(names)
+
+    skills_mod.save_disabled_skills = save_disabled_skills  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "hermes_cli.config", config_mod)
+    monkeypatch.setitem(sys.modules, "hermes_cli.skills_config", skills_mod)
+    # The symbol is simply absent (a bare module), as if it were renamed.
+    monkeypatch.setitem(sys.modules, "agent.skill_utils", types.ModuleType("agent.skill_utils"))
+    return state
+
+
+def test_toggle_survives_a_missing_essential_skills_symbol(api, monkeypatch):
+    state = _stub_engine_config(monkeypatch)
+
+    result = api._set_skill_enabled("some-regular-skill", False)
+
+    assert result["ok"] is True, result
+    assert result["kind"] if not result["ok"] else True
+    assert "some-regular-skill" in state
+    assert api._set_skill_enabled("some-regular-skill", True)["ok"] is True
+    assert "some-regular-skill" not in state
+
+
+def test_toggle_with_a_missing_symbol_never_degrades_to_engine_unavailable(api, monkeypatch):
+    def boom():
+        raise RuntimeError("engine refused the write")
+
+    _stub_engine_config(monkeypatch, on_save=boom)
+
+    result = api._set_skill_enabled("some-regular-skill", False)
+
+    assert result["ok"] is False, "a failed engine write must not report ok"
+    assert result["kind"] == "write-failed"
+    assert result["kind"] != "engine-unavailable"
+
+
+# ── N4: every write ROUTE requires the backend confirm latch ────────────────
+
+
+def test_install_route_requires_confirm(api):
+    result = api.install_skill(api.InstallRequest(slug="x", reference="u/x", name="x", category=""))
+    assert result["ok"] is False
+    assert result["kind"] == "needs-confirm"
+
+
+def test_toggle_routes_require_confirm(api):
+    assert api.enable_skill(api.ToggleRequest(name="s"))["kind"] == "needs-confirm"
+    assert api.disable_skill(api.ToggleRequest(name="s"))["kind"] == "needs-confirm"
+    # With the latch the route reaches the engine's own writer.
+    assert api.disable_skill(api.ToggleRequest(name="s", confirm=True))["ok"] is True
+    assert api.enable_skill(api.ToggleRequest(name="s", confirm=True))["ok"] is True

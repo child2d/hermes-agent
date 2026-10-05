@@ -348,7 +348,7 @@ function SkillMarketPage({ ctx }) {
     }
     // enable / disable → engine's own state
     const path = action === 'enable' ? '/skills/enable' : '/skills/disable'
-    return call(path, { name: skill.name || '', enabled: action === 'enable' }).then(result => {
+    return call(path, { name: skill.name || '', enabled: action === 'enable', confirm: true }).then(result => {
       setBanner(result && result.ok
         ? { tone: 'ok', text: `${action === 'enable' ? '已从引擎的停用清单里移出。' : '已写进引擎的停用清单（config.yaml）。'}默认在下一个会话生效。` }
         : { tone: 'error', text: describeResult(action, result) })

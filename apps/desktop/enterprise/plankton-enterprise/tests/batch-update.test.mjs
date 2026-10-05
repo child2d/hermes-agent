@@ -8,7 +8,8 @@
  * request. This loads the REAL `plugin.js` (bare imports rewritten to stubs, so
  * no SDK/react runtime is needed) and checks the aggregation directly.
  *
- * Run: node --test apps/desktop/enterprise/plankton-enterprise/tests/
+ * Run (file, not directory — `node --test <dir>` fails to resolve):
+ *   node --test apps/desktop/enterprise/plankton-enterprise/tests/batch-update.test.mjs
  */
 import assert from 'node:assert/strict'
 import fs from 'node:fs'

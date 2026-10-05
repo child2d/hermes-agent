@@ -57,7 +57,9 @@ import stat
 import subprocess
 import threading
 import time
+import unicodedata
 import urllib.request
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Optional, Tuple
@@ -326,6 +328,10 @@ class UninstallRequest(BaseModel):
 class ToggleRequest(BaseModel):
     name: str = ""
     enabled: bool = True
+    # Enabling/disabling is a write to the engine's config, so the backend
+    # requires the same human-confirmation latch as the file-writing routes
+    # (N4: the doc claim "every write needs confirm" is enforced HERE).
+    confirm: bool = False
 
 
 def _skills_dir(home: Path) -> Path:
@@ -856,8 +862,79 @@ def _rel_segments(install_path: str) -> list:
     return normalized.split("/") if normalized else []
 
 
+def _landing_key(install_path: str) -> tuple:
+    """Comparison key for a landing: NFC-normalized, case-folded segments (P3).
+
+    macOS volumes are case-INsensitive and Unicode-normalizing by default, so
+    ``cat/x``, ``CAT/x`` and an NFD spelling of either are ONE physical
+    directory. A raw-string prefix test therefore MISSES nesting (``CAT/x``
+    living inside ``cat``) and lets an uninstall ``rmtree`` a sibling and leave
+    the ledger dangling. Every overlap / nesting / same-landing comparison goes
+    through this key instead of ``str.startswith``.
+    """
+    segs = _rel_segments(install_path)
+    return tuple(unicodedata.normalize("NFC", p).casefold() for p in segs)
+
+
+def _key_is_under(child: tuple, parent: tuple) -> bool:
+    """True when ``child`` is STRICTLY inside ``parent`` (segment-wise)."""
+    return len(child) > len(parent) and child[: len(parent)] == parent
+
+
+def _lexical_absolute(path: Path) -> Path:
+    """Absolute path WITHOUT following symlinks (``.``/``..`` folded lexically)."""
+    return Path(os.path.abspath(str(path)))
+
+
+def assert_no_symlink_chain(path: Path, *, label: str, boundary: Optional[Path] = None) -> None:
+    """lstat every component of ``path`` AT OR BELOW ``boundary``, refusing symlinks (P2).
+
+    ``Path.resolve()`` erases a symlinked component, so a check that runs after
+    it can never see the link. This walks the literal chain — the final
+    component INCLUDED — because the store root itself (``…/skills``) or the
+    home above it being a symlink is exactly the escape ``resolve()`` hides.
+
+    ``boundary`` is a TRUSTED ancestor: it and everything above it are OUT of
+    scope. Without it a system-level symlink (macOS ``/tmp -> /private/tmp``,
+    ``/var -> private/var``) would produce a false refusal for a perfectly valid
+    ``HERMES_HOME`` under ``TMPDIR``. Components that do not exist yet are fine
+    (nothing to follow). Raises ``ValueError``.
+    """
+    absolute = _lexical_absolute(path)
+    parts = absolute.parts
+    if boundary is None:
+        lo = len(Path(absolute.anchor).parts)
+    else:
+        bound = _lexical_absolute(boundary)
+        bparts = bound.parts
+        if tuple(parts[: len(bparts)]) != tuple(bparts):
+            raise ValueError(f"{label}不在受信边界内：{absolute}（边界 {bound}）")
+        lo = len(bparts)
+    acc = Path(*parts[:lo]) if lo > 0 else Path(absolute.anchor)
+    for seg in parts[lo:]:
+        acc = acc / seg
+        try:
+            mode = os.lstat(acc).st_mode
+        except OSError:
+            # The rest of the chain does not exist (or a component is not a
+            # directory) — nothing further to resolve/follow.
+            return
+        if stat.S_ISLNK(mode):
+            raise ValueError(f"{label}链上存在符号链接，拒绝：{acc}")
+
+
+def _store_boundary(skills_path: Path) -> Path:
+    """The stable ancestor ABOVE the enterprise home (never itself checked).
+
+    ``skills_path`` is always ``<HERMES_HOME>/skills``, so this is
+    ``<HERMES_HOME>``'s parent — the boundary that keeps the symlink walk off
+    system ancestors while still covering HERMES_HOME and the ``skills`` root.
+    """
+    return Path(skills_path).parent.parent
+
+
 def assert_safe_landing(skills_path: Path, install_path: str) -> Path:
-    """Resolve a landing with NO symlink anywhere on its chain (F1 / F7).
+    """Resolve a landing with NO symlink anywhere on its chain (F1 / F7 / P2).
 
     Unlike a bare ``(skills_path / install_path).resolve()`` — which happily
     follows a symlinked component and then reports a path that is "inside" the
@@ -866,7 +943,13 @@ def assert_safe_landing(skills_path: Path, install_path: str) -> Path:
     component is a symlink. It then re-checks the RESOLVED landing for both
     containment (strictly under ``<HERMES_HOME>/skills``) and the personal-tree
     red line (PLK-REQ-0023). Raises ``ValueError``; there is no fallback.
+
+    P2: the ROOT chain (``<HERMES_HOME>`` → ``skills``) is checked on the
+    UNRESOLVED path FIRST. ``resolve()`` below would erase a symlinked root, so
+    a root that is itself a symlink escaped the old version entirely (installs
+    landed, and uninstalls deleted, OUTSIDE the store).
     """
+    assert_no_symlink_chain(skills_path, label="技能目录", boundary=_store_boundary(skills_path))
     root = Path(skills_path).resolve()
     parts = _rel_segments(install_path)
     if not parts:
@@ -910,21 +993,96 @@ def _safe_mkdir_chain(root: Path, parts: list) -> Path:
     return acc
 
 
+def _atomic_write_bytes(dest: Path, data: bytes) -> None:
+    """Write ``data`` to ``dest`` via a temp file + ``os.replace`` (P1).
+
+    ``Path.write_bytes`` writes THROUGH an existing file: if ``dest`` is a hard
+    link to e.g. ``<HERMES_HOME>/config.yaml`` the other name is silently
+    rewritten. A rename onto ``dest`` replaces the directory entry instead, so
+    the linked name keeps its content. The temp file is always cleaned up.
+    """
+    tmp = dest.with_name(f"{dest.name}.plankton-tmp-{os.getpid()}-{uuid.uuid4().hex}")
+    try:
+        with open(tmp, "wb") as handle:
+            handle.write(data)
+        os.replace(tmp, dest)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+
+
+def _assert_landing_writable(target: Path, entries: list, *, owned: bool) -> None:
+    """Refuse a landing whose EXISTING content must not be trampled (P1).
+
+    Two independent refusals:
+
+    * an existing landing this module did not record is foreign — swapping it
+      would destroy someone else's files, so ANY pre-existing entry refuses;
+    * a destination that is a symlink, a non-file, or a HARD LINK
+      (``st_nlink > 1``) refuses: a hard link's other name would otherwise be
+      overwritten with the bundle's bytes.
+
+    Raises ``ValueError``; nothing is touched.
+    """
+    if not owned:
+        for existing in sorted(target.iterdir()):
+            raise ValueError(f"落点内已存在非本台账文件，拒绝覆写：{existing}")
+    for segs, _ in entries:
+        cur = target
+        for index, seg in enumerate(segs):
+            cur = cur / seg
+            if cur.is_symlink():
+                raise ValueError(f"落点内存在符号链接，拒绝写入：{cur}")
+            if index < len(segs) - 1:
+                if cur.exists() and not cur.is_dir():
+                    raise ValueError(f"落点内被非目录占用，拒绝写入：{cur}")
+            elif cur.exists():
+                if not cur.is_file():
+                    raise ValueError(f"落点内被非文件占用，拒绝写入：{cur}")
+                if cur.lstat().st_nlink > 1:
+                    raise ValueError(f"落点内已存在硬链接文件，拒绝覆写：{cur}")
+
+
+def _swap_into_place(staging: Path, target: Path) -> None:
+    """Move a fully-built ``staging`` tree onto ``target`` (P1 / N1).
+
+    The new tree is complete BEFORE anything already at ``target`` is moved, so
+    a failed write never leaves a half-populated landing: the staging dir is
+    removed by the caller. An existing ``target`` is moved aside first and
+    restored if the swap fails.
+    """
+    if not target.exists():
+        os.replace(staging, target)
+        return
+    backup = target.with_name(f"{target.name}.plankton-old-{uuid.uuid4().hex}")
+    os.replace(target, backup)
+    try:
+        os.replace(staging, target)
+    except Exception:
+        os.replace(backup, target)
+        raise
+    shutil.rmtree(backup, ignore_errors=True)
+
+
 def _landing_overlap(planned: str, records: list, ref_of: Callable[[dict], str]) -> Optional[dict]:
     """Detect a parent/child overlap between ``planned`` and an existing record.
 
-    Both directions are refused (F2): landing UNDER another skill's directory
+    Both directions are refused (F2/P3): landing UNDER another skill's directory
     would let a later uninstall of that parent rmtree this skill too; landing
     ABOVE another skill's directory would let uninstall of this one swallow it.
+    Comparison uses the case-folded segment key, so ``CAT/x`` is correctly seen
+    as living under ``cat`` on a case-insensitive volume.
     """
+    planned_key = _landing_key(planned)
     for record in records:
         other = str(record.get("installPath") or "").strip()
-        if not other or other == planned:
+        other_key = _landing_key(other)
+        if not other_key or other_key == planned_key:
             continue
-        if planned.startswith(other + "/"):
+        if _key_is_under(planned_key, other_key):
             return {"plannedPath": planned, "conflictsWith": other, "direction": "under",
                     "reference": ref_of(record), "name": str(record.get("name") or "")}
-        if other.startswith(planned + "/"):
+        if _key_is_under(other_key, planned_key):
             return {"plannedPath": planned, "conflictsWith": other, "direction": "above",
                     "reference": ref_of(record), "name": str(record.get("name") or "")}
     return None
@@ -935,14 +1093,17 @@ def _nested_landings(
 ) -> list:
     """Records whose landing sits strictly INSIDE ``landing`` and still exists.
 
-    Deleting ``landing`` would take them with it (F2), so uninstall refuses.
-    A deeper path that is itself unsafe (or unreadable) counts as present —
-    the conservative branch, never a silent pass.
+    Deleting ``landing`` would take them with it (F2/P3), so uninstall refuses.
+    The nesting test is the case-folded segment key (a raw ``startswith`` misses
+    ``CAT/x`` inside ``cat``). A deeper path that is itself unsafe (or
+    unreadable) counts as present — the conservative branch, never a silent pass.
     """
     nested: list = []
+    landing_key = _landing_key(landing)
     for record in records:
         other = str(record.get("installPath") or "").strip()
-        if not other or other == landing or not other.startswith(landing + "/"):
+        other_key = _landing_key(other)
+        if not other_key or other_key == landing_key or not _key_is_under(other_key, landing_key):
             continue
         try:
             deeper: Optional[Path] = assert_safe_landing(skills_path, other)
@@ -963,13 +1124,13 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
     if not planned:
         return {"ok": False, "kind": "bad-input", "detail": {"reason": "技能名缺失，无法确定落点"}}
 
-    # F4: an UPDATE overwrites an occupied slot by definition, so ``confirm:true``
-    # is mandatory for it (not only for the "someone else owns the slot" branch).
+    # F4/N4: a write that touches the store REQUIRES ``confirm:true`` (the
+    # update route always, the install route too since it writes files).
     if require_confirm and not data.confirm:
         return {
             "ok": False,
             "kind": "needs-confirm",
-            "detail": {"reason": "更新会覆盖既有落点，必须带 confirm:true", "plannedPath": planned},
+            "detail": {"reason": "取用/更新会写入企业侧技能目录，必须带 confirm:true", "plannedPath": planned},
         }
 
     home = _hermes_home()
@@ -1015,8 +1176,8 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
             },
         }
 
-    owner = next((r for r in ledger_records if str(r.get("installPath") or "") == planned and ref_of(r) != ref), None)
-    mine = next((r for r in ledger_records if ref_of(r) == ref and str(r.get("installPath") or "") == planned), None)
+    owner = next((r for r in ledger_records if _landing_key(str(r.get("installPath") or "")) == _landing_key(planned) and ref_of(r) != ref), None)
+    mine = next((r for r in ledger_records if ref_of(r) == ref and _landing_key(str(r.get("installPath") or "")) == _landing_key(planned)), None)
     occupied_on_disk = target.is_dir()
     current_hash = engine_content_hash(target) if occupied_on_disk else None
     mine_intact = bool(mine) and _hash_state(mine.get("contentHash"), current_hash) == "match"
@@ -1068,24 +1229,56 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
     if unsafe:
         return {"ok": False, "kind": "extract-failed", "detail": {"message": "包内含不安全路径，已拒绝落盘", "paths": unsafe[:5]}}
 
+    # ── N1/P1: assemble into a staging dir, then swap atomically ─────────────
+    # A partial write must never leave residue inside the store, and a
+    # destination that already holds a hard link (or foreign files) must be
+    # refused rather than silently overwritten.
+    normalized_entries: list = []
+    for rel, data_bytes in entries:
+        parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
+        if parts:
+            normalized_entries.append((parts, data_bytes))
+
+    # `owned` = this landing is OUR recorded install (a record with a content
+    # hash proves this module wrote it); only then may existing files be
+    # replaced. A tampered record without a hash does not unlock a landing.
+    owned = bool(mine) and bool(str(mine.get("contentHash") or "").strip())
+
     written = 0
+    target = None
+    staging = None
     try:
-        # F1: create the landing chain and every entry's parent chain ONE level
-        # at a time, refusing any symlink component. `mkdir(parents=True)` would
-        # follow a pre-existing `sub -> …` symlink and write through it.
-        target = _safe_mkdir_chain(skills_path.resolve(), _rel_segments(planned))
-        for rel, data_bytes in entries:
-            parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
-            if not parts:
-                continue
-            parent = _safe_mkdir_chain(target, parts[:-1])
-            dest = parent / parts[-1]
-            if dest.is_symlink():
-                raise ValueError(f"落点文件是符号链接，拒绝写入：{dest}")
-            dest.write_bytes(data_bytes)
+        landing_parts = _rel_segments(planned)
+        if not landing_parts:
+            raise ValueError(f"落点路径不合法：{planned!r}")
+        parent = _safe_mkdir_chain(skills_path, landing_parts[:-1])
+        target = parent / landing_parts[-1]
+        # P2: refuse a symlinked root/chain on the literal path (resolve erases it).
+        assert_no_symlink_chain(target, label="落点", boundary=_store_boundary(skills_path))
+        if target.is_symlink():
+            raise ValueError(f"落点是符号链接，拒绝写入：{target}")
+        if target.exists():
+            if not target.is_dir():
+                raise ValueError(f"落点被非目录占用，拒绝写入：{target}")
+            # P1: refuse foreign content / hard links that a swap would trample.
+            _assert_landing_writable(target, normalized_entries, owned=owned)
+
+        staging = parent / f".plankton-staging-{os.getpid()}-{uuid.uuid4().hex}"
+        os.mkdir(staging)
+        for segs, data_bytes in normalized_entries:
+            sub = _safe_mkdir_chain(staging, segs[:-1])
+            _atomic_write_bytes(sub / segs[-1], data_bytes)
             written += 1
+        _swap_into_place(staging, target)
+        staging = None
     except Exception as exc:
-        return {"ok": False, "kind": "write-failed", "detail": {"message": str(exc), "written": written, "target": str(target)}}
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
+        return {
+            "ok": False,
+            "kind": "write-failed",
+            "detail": {"message": str(exc), "written": written, "target": str(target) if target is not None else planned},
+        }
 
     content_hash = engine_content_hash(target)
     if not content_hash:
@@ -1111,7 +1304,9 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
         "pickedBy": str(data.pickedBy or ""),
     }
     records = [record] + [
-        r for r in ledger_records if ref_of(r) != ref and str(r.get("installPath") or "") != planned
+        r
+        for r in ledger_records
+        if ref_of(r) != ref and _landing_key(str(r.get("installPath") or "")) != _landing_key(planned)
     ]
     try:
         write_ledger(home, records)
@@ -1154,7 +1349,15 @@ def _uninstall_skill(data: UninstallRequest) -> dict:
         return str(record.get("reference") or record.get("slug") or "")
 
     record = next(
-        (r for r in ledger_records if ref_of(r) == ref and (not data.installPath or str(r.get("installPath") or "") == data.installPath)),
+        (
+            r
+            for r in ledger_records
+            if ref_of(r) == ref
+            and (
+                not data.installPath
+                or _landing_key(str(r.get("installPath") or "")) == _landing_key(data.installPath)
+            )
+        ),
         None,
     )
     if record is None:
@@ -1177,6 +1380,22 @@ def _uninstall_skill(data: UninstallRequest) -> dict:
             },
         }
 
+    # P4: shape alone is NOT ownership. A record with an empty/missing
+    # ``contentHash`` was never vouched for by an install of this module — a
+    # tampered ledger could otherwise point a legal-looking landing at ANY
+    # unrelated directory under ``skills`` (e.g. a bundled engine skill) and
+    # have it deleted. Require the record to carry the hash our install writes.
+    if not str(record.get("contentHash") or "").strip():
+        return {
+            "ok": False,
+            "kind": "unsafe-path",
+            "detail": {
+                "reason": "台账记录缺少内容哈希，无法证明这条落点是本模块取用的，拒绝卸载（疑似台账被改动）",
+                "installPath": recorded_path,
+                "recordedHash": None,
+            },
+        }
+
     # F1/F7: resolve with the per-component symlink rejection (never follow a
     # symlinked landing out of the store, and never into a personal tree).
     try:
@@ -1194,6 +1413,20 @@ def _uninstall_skill(data: UninstallRequest) -> dict:
                 "reason": "落点内部仍含其它台账记录的技能目录，拒绝删除以免连坐",
                 "installPath": recorded_path,
                 "contains": nested,
+            },
+        }
+
+    # N2: a landing occupied by a NON-directory is not something we can remove
+    # as a skill directory. Report it truthfully — never "ok / removed:false"
+    # while ALSO stamping the ledger as uninstalled (a false green).
+    if target.exists() and not target.is_dir():
+        return {
+            "ok": False,
+            "kind": "remove-failed",
+            "detail": {
+                "reason": "落点被非目录占用（不是技能目录），未删除、台账未改动",
+                "installPath": recorded_path,
+                "target": str(target),
             },
         }
 
@@ -1249,9 +1482,17 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
     try:
         from hermes_cli.config import load_config  # type: ignore
         from hermes_cli.skills_config import get_disabled_skills, save_disabled_skills  # type: ignore
-        from agent.skill_utils import ESSENTIAL_SKILLS  # type: ignore
     except Exception as exc:
         return {"ok": False, "kind": "engine-unavailable", "detail": {"message": f"引擎技能配置模块不可用：{exc}"}}
+
+    # N3: ``ESSENTIAL_SKILLS`` is only used to LABEL a failure. It lives in a
+    # different module, so a missing/renamed symbol there must not take the
+    # whole enable/disable path down with ``engine-unavailable`` — the config
+    # read/write above is what actually matters.
+    try:
+        from agent.skill_utils import ESSENTIAL_SKILLS  # type: ignore
+    except Exception:
+        ESSENTIAL_SKILLS = frozenset()
 
     try:
         try:
@@ -1300,8 +1541,13 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
 
 @router.post("/skills/install")
 def install_skill(data: InstallRequest) -> dict:
-    """Install (or refresh) one skill into ``<HERMES_HOME>/skills``."""
-    return _install_skill(data)
+    """Install (or refresh) one skill into ``<HERMES_HOME>/skills``.
+
+    Installing writes files, so the backend REQUIRES ``confirm:true`` (N4) —
+    the UI always sends it after its confirmation dialog, and a direct call
+    without it is refused rather than silently writing.
+    """
+    return _install_skill(data, require_confirm=True)
 
 
 @router.post("/skills/update")
@@ -1323,10 +1569,14 @@ def uninstall_skill(data: UninstallRequest) -> dict:
 @router.post("/skills/enable")
 def enable_skill(data: ToggleRequest) -> dict:
     """Re-enable a skill through the engine's own enable state."""
+    if not data.confirm:
+        return {"ok": False, "kind": "needs-confirm", "detail": {"reason": "启用会写引擎配置，必须带 confirm:true", "name": data.name}}
     return _set_skill_enabled(data.name, True)
 
 
 @router.post("/skills/disable")
 def disable_skill(data: ToggleRequest) -> dict:
     """Disable a skill through the engine's own enable state."""
+    if not data.confirm:
+        return {"ok": False, "kind": "needs-confirm", "detail": {"reason": "停用会写引擎配置，必须带 confirm:true", "name": data.name}}
     return _set_skill_enabled(data.name, False)
