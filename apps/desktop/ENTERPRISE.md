@@ -411,8 +411,37 @@ Everything else is a small Plankton-specific layer, because it has to be.
    gateway WS URLs, file reads, clipboard, logs, …) is refused before its
    business handler runs unless it is on `PLANKTON_PUBLIC_CHANNELS`. This is the
    old shell's `guardIpc` equivalence, and it is *default-closed*: a channel
-   added later is refused, not allowed. (`ipcMain.on` channels the preload needs
-   to build `window.hermesDesktop` carry no enterprise data and stay reachable.)
+   added later is refused, not allowed.
+   - **Startup self-check (fail-closed).** Because the gate *is* the assignment
+     `ipcMain.handle = wrapped`, a read-only `ipcMain.handle` (a future Electron
+     change) would make the wrap fail — silently, in a non-strict build — and
+     the whole gate would vanish with no notice. So right after installing the
+     wrap the code (a) checks the identity of the installed `handle` and (b)
+     registers a throwaway probe channel through it to prove the wrapper is
+     actually in effect. Either check failing calls
+     `planktonGateSelfCheckFailure`: it logs, shows a blocking `showErrorBox` on
+     a packaged artifact, `app.exit(1)`, and throws. The app **aborts visibly**
+     rather than boot with no gate. `plankton-login-gate-main.test.ts` proves
+     this is load-bearing: it stubs `ipcMain.handle` read-only (both the
+     "assignment throws" and the "assignment silently ignored" shapes) and
+     asserts the launch aborts with the self-check message.
+   - **`ipcMain.on` boundary.** The `ipcMain.on` (send/sendSync) channels — 39
+     registration sites across `main.ts`, `hud-ipc.ts`, `pet-overlay-ipc.ts`,
+     `chat-onboarding-window.ts`, `window-controls.ts`, `command-screenshot.ts`
+     (a review counted "38"; the extra is the macOS-only
+     `hermes:screenshot:subscribe`) — are **not** wrapped, and are documented in
+     `main.ts` to carry no enterprise data and to spawn nothing: they are
+     window/overlay geometry and chrome state, the pre-first-paint UI facts the
+     login surface itself needs answered synchronously (version / feature-flags
+     / translucency-support / skin), and renderer log/theme plumbing. None reads
+     a session, connection, chat, file, clipboard or log line, and none resolves
+     or spawns the backend. The two that touch `<HERMES_HOME>` on disk are UI
+     plumbing, not enterprise data: `hermes:skin:local` reads only
+     `config.yaml → display.skin` plus a symlink-guarded `skins/<name>.yaml` for
+     the pre-paint palette, and `hermes:logs:renderer-*` appends renderer-
+     supplied text to `HERMES_HOME/logs/desktop.log`. Persisted
+     theme/translucency/screenshot preferences live under
+     `app.getPath('userData')`, not the enterprise home.
 2. **Backend spawn — the lowest chokepoint.** `assertPlanktonAuthenticated()` is
    called inside `spawnOwnedBackend` (through which every `hermes serve` child is
    created) AND at each spawn entry — `startHermes`, `ensureBackend`,

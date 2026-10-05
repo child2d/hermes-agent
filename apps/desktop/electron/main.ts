@@ -1485,6 +1485,34 @@ function runPlanktonModelSeedIfSignedIn(): void {
 }
 
 /**
+ * Fail-CLOSED on a gate self-check failure: LOG it, make it VISIBLE to whoever
+ * launched the app, then stop the launch before any ungated channel can serve a
+ * request. Mirrors the enterprise home isolation self-check above — `app.exit`
+ * first (on a packaged artifact a blocking error box explains it, so the user
+ * sees WHY rather than a blank window), then throw as belt-and-braces so a
+ * harness with a stubbed `app` (the test suite) still observes the abort.
+ * Never returns.
+ */
+function planktonGateSelfCheckFailure(detail: string): never {
+  const message =
+    `[hermes] ENTERPRISE IPC GATE SELF-CHECK FAILURE: ${detail}. ` +
+    'The enterprise fail-closed gate wraps ipcMain.handle; if the wrap did not ' +
+    'take effect, EVERY invoke channel would be reachable while logged out. ' +
+    'Refusing to start (fail-closed) rather than run with no gate. ' +
+    'See apps/desktop/ENTERPRISE.md.'
+
+  console.error(message)
+
+  if (IS_PACKAGED) {
+    // showErrorBox is safe before `ready` and needs no window.
+    dialog.showErrorBox('Plankton: IPC 门禁未生效', message)
+  }
+
+  app.exit(1)
+  throw new Error(`plankton ipc gate self-check failure: ${detail}`)
+}
+
+/**
  * THE single IPC registration point for the enterprise build — the old shell's
  * `guardIpc` equivalence. Every `ipcMain.handle` (invoke) channel registered
  * AFTER this call is wrapped: while no SSO session is live, the decision is
@@ -1493,10 +1521,49 @@ function runPlanktonModelSeedIfSignedIn(): void {
  * connection, file, clipboard or log. Default-closed: anything not on
  * `PLANKTON_PUBLIC_CHANNELS` is refused.
  *
+ * WHY A STARTUP SELF-CHECK (fail-closed, not a log line)
+ * -----------------------------------------------------
+ * The gate IS the assignment `ipcMain.handle = wrappedHandle`. If that
+ * assignment ever fails to take effect, every invoke channel below registers
+ * UNWRAPPED and the enterprise gate silently disappears — a maximal fail-OPEN.
+ * It can fail two ways: (a) a strict build assigning to a read-only `handle`
+ * throws; (b) a non-strict build does so SILENTLY (write ignored, no throw).
+ * Case (b) is the dangerous one — nothing else here would notice. So right after
+ * the assignment we PROVE the wrapper is the installed `handle` (identity) and
+ * that a probe registered through it is actually gated, and abort the launch if
+ * not. See planktonGateSelfCheckFailure for the loud, visible, fail-closed abort.
+ *
+ * SCOPE — `handle` only, and why the `ipcMain.on` channels need none
+ * -------------------------------------------------------------------
  * Only `handle` (invoke) channels are wrapped, matching the old shell's scope.
- * The synchronous `ipcMain.on` channels the preload needs to build
- * `window.hermesDesktop` (translucency/feature-flags/skin) carry no enterprise
- * data and must stay reachable or the login surface itself cannot paint.
+ * The `ipcMain.on` (send/sendSync) channels — 39 registration sites across
+ * main.ts, hud-ipc.ts, pet-overlay-ipc.ts, chat-onboarding-window.ts,
+ * window-controls.ts and command-screenshot.ts (a review counted "38"; the extra
+ * is the macOS-only `hermes:screenshot:subscribe`) — are NOT wrapped, and each
+ * was checked to carry no enterprise data and to spawn nothing:
+ *   • window/overlay geometry + chrome state — hud:* (native-drag, windowing,
+ *     workspace-transfer, ignore-mouse, begin/end-move, move-by, set-bounds,
+ *     session), pet-overlay:* (set-bounds, ignore-mouse, set-focusable, state,
+ *     control), chat-onboarding:* (grow, solo-boot), window-control,
+ *     window:relay (opaque renderer→renderer forward), zoom:set-percent,
+ *     keep-awake, active-work, quick-entry:*, previewShortcutActive,
+ *     preview-guest-hidden, f12ShortcutActive, devtools:disable-f12,
+ *     connection:active-route (an in-memory route map), wake-indicator:set;
+ *   • pre-first-paint UI facts the LOGIN SURFACE itself needs answered
+ *     synchronously (sendSync) — version/feature-flags/translucency-support/skin
+ *     — which must stay reachable or the login window cannot paint;
+ *   • renderer log plumbing (logs:renderer-error, logs:renderer-line) and theme
+ *     (titlebar-theme, native-theme).
+ * None reads a session, connection, chat, file, clipboard or log line, and none
+ * resolves or spawns the backend. The only two that touch `<HERMES_HOME>` on
+ * disk do so for UI plumbing, NOT enterprise data: `hermes:skin:local` reads
+ * just `config.yaml → display.skin` plus a symlink-guarded `skins/<name>.yaml`
+ * (a colour palette) for the pre-paint theme, and `hermes:logs:renderer-*`
+ * APPENDS renderer-supplied text to `HERMES_HOME/logs/desktop.log`. Persisted
+ * theme/translucency/screenshot preferences live under `app.getPath('userData')`,
+ * not the enterprise home. (The `renderer-line`/`renderer-error` append is the
+ * one home-touching `.on` channel; it is a WRITE of caller-supplied UI text, not
+ * a data read, and cannot spawn.)
  *
  * No-op for every upstream variant, so their surface is byte-for-byte unchanged.
  */
@@ -1507,8 +1574,14 @@ function installPlanktonIpcGate(): void {
 
   const originalHandle = ipcMain.handle.bind(ipcMain) as typeof ipcMain.handle
 
-  ipcMain.handle = ((channel: string, listener: (...args: any[]) => any) => {
-    originalHandle(channel, (event, ...args) => {
+  // A throwaway channel used only to prove the wrapper is installed. Never
+  // public: the wrapper would refuse it while logged out, and it is removed
+  // again in the `finally` below, so nothing ever serves it.
+  const PROBE_CHANNEL = 'plankton:gate-selfcheck'
+  let probeSeen: ((...args: any[]) => any) | null = null
+
+  const wrappedHandle = ((channel: string, listener: (...args: any[]) => any) => {
+    const gated = (event: any, ...args: any[]) => {
       const decision = planktonGateDecision({ channel, loggedIn: getPlanktonAuth().isLoggedIn() })
 
       if (!decision.allow) {
@@ -1518,8 +1591,42 @@ function installPlanktonIpcGate(): void {
       }
 
       return listener(event, ...args)
-    })
+    }
+
+    // The self-check reads this back: it is set ONLY when the installed
+    // `ipcMain.handle` routed the probe through THIS wrapper.
+    if (channel === PROBE_CHANNEL) {
+      probeSeen = gated
+    }
+
+    originalHandle(channel, gated)
   }) as typeof ipcMain.handle
+
+  try {
+    ipcMain.handle = wrappedHandle
+  } catch (error) {
+    planktonGateSelfCheckFailure(`assigning ipcMain.handle threw (${(error as Error)?.message || error})`)
+  }
+
+  // (a) Identity — a silently-ignored assignment leaves the ORIGINAL in place.
+  if (ipcMain.handle !== wrappedHandle) {
+    planktonGateSelfCheckFailure('ipcMain.handle is still the unwrapped handler after assignment')
+  }
+
+  // (b) Functional — register a channel THROUGH the installed handle: the
+  // wrapper records the gated listener, the raw handle would not.
+  probeSeen = null
+
+  try {
+    ipcMain.handle(PROBE_CHANNEL, () => 'PROBE_RAW_HANDLER_RAN')
+
+    if (!probeSeen) {
+      planktonGateSelfCheckFailure('probe channel reached the RAW handle — the gate wrapper is not installed')
+    }
+  } finally {
+    probeSeen = null
+    ipcMain.removeHandler(PROBE_CHANNEL)
+  }
 }
 
 // NOTE: installPlanktonIpcGate() is CALLED near the first `ipcMain.handle`

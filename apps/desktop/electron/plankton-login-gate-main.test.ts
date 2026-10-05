@@ -126,10 +126,27 @@ function fakeWC() {
     navigationHistory: { canGoBack: () => false, canGoForward: () => false, goBack: noop, goForward: noop },
   }
 }
+const ipcHandleMode = process.env.GATE_IPC_HANDLE || 'writable'
+const rawHandle = (c, f) => { handlers.set(c, f) }
+const ipcStub = {
+  handle: rawHandle, on: noop, once: noop,
+  removeHandler: c => handlers.delete(c), removeAllListeners: noop
+}
+if (ipcHandleMode === 'readonly-throw') {
+  // A read-only 'handle' in strict mode: the assignment THROWS.
+  Object.defineProperty(ipcStub, 'handle', {
+    get: () => rawHandle,
+    set: () => { throw new TypeError("Cannot assign to read only property 'handle'") },
+    configurable: true
+  })
+} else if (ipcHandleMode === 'readonly-silent') {
+  // A read-only 'handle' in sloppy mode: the assignment is accepted then IGNORED.
+  Object.defineProperty(ipcStub, 'handle', { get: () => rawHandle, set: () => {}, configurable: true })
+}
 const proxy = new Proxy(
   {
     app: fakeApp, BrowserWindow: FakeWindow, BrowserView: class {},
-    ipcMain: { handle: (c, f) => handlers.set(c, f), on: noop, once: noop, removeHandler: noop, removeAllListeners: noop },
+    ipcMain: ipcStub,
     dialog: noopProxy({ showErrorBox: noop, showOpenDialog: () => Promise.resolve({ canceled: true }), showSaveDialog: () => Promise.resolve({ canceled: true }), showMessageBox: () => Promise.resolve({ response: 0 }) }),
     Menu: noopProxy({ setApplicationMenu: noop, buildFromTemplate: () => ({}), getApplicationMenu: () => null }),
     MenuItem: class {}, shell: noopProxy({ openExternal: () => Promise.resolve(), openPath: () => Promise.resolve(''), showItemInFolder: noop, trashItem: () => Promise.resolve() }),
@@ -174,7 +191,9 @@ Module._load = function (request, parent, isMain) {
 let fatal = null
 try { require(process.env.GATE_BUNDLE) } catch (e) { fatal = String(e && e.stack || e) }
 const out = { channels: [...handlers.keys()].sort(), spawnCount, spawnedArgs, fatal }
-if (MODE === 'handlers' && !fatal) {
+if (fatal || MODE === 'load') {
+  console.log('__RESULT__' + JSON.stringify(out))
+} else if (MODE === 'handlers') {
   const SKIP = new Set(JSON.parse(process.env.GATE_SKIP || '[]'))
   ;(async () => {
     const results = {}
@@ -207,7 +226,7 @@ function makeSandbox(): { root: string; home: string; hermesHome: string } {
   return { root, home, hermesHome }
 }
 
-function runChild(mode: string): any {
+function runChild(mode: string, extraEnv: Record<string, string> = {}): any {
   const sandbox = makeSandbox()
   const childFile = path.join(sandbox.root, 'probe.cjs')
   fs.writeFileSync(childFile, CHILD)
@@ -217,6 +236,7 @@ function runChild(mode: string): any {
       cwd: desktop,
       env: {
         ...process.env,
+        ...extraEnv,
         GATE_MODE: mode,
         GATE_SANDBOX: sandbox.root,
         GATE_APPDIR: desktop,
@@ -387,4 +407,42 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
       }
     }
   }, 120_000)
+
+  // The gate is installed by ASSIGNING OVER `ipcMain.handle`. These two prove
+  // the startup self-check is load-bearing: a stub `handle` that cannot be
+  // wrapped (read-only) must ABORT the launch — not boot with an ungated IPC
+  // surface. Remove the self-check and the "silently ignored" case loads clean
+  // (fatal=null) with every invoke channel reachable while logged out.
+  it('self-check aborts startup when a read-only ipcMain.handle write THROWS (fail-closed)', () => {
+    const result = runChild('load', { GATE_IPC_HANDLE: 'readonly-throw' })
+    try {
+      expect(result.fatal, 'a failing handle assignment must abort, not boot').toBeTruthy()
+      // The self-check message (not a bare TypeError) proves the abort path ran.
+      expect(result.fatal).toMatch(/ipc gate self-check failure/i)
+    } finally {
+      fs.rmSync(result.__sandbox.root, { recursive: true, force: true })
+    }
+  })
+
+  it('self-check aborts startup when a read-only ipcMain.handle write is SILENTLY ignored (fail-closed)', () => {
+    const result = runChild('load', { GATE_IPC_HANDLE: 'readonly-silent' })
+    try {
+      expect(result.fatal, 'a silently-ignored wrap must abort, not boot ungated').toBeTruthy()
+      expect(result.fatal).toMatch(/ipc gate self-check failure/i)
+    } finally {
+      fs.rmSync(result.__sandbox.root, { recursive: true, force: true })
+    }
+  })
+
+  it('self-check passes on a healthy writable handle and leaves no probe channel behind', () => {
+    const result = runChild('load')
+    try {
+      expect(result.fatal, result.fatal).toBeNull()
+      expect(result.channels, 'the self-check probe channel was not cleaned up').not.toContain(
+        'plankton:gate-selfcheck'
+      )
+    } finally {
+      fs.rmSync(result.__sandbox.root, { recursive: true, force: true })
+    }
+  })
 })
