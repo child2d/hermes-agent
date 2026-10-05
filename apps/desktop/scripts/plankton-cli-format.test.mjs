@@ -46,12 +46,18 @@ function pe(arch) {
   return buffer
 }
 
+/** A COMPLETE fat Mach-O: arch table + a real [offset, size) slice per arch. */
 function fatMachO(archs) {
-  const buffer = Buffer.alloc(8 + archs.length * 20)
+  const tableSize = 8 + archs.length * 20
+  const sliceStride = 16
+  const buffer = Buffer.alloc(tableSize + archs.length * sliceStride)
   buffer.writeUInt32BE(0xcafebabe, 0)
   buffer.writeUInt32BE(archs.length, 4)
   archs.forEach((arch, i) => {
-    buffer.writeUInt32BE(arch === 'x64' ? 0x01000007 : 0x0100000c, 8 + i * 20)
+    const off = 8 + i * 20
+    buffer.writeUInt32BE(arch === 'x64' ? 0x01000007 : 0x0100000c, off)
+    buffer.writeUInt32BE(tableSize + i * sliceStride, off + 8) // slice offset
+    buffer.writeUInt32BE(sliceStride, off + 12) // slice size
   })
   return buffer
 }
@@ -75,6 +81,27 @@ describe('detectBinaryFormat', () => {
   it('reports unknown for garbage / text', () => {
     expect(detectBinaryFormat(Buffer.from('a text placeholder'))).toEqual({ format: 'unknown', archs: [] })
     expect(detectBinaryFormat(Buffer.alloc(0))).toEqual({ format: 'unknown', archs: [] })
+  })
+
+  // ── P3-1: a magic-only check is a false green. A truncated-but-headed file
+  // must read as UNREADABLE (empty archs), not as a valid binary.
+  it('P3-1: reads a TRUNCATED thin Mach-O (8 bytes) as unreadable', () => {
+    expect(detectBinaryFormat(macho('arm64').subarray(0, 8))).toEqual({ format: 'macho', archs: [] })
+  })
+
+  it('P3-1: reads a TRUNCATED fat Mach-O (12 bytes) as unreadable', () => {
+    expect(detectBinaryFormat(fatMachO(['x64', 'arm64']).subarray(0, 12))).toEqual({ format: 'macho-fat', archs: [] })
+  })
+
+  it('P3-1: reads a fat Mach-O whose slice runs off the end as unreadable', () => {
+    const fat = fatMachO(['arm64'])
+    fat.writeUInt32BE(fat.length + 4096, 8 + 12) // slice size past EOF
+    expect(detectBinaryFormat(fat)).toEqual({ format: 'macho-fat', archs: [] })
+  })
+
+  it('P3-1: reads a truncated ELF and PE header as unreadable', () => {
+    expect(detectBinaryFormat(elf('x64').subarray(0, 20))).toEqual({ format: 'elf', archs: [] })
+    expect(detectBinaryFormat(pe('x64').subarray(0, 0x40))).toEqual({ format: 'pe', archs: [] })
   })
 })
 
@@ -105,6 +132,33 @@ describe('assertCliBinaryFormat', () => {
   it('rejects a text placeholder', async () => {
     const text = await tempFile(Buffer.from('not a binary'))
     expect(() => assertCliBinaryFormat({ file: text, platform: 'linux', arch: 'x64' })).toThrow(/not a linux executable/)
+  })
+
+  // ── P3-1 (third review): the MAGIC matched and the cputype was readable, but
+  // the file was truncated. Both shipped GREEN before; both must be RED now.
+  it('P3-1: rejects a truncated thin Mach-O even though its cputype matches', async () => {
+    const file = await tempFile(macho('arm64').subarray(0, 8))
+    expect(() => assertCliBinaryFormat({ file, platform: 'darwin', arch: 'arm64' })).toThrow(/TRUNCATED/)
+  })
+
+  it('P3-1: rejects a truncated fat Mach-O (12 bytes) for an arch target', async () => {
+    const file = await tempFile(fatMachO(['x64', 'arm64']).subarray(0, 12))
+    expect(() => assertCliBinaryFormat({ file, platform: 'darwin', arch: 'arm64' })).toThrow(/TRUNCATED/)
+    // …and for a universal target too (format alone is not enough).
+    expect(() => assertCliBinaryFormat({ file, platform: 'darwin', arch: 'universal' })).toThrow(/TRUNCATED/)
+  })
+
+  // ── Low-item: `arch: 'universal'` used to normalize to null and SILENTLY skip
+  // the arch check. It is now an explicit target with a real requirement.
+  it('treats arch universal as an explicit darwin fat-Mach-O requirement (never a silent skip)', async () => {
+    const universal = await tempFile(fatMachO(['x64', 'arm64']))
+    expect(assertCliBinaryFormat({ file: universal, platform: 'darwin', arch: 'universal' }).format).toBe('macho-fat')
+
+    const thin = await tempFile(macho('arm64'))
+    expect(() => assertCliBinaryFormat({ file: thin, platform: 'darwin', arch: 'universal' })).toThrow(/universal/)
+
+    const linux = await tempFile(elf('x64'))
+    expect(() => assertCliBinaryFormat({ file: linux, platform: 'linux', arch: 'universal' })).toThrow(/only valid for darwin/)
   })
 
   it('accepts a Windows PE for win32 and normalizes arch aliases', async () => {

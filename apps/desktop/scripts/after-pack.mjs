@@ -150,26 +150,60 @@ export function assertEnterpriseResourcesPresent(
     label: '[after-pack] enterprise CLI'
   })
 
-  // Content legality for the two structured payloads: an invalid YAML/JSON seed
-  // detaches the plugin's dashboard API while the build would otherwise stay green.
+  // Content legality for the two structured payloads. Parseable is not enough
+  // (batch-2 third review, P3-2): `plugin.yaml = [1,2,3]` and
+  // `manifest.json = {}` / `[1,2,3]` are all VALID YAML/JSON yet the engine
+  // cannot load the plugin from them (the dashboard backend never mounts, the
+  // manifest schema rejects the shape). So require the SHAPE the engine loads:
+  //   - plugin.yaml: a mapping carrying the engine's required fields
+  //     (name, version, description — see hermes_cli/plugin_validate.py);
+  //   - dashboard/manifest.json: a mapping with a non-empty `name` and an `api`
+  //     entry that resolves to a real file inside dashboard/ — the field that
+  //     actually mounts the plugin's backend (see
+  //     hermes_cli/web_server_dashboard.py:_dashboard_plugin_entry).
   const pluginYaml = path.join(resources, 'enterprise/plankton-enterprise/plugin.yaml')
   try {
     const doc = parseDocument(fs.readFileSync(pluginYaml, 'utf8'))
     if (doc.errors.length > 0) {
       throw doc.errors[0]
     }
+    const data = doc.toJS()
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('root is not a mapping')
+    }
+    const missing = ['name', 'version', 'description'].filter(
+      field => typeof data[field] !== 'string' || data[field].trim() === ''
+    )
+    if (missing.length > 0) {
+      throw new Error(`missing required field(s): ${missing.join(', ')}`)
+    }
   } catch (error) {
     throw new Error(
-      `[after-pack] enterprise plugin.yaml is not valid YAML (${pluginYaml}): ${error instanceof Error ? error.message : String(error)}`
+      `[after-pack] enterprise plugin.yaml is not a valid plugin manifest (${pluginYaml}): ${error instanceof Error ? error.message : String(error)}`
     )
   }
 
   const manifest = path.join(resources, 'enterprise/plankton-enterprise/dashboard/manifest.json')
   try {
-    JSON.parse(fs.readFileSync(manifest, 'utf8'))
+    const data = JSON.parse(fs.readFileSync(manifest, 'utf8'))
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('root is not a mapping')
+    }
+    if (typeof data.name !== 'string' || data.name.trim() === '') {
+      throw new Error("missing required field 'name'")
+    }
+    if (typeof data.api !== 'string' || data.api.trim() === '') {
+      throw new Error("missing required field 'api'")
+    }
+    // The api path is what the dashboard loader imports to mount the backend; if
+    // it doesn't resolve to a real file the tab renders but its API is dead.
+    const apiPath = path.join(path.dirname(manifest), data.api)
+    if (!fs.existsSync(apiPath) || !fs.statSync(apiPath).isFile()) {
+      throw new Error(`declared api file is missing: ${data.api}`)
+    }
   } catch (error) {
     throw new Error(
-      `[after-pack] enterprise dashboard/manifest.json is not valid JSON (${manifest}): ${error instanceof Error ? error.message : String(error)}`
+      `[after-pack] enterprise dashboard/manifest.json is not a loadable dashboard manifest (${manifest}): ${error instanceof Error ? error.message : String(error)}`
     )
   }
 

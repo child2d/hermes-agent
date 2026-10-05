@@ -427,4 +427,120 @@ describe('seedEnterpriseAssets', () => {
     expect(result.seeded).toBe(false)
     expect(result.reason).toBe('no-resources')
   })
+
+  // ── P4-1 (third review): a DANGLING symlink was silently replaced by a
+  // regular file. The engine keeps the link. Two distinct correct behaviours:
+  //   * the CLI DESTINATION (a copy target): write THROUGH the link to its
+  //     target, creating it — the link survives;
+  //   * the config READ path (P1-1): a dangling `config.yaml` reads as ENOENT
+  //     but LSTAT says the path exists → refuse, never rebuild it.
+  it('P4-1: a dangling symlink at the CLI destination keeps the link and writes through it', () => {
+    const home = tempDir('plankton-home-')
+    const resources = fakeResources(tempDir('plankton-res-'))
+    const cliName = process.platform === 'win32' ? 'shaoke-cli.exe' : 'shaoke-cli'
+    const link = path.join(enterpriseBinDir(home), cliName)
+    const target = path.join(enterpriseBinDir(home), 'real-shaoke-cli')
+    fs.mkdirSync(enterpriseBinDir(home), { recursive: true })
+    fs.symlinkSync(target, link)
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(fs.existsSync(target)).toBe(false) // premise: dangling
+
+    const result = seedEnterpriseAssets({ identity: { enterprise: true }, hermesHome: home, resourcesPath: resources })
+
+    expect(result.cliPath).toBeTruthy()
+    // The link is STILL a link — not replaced by a regular file.
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true)
+    // The bytes landed in the link's target, keeping the symlink semantics.
+    expect(fs.existsSync(target)).toBe(true)
+    expect(fs.readFileSync(target).toString()).toContain('echo cli')
+  })
+
+  it('P1-1: a dangling symlinked config.yaml is refused (link kept, target NOT created)', () => {
+    const home = tempDir('plankton-home-')
+    const resources = fakeResources(tempDir('plankton-res-'))
+    const link = path.join(home, 'config.yaml')
+    const target = path.join(home, 'real-config.yaml')
+    fs.symlinkSync(target, link)
+
+    const notes: string[] = []
+    const result = seedEnterpriseAssets({
+      identity: { enterprise: true },
+      hermesHome: home,
+      resourcesPath: resources,
+      log: line => notes.push(line)
+    })
+
+    // Read reported ENOENT but lstat proves a file-shaped entry exists → refuse.
+    expect(result.configUpdated).toBe(false)
+    expect(notes.join('\n')).toMatch(/plugins\.enabled NOT updated \(unreadable\)/)
+    // Filesystem shape untouched: still a link, and no regular file was rebuilt.
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(fs.existsSync(target)).toBe(false)
+  })
+
+  // ── P2-2 (third review): CLI + plugin landed but the config write failed →
+  // the result must NOT read as `seeded`. It is a PARTIAL seed, and the failure
+  // is visible in `errors` (and the log), not swallowed.
+  it('P2-2: a failed config write reports partial (not seeded) and a visible error', () => {
+    const home = tempDir('plankton-home-')
+    const resources = fakeResources(tempDir('plankton-res-'))
+    // Only the config publish fails (a real write error, not a permission one so
+    // there is no mkstemp fallback): the CLI and plugin copies still land.
+    const fsModule = {
+      copyFileSync: fs.copyFileSync,
+      existsSync: fs.existsSync,
+      mkdirSync: fs.mkdirSync,
+      readFileSync: (t: string, encoding: BufferEncoding) => fs.readFileSync(t, encoding),
+      readFileBuffer: (t: string) => fs.readFileSync(t),
+      readdirSync: fs.readdirSync,
+      statSync: fs.statSync,
+      lstatSync: fs.lstatSync,
+      readlinkSync: fs.readlinkSync,
+      realpathSync: fs.realpathSync,
+      writeFileSync: fs.writeFileSync,
+      chmodSync: fs.chmodSync,
+      renameSync: (from: string, to: string) => {
+        if (to.endsWith('config.yaml')) {
+          const error = new Error('simulated write failure') as NodeJS.ErrnoException
+          error.code = 'EIO'
+          throw error
+        }
+        fs.renameSync(from, to)
+      },
+      unlinkSync: fs.unlinkSync
+    }
+
+    const notes: string[] = []
+    const result = seedEnterpriseAssets({
+      identity: { enterprise: true },
+      hermesHome: home,
+      resourcesPath: resources,
+      fsModule,
+      log: line => notes.push(line)
+    })
+
+    // The CLI + plugin DID land…
+    expect(fs.existsSync(path.join(home, 'plugins', ENTERPRISE_PLUGIN_ID, 'plugin.yaml'))).toBe(true)
+    // …but the home is only PARTLY seeded and says so.
+    expect(result.seeded).toBe(false)
+    expect(result.reason).toBe('partial')
+    expect(result.configUpdated).toBe(false)
+    expect(result.errors.some(entry => entry.startsWith('config:'))).toBe(true)
+    expect(notes.join('\n')).toMatch(/plugins\.enabled NOT updated \(write-failed\)/)
+
+    // Low-item: the failed atomic write left no `.tmp` turd behind.
+    const leftovers: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+        } else if (entry.name.endsWith('.tmp')) {
+          leftovers.push(full)
+        }
+      }
+    }
+    walk(home)
+    expect(leftovers).toEqual([])
+  })
 })

@@ -59,6 +59,12 @@ export interface EnterpriseAssetSeedResult {
   configUpdated?: boolean
   /** Human-readable notes for the launch log (never secret). */
   notes: string[]
+  /**
+   * Non-fatal step failures (unwritable subdir, unreadable config, ...). Empty
+   * on a fully clean run. When non-empty, `reason` is `partial` and `seeded` is
+   * false — a partially seeded home must never read as success.
+   */
+  errors: string[]
 }
 
 /** The minimal fs surface this module needs (injected in tests). */
@@ -73,12 +79,16 @@ export interface EnterpriseSeedFs {
   statSync: typeof fs.statSync
   /** `lstat` (never follow) — used to detect a symlinked destination. */
   lstatSync: typeof fs.lstatSync
+  /** Read a symlink's literal target (never follow). */
+  readlinkSync: typeof fs.readlinkSync
   /** Resolve a symlink to its real target path (engine `atomic_replace` parity). */
   realpathSync: typeof fs.realpathSync
   writeFileSync: (target: string, data: string, options?: { mode?: number }) => void
   chmodSync: typeof fs.chmodSync
   /** Atomic publish step for a temp-then-rename write. */
   renameSync: (from: string, to: string) => void
+  /** Remove a staged temp file when a publish fails (no `.tmp` turds). */
+  unlinkSync: (target: string) => void
 }
 
 const DEFAULT_FS: EnterpriseSeedFs = {
@@ -90,10 +100,12 @@ const DEFAULT_FS: EnterpriseSeedFs = {
   readdirSync: fs.readdirSync,
   statSync: fs.statSync,
   lstatSync: fs.lstatSync,
+  readlinkSync: fs.readlinkSync,
   realpathSync: fs.realpathSync,
   writeFileSync: fs.writeFileSync,
   chmodSync: fs.chmodSync,
-  renameSync: fs.renameSync
+  renameSync: fs.renameSync,
+  unlinkSync: fs.unlinkSync
 }
 
 function pathsFor(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {
@@ -239,6 +251,25 @@ function fileDigest(fsModule: EnterpriseSeedFs, file: string): string {
   return createHash('sha256').update(fsModule.readFileBuffer(file)).digest('hex')
 }
 
+/** True when the path exists on disk WITHOUT following a final symlink. */
+function pathExistsByLstat(fsModule: EnterpriseSeedFs, target: string): boolean {
+  try {
+    fsModule.lstatSync(target)
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A short, non-secret error description for a note/log line. */
+function errorText(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  const message = error instanceof Error ? error.message : String(error)
+
+  return code ? `${code}: ${message}` : message
+}
+
 /** A sibling temp path used for an atomic temp-then-rename publish. */
 function tempSibling(target: string): string {
   return `${target}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`
@@ -246,19 +277,130 @@ function tempSibling(target: string): string {
 
 /**
  * The path an atomic publish should rename ONTO: a symlink's real target, else
- * the target itself. Mirrors the engine's `utils._publish_path` so a symlinked
- * `config.yaml` is updated through the link and stays a link — a bare
- * `renameSync` onto the link path would replace it with a regular file.
+ * the target itself. Mirrors Python's `os.path.realpath` (the engine's
+ * `utils._publish_path`) — which resolves the link chain LEXICALLY and returns a
+ * path even when the final target does not exist. Node's `fs.realpathSync`
+ * THROWS on a DANGLING symlink, and the previous fallback then renamed onto the
+ * LINK path, silently replacing the symlink with a regular file (the engine
+ * preserves the link and creates its target). So resolve the chain with
+ * `readlink` ourselves; an unreadable link / a cycle THROWS so the caller
+ * refuses the write instead of rewriting the filesystem shape.
  */
 function resolvePublishPath(fsModule: EnterpriseSeedFs, target: string): string {
   try {
-    if (fsModule.lstatSync(target).isSymbolicLink()) {
-      return fsModule.realpathSync(target)
+    if (!fsModule.lstatSync(target).isSymbolicLink()) {
+      return target
     }
   } catch {
     // Missing / not a link — publish to the path as given.
+    return target
   }
-  return target
+
+  let current = path.resolve(target)
+  for (let hop = 0; hop < 40; hop += 1) {
+    let link: string
+    try {
+      link = fsModule.readlinkSync(current)
+    } catch {
+      throw new Error(`unresolvable-symlink: ${target}`)
+    }
+    const next = path.resolve(path.dirname(current), link)
+    if (next === current) {
+      throw new Error(`symlink-loop: ${target}`)
+    }
+    current = next
+    try {
+      if (!fsModule.lstatSync(current).isSymbolicLink()) {
+        return current
+      }
+    } catch {
+      // Dangling final target: write THROUGH the link (the target is created),
+      // never replace the link with a regular file.
+      return current
+    }
+  }
+
+  throw new Error(`symlink-loop: ${target}`)
+}
+
+/** A permission-class errno where staging beside the link may still succeed. */
+function isPermissionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+}
+
+/**
+ * Rename `tmp` onto `dest`, mirroring the engine's `atomic_replace`: a plain
+ * rename, falling back to copy+fsync-style copy only when the rename cannot
+ * cross a device or is contended (EXDEV/EBUSY/EPERM). The temp is removed on
+ * every failure path so a failed atomic write never leaves a `.tmp` behind.
+ */
+function publishTemp(fsModule: EnterpriseSeedFs, tmp: string, dest: string): void {
+  try {
+    fsModule.renameSync(tmp, dest)
+
+    return
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    if (code !== 'EXDEV' && code !== 'EBUSY' && code !== 'EPERM') {
+      throw error
+    }
+  }
+
+  fsModule.copyFileSync(tmp, dest)
+  try {
+    fsModule.unlinkSync(tmp)
+  } catch {
+    void 0
+  }
+}
+
+/**
+ * Stage `write(tmp)` beside the resolved publish path and rename it into place.
+ * If the real target's directory is not writable we mirror the engine's
+ * `mkstemp_beside` fallback: stage beside the LINK instead (the save still
+ * works) and still publish onto the resolved path. On ANY failure the staged
+ * temp is unlinked before the error propagates.
+ */
+function atomicPublish(
+  fsModule: EnterpriseSeedFs,
+  target: string,
+  resolved: string,
+  write: (tmp: string) => void
+): void {
+  const stages = resolved === target ? [resolved] : [resolved, target]
+  let lastError: unknown
+  for (const stage of stages) {
+    try {
+      fsModule.mkdirSync(path.dirname(stage), { recursive: true })
+    } catch (error) {
+      lastError = error
+      if (!isPermissionError(error) || stage !== resolved) {
+        throw error
+      }
+      continue
+    }
+
+    const tmp = tempSibling(stage)
+    try {
+      write(tmp)
+      publishTemp(fsModule, tmp, resolved)
+
+      return
+    } catch (error) {
+      try {
+        fsModule.unlinkSync(tmp)
+      } catch {
+        void 0
+      }
+      lastError = error
+      if (!isPermissionError(error) || stage !== resolved) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError
 }
 
 /**
@@ -267,22 +409,22 @@ function resolvePublishPath(fsModule: EnterpriseSeedFs, target: string): string 
  * never leave a half-written config.yaml / cli. `mode` is applied to the temp
  * file BEFORE the rename, so the destination is never briefly mis-permissioned.
  *
- * A symlinked destination is resolved first (and its temp staged beside the
- * real target) so the link survives — parity with the engine's `atomic_replace`
- * / `mkstemp_beside` pair.
+ * A symlinked destination is resolved first (dangling links included) and its
+ * temp staged beside the real target so the link survives — parity with the
+ * engine's `atomic_replace` / `mkstemp_beside` pair.
  */
 function atomicWriteFile(fsModule: EnterpriseSeedFs, target: string, data: string, mode?: number): void {
   const resolved = resolvePublishPath(fsModule, target)
-  const tmp = tempSibling(resolved)
-  fsModule.writeFileSync(tmp, data, mode === undefined ? undefined : { mode })
-  if (mode !== undefined) {
-    try {
-      fsModule.chmodSync(tmp, mode)
-    } catch {
-      void 0
+  atomicPublish(fsModule, target, resolved, tmp => {
+    fsModule.writeFileSync(tmp, data, mode === undefined ? undefined : { mode })
+    if (mode !== undefined) {
+      try {
+        fsModule.chmodSync(tmp, mode)
+      } catch {
+        void 0
+      }
     }
-  }
-  fsModule.renameSync(tmp, resolved)
+  })
 }
 
 /**
@@ -309,20 +451,20 @@ function copyIfChanged(fsModule: EnterpriseSeedFs, source: string, dest: string,
     // Unreadable dest/source — fall through and (re)write.
   }
 
-  // Resolve a symlinked destination so the copy lands in the real file and the
-  // link survives (engine parity); the temp stages beside the resolved target.
+  // Resolve a symlinked destination (dangling links included) so the copy lands
+  // in the real file and the link survives (engine parity); the temp stages
+  // beside the resolved target, with the engine's fallback beside the link.
   const resolvedDest = resolvePublishPath(fsModule, dest)
-  fsModule.mkdirSync(path.dirname(resolvedDest), { recursive: true })
-  const tmp = tempSibling(resolvedDest)
-  fsModule.copyFileSync(source, tmp)
-  if (mode !== undefined) {
-    try {
-      fsModule.chmodSync(tmp, mode)
-    } catch {
-      // best effort — a filesystem without POSIX modes (Windows) still has a runnable copy
+  atomicPublish(fsModule, dest, resolvedDest, tmp => {
+    fsModule.copyFileSync(source, tmp)
+    if (mode !== undefined) {
+      try {
+        fsModule.chmodSync(tmp, mode)
+      } catch {
+        // best effort — a filesystem without POSIX modes (Windows) still has a runnable copy
+      }
     }
-  }
-  fsModule.renameSync(tmp, resolvedDest)
+  })
 
   return true
 }
@@ -360,8 +502,13 @@ function ensurePluginEnabled(
     // own writer fails closed on exactly this
     // (hermes_cli/config.py: require_readable_config_before_write), so mirror
     // it: refuse and leave the original bytes untouched.
+    //
+    // "Absent" must mean LSTAT says nothing is there — not merely that a read
+    // reported ENOENT. A dangling symlink (read → ENOENT, but the path exists)
+    // must NOT be treated as an empty file to rebuild, or we would replace
+    // reproducible filesystem state; lstat (never following the link) decides.
     const code = (error as NodeJS.ErrnoException | null)?.code
-    const absent = code === 'ENOENT' || (code === undefined && !fsModule.existsSync(configPath))
+    const absent = (code === 'ENOENT' || code === undefined) && !pathExistsByLstat(fsModule, configPath)
     if (!absent) {
       return { changed: false, contents: current, error: 'unreadable' }
     }
@@ -408,7 +555,7 @@ export function seedEnterpriseAssets(options: {
   log?: (line: string) => void
 }): EnterpriseAssetSeedResult {
   if (!options.identity?.enterprise) {
-    return { seeded: false, reason: 'not-enterprise', notes: [] }
+    return { seeded: false, reason: 'not-enterprise', notes: [], errors: [] }
   }
 
   const fsModule = options.fsModule ?? DEFAULT_FS
@@ -417,16 +564,24 @@ export function seedEnterpriseAssets(options: {
   const p = pathsFor(platform)
   const notes: string[] = []
 
-  const result: EnterpriseAssetSeedResult = { seeded: false, reason: 'no-resources', notes }
+  const result: EnterpriseAssetSeedResult = { seeded: false, reason: 'no-resources', notes, errors: [] }
 
   // ── 1. CLI ────────────────────────────────────────────────────────────────
   const cliSource = p.join(options.resourcesPath, ...enterpriseCliResourceRelative(platform, arch))
   const cliDest = p.join(enterpriseBinDir(options.hermesHome, platform), enterpriseCliFileName(platform))
 
   if (fsModule.existsSync(cliSource)) {
-    result.cliCopied = copyIfChanged(fsModule, cliSource, cliDest, 0o755)
-    result.cliPath = cliDest
-    notes.push(`cli ${result.cliCopied ? 'copied' : 'present'}: ${cliDest}`)
+    try {
+      result.cliCopied = copyIfChanged(fsModule, cliSource, cliDest, 0o755)
+      result.cliPath = cliDest
+      notes.push(`cli ${result.cliCopied ? 'copied' : 'present'}: ${cliDest}`)
+    } catch (error) {
+      // Never a crash (this runs at the Electron main module's top level): a
+      // failed copy is reported, not thrown.
+      const detail = errorText(error)
+      notes.push(`cli NOT seeded: ${cliDest} (${detail})`)
+      result.errors.push(`cli: ${detail}`)
+    }
   } else {
     notes.push(`cli resource missing: ${cliSource}`)
   }
@@ -434,46 +589,61 @@ export function seedEnterpriseAssets(options: {
   // ── 2. Plugin ─────────────────────────────────────────────────────────────
   const pluginSource = p.join(options.resourcesPath, ...enterprisePluginResourceRelative())
   if (fsModule.existsSync(pluginSource)) {
-    const pluginDest = p.join(options.hermesHome, 'plugins', ENTERPRISE_PLUGIN_ID)
-    const desktopDest = p.join(options.hermesHome, 'desktop-plugins', ENTERPRISE_PLUGIN_ID)
+    try {
+      const pluginDest = p.join(options.hermesHome, 'plugins', ENTERPRISE_PLUGIN_ID)
+      const desktopDest = p.join(options.hermesHome, 'desktop-plugins', ENTERPRISE_PLUGIN_ID)
 
-    // Agent half + dashboard backend: everything EXCEPT `desktop/`.
-    for (const entry of fsModule.readdirSync(pluginSource, { withFileTypes: true })) {
-      if (entry.name === 'desktop') {
-        continue
+      // Agent half + dashboard backend: everything EXCEPT `desktop/`.
+      for (const entry of fsModule.readdirSync(pluginSource, { withFileTypes: true })) {
+        if (entry.name === 'desktop') {
+          continue
+        }
+        const from = p.join(pluginSource, entry.name)
+        const to = p.join(pluginDest, entry.name)
+        if (entry.isDirectory()) {
+          mirrorDir(fsModule, from, to)
+        } else if (copyIfChanged(fsModule, from, to)) {
+          notes.push(`plugin file: ${to}`)
+        }
       }
-      const from = p.join(pluginSource, entry.name)
-      const to = p.join(pluginDest, entry.name)
-      if (entry.isDirectory()) {
-        mirrorDir(fsModule, from, to)
-      } else if (copyIfChanged(fsModule, from, to)) {
-        notes.push(`plugin file: ${to}`)
+      result.pluginPath = pluginDest
+
+      // Desktop half: the STANDALONE door (marker-free → default-ON).
+      const desktopEntry = p.join(pluginSource, 'desktop', 'plugin.js')
+      if (fsModule.existsSync(desktopEntry)) {
+        const desktopFile = p.join(desktopDest, 'plugin.js')
+        copyIfChanged(fsModule, desktopEntry, desktopFile)
+        result.desktopPluginPath = desktopFile
+        notes.push(`desktop plugin: ${desktopFile}`)
       }
-    }
-    result.pluginPath = pluginDest
 
-    // Desktop half: the STANDALONE door (marker-free → default-ON).
-    const desktopEntry = p.join(pluginSource, 'desktop', 'plugin.js')
-    if (fsModule.existsSync(desktopEntry)) {
-      const desktopFile = p.join(desktopDest, 'plugin.js')
-      copyIfChanged(fsModule, desktopEntry, desktopFile)
-      result.desktopPluginPath = desktopFile
-      notes.push(`desktop plugin: ${desktopFile}`)
-    }
+      // ── 3. plugins.enabled (the user-plugin Python gate) ──────────────────
+      const configPath = p.join(options.hermesHome, 'config.yaml')
+      const enabled = ensurePluginEnabled(fsModule, configPath, ENTERPRISE_PLUGIN_ID)
+      result.configPath = configPath
+      result.configUpdated = enabled.changed
+      if (enabled.error) {
+        notes.push(`plugins.enabled NOT updated (${enabled.error}); ${configPath} left unchanged`)
+        result.errors.push(`config: ${enabled.error}`)
+      } else {
+        notes.push(`plugins.enabled ${enabled.changed ? 'updated' : 'present'}: ${configPath}`)
+      }
 
-    // ── 3. plugins.enabled (the user-plugin Python gate) ────────────────────
-    const configPath = p.join(options.hermesHome, 'config.yaml')
-    const enabled = ensurePluginEnabled(fsModule, configPath, ENTERPRISE_PLUGIN_ID)
-    result.configPath = configPath
-    result.configUpdated = enabled.changed
-    if (enabled.error) {
-      notes.push(`plugins.enabled NOT updated (${enabled.error}); ${configPath} left unchanged`)
-    } else {
-      notes.push(`plugins.enabled ${enabled.changed ? 'updated' : 'present'}: ${configPath}`)
+      // A landed CLI + plugin is NOT "seeded" when plugins.enabled failed to
+      // write: the plugin's Python half then refuses to import (the engine's
+      // allow-list gate), so the home is only PARTLY usable. Reporting `seeded`
+      // here was a misleading success signal (batch-2 third review, P2-2).
+      result.seeded = Boolean(result.cliPath) && Boolean(result.pluginPath) && !enabled.error
+      result.reason = result.seeded ? 'seeded' : 'partial'
+    } catch (error) {
+      // A mid-mirror failure (unwritable home, EACCES on a subdir, a symlink
+      // cycle) is reported, never thrown — see the module's "never a crash"
+      // contract and the top-level caller in main.ts.
+      const detail = errorText(error)
+      notes.push(`plugin seed failed: ${pluginSource} (${detail})`)
+      result.errors.push(`plugin: ${detail}`)
+      result.reason = result.cliPath ? 'partial' : 'no-resources'
     }
-
-    result.seeded = Boolean(result.cliPath) && Boolean(result.pluginPath)
-    result.reason = result.seeded ? 'seeded' : 'partial'
   } else {
     notes.push(`plugin resource missing: ${pluginSource}`)
     result.reason = result.cliPath ? 'partial' : 'no-resources'

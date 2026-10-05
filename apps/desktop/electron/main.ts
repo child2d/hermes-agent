@@ -1507,7 +1507,8 @@ function runPlanktonModelSeedIfSignedIn(): void {
     console.log(
       `[hermes] enterprise assets: ${assets.reason}` +
         (assets.cliPath ? ` cli=${assets.cliPath}` : '') +
-        (assets.pluginPath ? ` plugin=${assets.pluginPath}` : '')
+        (assets.pluginPath ? ` plugin=${assets.pluginPath}` : '') +
+        (assets.errors.length > 0 ? ` errors=[${assets.errors.join('; ')}]` : '')
     )
   } catch (error) {
     console.error(

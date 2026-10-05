@@ -283,13 +283,55 @@ it('P3: an invalid plugin.yaml and an invalid dashboard/manifest.json each fail 
     // (4) plugin.yaml that does not parse as YAML → RED.
     const pluginYaml = path.join(resources, 'enterprise', 'plankton-enterprise', 'plugin.yaml')
     await writeFile(pluginYaml, 'name: [unterminated\n')
-    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/plugin\.yaml is not valid YAML/)
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/plugin\.yaml is not a valid plugin manifest/)
     await writeFile(pluginYaml, VALID_PLUGIN_YAML)
 
     // (5) dashboard/manifest.json that does not parse as JSON → RED.
     const manifest = path.join(resources, 'enterprise', 'plankton-enterprise', 'dashboard', 'manifest.json')
     await writeFile(manifest, '{ this is not json')
-    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/manifest\.json is not valid JSON/)
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/manifest\.json is not a loadable dashboard manifest/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+// P3-2 (third review): PARSEABLE is not enough — the engine loads these by
+// SHAPE. `plugin.yaml = [1,2,3]` and `manifest.json = {}` / `[1,2,3]` are all
+// valid YAML/JSON and shipped GREEN, yet the plugin/dashboard can never load.
+it('P3-2: a well-formed but wrong-SHAPED plugin.yaml / manifest.json fails the pack', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'hermes-enterprise-shape-'))
+  try {
+    const appDir = await enterpriseAppDir(root, 'apps-desktop')
+    const appOutDir = path.join(root, 'out')
+    const resources = path.join(appOutDir, 'Plankton.app', 'Contents', 'Resources')
+    const ctx = { appOutDir, electronPlatformName: 'darwin', arch: 3, packager: { appInfo: { productFilename: 'Plankton' } } }
+    const pluginYaml = path.join(resources, 'enterprise', 'plankton-enterprise', 'plugin.yaml')
+    const manifest = path.join(resources, 'enterprise', 'plankton-enterprise', 'dashboard', 'manifest.json')
+
+    await seedEnterpriseResources(resources)
+    expect(assertEnterpriseResourcesPresent(ctx, appDir)).toEqual(REQUIRED_ENTERPRISE)
+
+    // (1) plugin.yaml is VALID YAML but a sequence, not a mapping → RED.
+    await writeFile(pluginYaml, '[1, 2, 3]\n')
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/not a valid plugin manifest/)
+
+    // (2) plugin.yaml is a mapping but misses the engine's required fields → RED.
+    await writeFile(pluginYaml, 'name: plankton-enterprise\n')
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/missing required field/)
+    await writeFile(pluginYaml, VALID_PLUGIN_YAML)
+
+    // (3) manifest.json is VALID JSON but an empty mapping → RED (name + api absent).
+    await writeFile(manifest, '{}')
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/not a loadable dashboard manifest/)
+
+    // (4) manifest.json is VALID JSON but a sequence → RED.
+    await writeFile(manifest, '[1, 2, 3]')
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/not a loadable dashboard manifest/)
+
+    // (5) manifest.json declares an api file that does not exist → RED (the
+    // dashboard tab would render but its backend would never mount).
+    await writeFile(manifest, JSON.stringify({ name: 'plankton-enterprise', api: 'missing_api.py' }))
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/declared api file is missing/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
