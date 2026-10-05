@@ -32,6 +32,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 import { _electron, expect, test } from '@playwright/test'
@@ -43,6 +44,24 @@ import { createSandbox, type Sandbox, waitForAppReady } from '../fixtures'
 test.describe.configure({ timeout: 180_000 })
 
 const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+const REPO_ROOT = path.resolve(DESKTOP_ROOT, '..', '..')
+
+/**
+ * The ENGINE's own ``tools.skills_guard.content_hash``, run in a SEPARATE Python
+ * process as an INDEPENDENT oracle for the hash the page displays.
+ *
+ * Deliberately NOT a JS re-implementation of the digest: the whole point of the
+ * batch-2 step-2 hash parity check is that the page and the engine share ONE
+ * implementation. A hand-copied JS hasher would defeat it.
+ */
+function engineContentHash(dir: string): string {
+  const python =
+    process.env.HERMES_TEST_PYTHON || path.join(REPO_ROOT, '.venv', 'bin', 'python3')
+  const script =
+    'import sys\nfrom pathlib import Path\nfrom tools.skills_guard import content_hash\nprint(content_hash(Path(sys.argv[1])))\n'
+  return execFileSync(python, ['-c', script, dir], { cwd: REPO_ROOT, encoding: 'utf8' }).trim()
+}
+
 
 /** Resolve the packaged Plankton.app, or fail loudly (never a silent skip). */
 function resolvePackagedApp(): string {
@@ -162,6 +181,41 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
   writeMockProviderConfig(home, mock.url, undefined, 'plugins:\n  enabled:\n    - plankton-enterprise\n')
   writeEnvFile(home)
 
+  // Seed ONE locally-installed skill + its ledger record, so the skill market's
+  // local facts (and the hash we compare) are present WITHOUT depending on the
+  // catalog/network. The recorded hash is deliberately a bogus value: the page
+  // must surface "哈希不符" (the hash-mismatch class) while still printing the
+  // current, engine-computed hash for parity.
+  const seededSkillDir = path.join(home, 'skills', 'e2e-market-skill')
+  fs.mkdirSync(seededSkillDir, { recursive: true })
+  fs.writeFileSync(path.join(seededSkillDir, 'SKILL.md'), '# e2e market skill\nbody\n', 'utf8')
+  fs.mkdirSync(path.join(home, 'plankton'), { recursive: true })
+  fs.writeFileSync(
+    path.join(home, 'plankton', 'skill-ledger.json'),
+    JSON.stringify(
+      {
+        schema: 1,
+        records: [
+          {
+            reference: 'e2e/owner-e2e-market-skill',
+            slug: 'e2e-market-skill',
+            name: 'e2e-market-skill',
+            category: '',
+            version: '9.9.9',
+            contentHash: 'sha256:0000000000000000',
+            installPath: 'e2e-market-skill',
+            installedAt: '2026-10-05T00:00:00Z',
+            files: 1
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    'utf8'
+  )
+
+
   // The enterprise build is fail-closed behind SSO: seed the app's OWN persisted
   // session shape (a local fact, no secret) so the gate opens for this run.
   const ssoDir = path.join(sandbox.userDataDir, 'plankton-state', 'sso')
@@ -221,6 +275,44 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
     expect(text, 'must not render a minified React error').not.toContain('Minified React error')
     expect(text).not.toContain('#62')
+
+    // ── 企业技能市场 (batch 2 step 2) ──────────────────────────────────────
+    const skillsNav = page.locator('[data-slot="sidebar"] button', { hasText: '企业技能' }).first()
+    await skillsNav.waitFor({ state: 'visible', timeout: 60_000 })
+    await skillsNav.click()
+    await expect(page.getByText('企业技能市场', { exact: false }).first()).toBeVisible({ timeout: 30_000 })
+
+    const marketText = await page.locator('body').innerText()
+    expect(marketText, 'the skill market must not render a minified React error').not.toContain('Minified React error')
+
+    // The catalog is EITHER listed OR a distinguishable failure — never a silent
+    // empty page (PLK-REQ-0018: "取不到" ≠ "没有").
+    const catalogReady = marketText.includes('企业已审技能目录已就绪')
+    const catalogFailed = marketText.includes('这是「取不到目录」，不是「目录为空」')
+    expect(catalogReady || catalogFailed, 'catalog must be listed or show a distinguishable failure').toBe(true)
+
+    // The seeded local install is visible with its engine-computed hash, and the
+    // deliberately-bogus recorded hash shows the hash-mismatch class distinctly.
+    expect(marketText).toContain('本机已取用（台账）')
+    expect(marketText).toContain('e2e-market-skill')
+    expect(marketText).toContain('哈希不符')
+
+    // HASH PARITY: the page's displayed hash must be byte-for-byte the engine's
+    // own `tools.skills_guard.content_hash` (computed in a separate process).
+    const hashMatch = marketText.match(/sha256:[0-9a-f]{16}/)
+    expect(hashMatch, 'the page must display a local content hash').toBeTruthy()
+    const pageHash = hashMatch![0]
+    const oracleHash = engineContentHash(seededSkillDir)
+    expect(pageHash, `page hash ${pageHash} must equal engine content_hash ${oracleHash}`).toBe(oracleHash)
+
+    // HUMAN CONFIRMATION: a 取用 (install) action must open a confirmation
+    // dialog — a write never fires on the first click.
+    const pickup = page.getByRole('button', { name: '取用' }).first()
+    if (await pickup.count()) {
+      await pickup.click()
+      await expect(page.getByText('取用技能', { exact: false }).first()).toBeVisible({ timeout: 10_000 })
+      await page.keyboard.press('Escape')
+    }
 
     await page.screenshot({ path: test.info().outputPath('tool-catalog.png') })
   } finally {

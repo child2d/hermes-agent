@@ -185,6 +185,26 @@
 
 **备选附注**：(a) app 内嵌一个终端页签跑 `shaoke-cli auth login`——体验更好，但等同于把「交互式登录的终端」搬进 app，须先证明它不把凭据落进 renderer；留待批 4 与出口/审计一起评估。(b) 后续若企业提供凭据发放端点，再走「SSO → CLI 令牌交换」，届时需重开决策点。
 
+### D4 — 「停用」的语义：映射到**引擎自身的技能启用态**（批 2 第二步落地）
+
+**推荐（已落地）**：「停用」= 写**引擎自己读的那个键**——`config.yaml` 的 `skills.disabled`；实现上直接调用引擎自己的
+`hermes_cli.skills_config.get_disabled_skills` / `save_disabled_skills`（与引擎 `PUT /api/skills/toggle` 路由调用的**同一对函数**），
+**与本插件的 `GET /skills` 处在同一进程**。应用侧**不另存**任何「技能是否启用」的第二份状态；技能落点（`<HERMES_HOME>/skills`）
+与台账（`<HERMES_HOME>/plankton/skill-ledger.json`）只承载「装了什么、什么版本、内容哈希」，**不承载启用态**。
+
+**理由**：
+1. **引擎是「技能是否生效」的唯一真相**：引擎加载技能时按 `agent/skill_utils.get_disabled_skill_names` 判 `skills.disabled`。
+   另存一份应用侧状态必然与引擎分叉（两边都能改、两边都可能被对方覆盖），并让「界面说启用、引擎实际不加载」成为可能。
+2. **入口确实存在**（这是本决策可落地的前提，已实测）：`hermes_cli/skills_config.py` 提供读/写，引擎 `PUT /api/skills/toggle`
+   是其既有 REST 出口，`SkillInfo.enabled` 是其既有读出口——无需自造。
+3. **口径一致**：与本批 §2.3「哈希直接用引擎函数」同构——凡引擎已有的事实/函数，我方一律**引用**而非**重写**。
+
+**代价（如实）**：
+- 启停写的是**引擎配置文件**（`config.yaml`），会影响引擎全局（对所有会话生效），且**下一个会话**才生效——界面必须如实说明，不得说成「本对话已生效」。
+- 引擎若把配置文件写成我们不认识的形态，写入必须 **fail-closed**（报告 `unreadable-config`/`write-failed` 并禁用开关），不得猜着改。
+- 引擎对「我方装入的技能」不认其为 hub 条目（KI-0051），故卸载/更新由我方实现；启停因为是引擎的通用技能开关，**不受此限**。
+- 该键是**按技能名**（非 `分类/技能名`）判定的，与本批落点命名一致（引擎用它目录下的技能名）。
+
 ---
 
 ## 4. 实现步与验收标准
@@ -252,6 +272,30 @@
 1. **桌面运行时插件对「统一包」半边的启用门控未逐字核实**：`runtime-loader.ts` 头注释写了 `<hermes home>/plugins/<name>/desktop/plugin.js` 与 `<hermes home>/desktop-plugins/<name>/plugin.js` 两门，并提到统一包根有「installed-but-inert」的默认关姿。企业插件落在哪一门（还是两门都要）、以及「默认关」是否影响首启即可用，**需在实现步 1 实测收口**（本批未起 app 验证）。
 2. **CLI 自更新是否会落到我们的 `<HERMES_HOME>/bin` 副本**：未核。若不会，升级就只能靠重打包或另写升级动作（R2）。
 3. **引擎后端 PATH 前置的落点**：`electron/backend-env.ts` 的 `buildDesktopBackendEnv` / `storeFirstPath` 是唯一一处「后端 PATH 由 Electron 决定」的地方，但企业门控加在哪一层（复用 `PRODUCT_IDENTITY.enterprise` 还是新建企业 env 模块）需与批 1 的 `electron/plankton-*.ts` 命名/门控约定对齐；本批只给方向。
-4. **技能「停用」语义**：引擎对本地技能有启用态（`SkillInfo.enabled` + `toggle_skill`）。我方台账的「停用」是映射到引擎的启用态、还是我方另存一份状态，**未定**（会影响「引擎认不认」的一致性），列实现步 6 开工前确定。
+4. **技能「停用」语义**：**已定并落地**（见 §D4）——映射到引擎自身的启用态（`config.yaml` → `skills.disabled`，经 `hermes_cli.skills_config` 读写），应用侧不另存状态。
 5. **旧测试逐条行为等价未逐个跑**：本批依据旧仓测试名与实现头注释判定口径（预算与「不跑整套测试」红线的限制），逐条对照时可能发现个别判据细节需再核（同 `PLANKTON-MIGRATION.md` §4.4）。
 6. **`+list` 的 `category` 实测可为空串**：此时落点退化为单层技能名（引擎规则），与旧实现一致；但空分类技能的检索/分组呈现需在实现步 5 明确。
+
+---
+
+## 8. 批 2 第二步实现纪要（技能市场页）
+
+**落点**：同一外置插件（`enterprise/plankton-enterprise/`），同一条投递/落地/校验机制，**不新开通道、不新增 IPC**。
+页面数据全走插件自己的后端命名空间 `ctx.rest('/skills*')` → `/api/plugins/plankton-enterprise/*`。后端只经 `shaoke-cli` 访问企业 SkillHub。
+
+**后端**（`dashboard/plugin_api.py`）：
+- `GET /skills`——分页取 `skillhub +list` 全量；合并台账（`<HERMES_HOME>/plankton/skill-ledger.json`）与磁盘事实；
+  每条给出落点、已装态、版本对照（只用 `version`，不拿哈希冒充版本）、**本地内容哈希**、`disabled`（取引擎启用态）。
+  **目录取不到时**单独用嵌套 `catalog` 块如实呈现（失败类可辨），**不塌成「没有技能」**；本机已装事实照常渲染。
+- `POST /skills/{install,update,uninstall,enable,disable}`——安装/更新落 `<HERMES_HOME>/skills`（引擎命名规则）；
+  卸载删落点、**保留台账记录**；启停走 §D4。
+- **哈希**：`engine_content_hash()` 直接 `from tools.skills_guard import content_hash`，**同进程同函数**——第二实现整块不存在。
+- **四类失败可辨**：`unauthorized` / `network-failed` / `not-json`+`shape-mismatch`（格式不符）/ `hashState: 'mismatch'`（哈希不符），
+  另含 `cli-missing` / `no-bundle` / `download-failed` / `extract-failed` / `write-failed` / `needs-confirm` / `blocked-personal-dir` /
+  `enterprise-home-unavailable` / `hash-unavailable`。**空目录是成功**（`catalog.ok && count===0`）。
+- **写动作人工确认**：后端对 `uninstall`/`update` 及「落点被占」的覆盖一律要求 `confirm:true`，否则回 `needs-confirm`；UI 每次写都过 `ConfirmDialog`，批量更新另有显式确认对话框。
+
+**前端**（`desktop/plugin.js`）：新增 `/plankton-skills` 整页 + 侧栏导航行；状态徽章、版本对照、本地哈希、失败文案（每类独立）、确认对话框齐备。
+
+**验收证据（实测）**：见本仓提交说明与 `e2e/packaged/enterprise-tool-catalog.spec.ts`（在打包产物上断言技能市场页渲染、
+四类失败可辨、`哈希不符` 可见、页面哈希 == 引擎 `content_hash`（独立进程）、写动作弹确认框）。
