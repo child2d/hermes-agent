@@ -413,6 +413,72 @@ def test_staged_cache_skips_build_inputs_before_copying(tmp_path, monkeypatch, p
     assert all((cache / relative).read_bytes() == data for relative, data in {**waste, **kept}.items())
 
 
+def test_stage_uv_cache_build_switch_omits_offline_cache(tmp_path, monkeypatch):
+    cache = tmp_path / "cache"
+    entry = cache / "wheels-v6" / "pypi" / "keep-me" / "metadata.msgpack"
+    entry.parent.mkdir(parents=True)
+    entry.write_bytes(b"wheel metadata")
+    shipped = tmp_path / "payload/uv-cache"
+
+    # Default: the cache ships, so a per-install venv rebuild stays offline.
+    monkeypatch.delenv(native.UV_CACHE_SWITCH, raising=False)
+    assert native.payload_uv_cache_enabled() is True
+    assert native.stage_uv_cache(cache, shipped) is True
+    assert (shipped / "wheels-v6/pypi/keep-me/metadata.msgpack").is_file()
+
+    # Explicit off: nothing is staged, and the build machine's cache is intact.
+    shutil.rmtree(shipped)
+    monkeypatch.setenv(native.UV_CACHE_SWITCH, "0")
+    assert native.payload_uv_cache_enabled() is False
+    assert native.stage_uv_cache(cache, shipped) is False
+    assert not shipped.exists()
+    assert entry.read_bytes() == b"wheel metadata"
+
+    # An explicit include wins over the ambient switch.
+    assert native.stage_uv_cache(cache, shipped, include=True) is True
+    assert (shipped / "wheels-v6/pypi/keep-me/metadata.msgpack").is_file()
+
+
+def test_prepared_input_paths_follow_the_uv_cache_switch(tmp_path, monkeypatch):
+    """Preparation and finish must agree on the cache: registration follows the
+    switch, so a build that omits `uv-cache/` never demands it as a prepared
+    path (`_owned` would otherwise fail on a deliberately absent directory)."""
+    from scripts.bundles.native_prepared import _input_paths
+    from scripts.build.inputs import AgentInputs, RESOURCE_ENV
+
+    out = (tmp_path / "payload").resolve()
+    code = out / "hermes-agent"
+    code.mkdir(parents=True)
+    (code / "pyproject.toml").write_text(
+        "[project]\nname='hermes-agent'\nversion='0.0.0'\n", encoding="utf-8")
+    for name in ("tools", "venv", "pm-runtime"):
+        (out / name).mkdir()
+    (out / "enabled-features.json").write_text("{}", encoding="utf-8")
+    (out / "python").write_text("", encoding="utf-8")
+    site_packages = out / "venv" / "lib" / "python3.14" / "site-packages"
+    site_packages.mkdir(parents=True)
+    resources = {name: code / name for name in RESOURCE_ENV}
+    for path in resources.values():
+        path.mkdir()
+    inputs = AgentInputs(
+        project=code / "pyproject.toml", code=code, repo="hermes-agent",
+        placement="contained", target="darwin-arm64", python=out / "python",
+        site_packages=site_packages, environment=out / "venv",
+        pm_runtime=out / "pm-runtime", tools=out / "tools",
+        resources=resources, features=out / "enabled-features.json",
+    )
+
+    # Default build: the shipped cache IS a registered prepared input.
+    monkeypatch.delenv(native.UV_CACHE_SWITCH, raising=False)
+    (out / "uv-cache").mkdir()
+    shipped = _input_paths(inputs, out)
+    assert out / "uv-cache" in shipped
+
+    # Switch off: registration follows staging — the omitted cache is not demanded.
+    monkeypatch.setenv(native.UV_CACHE_SWITCH, "0")
+    assert _input_paths(inputs, out) == [path for path in shipped if path != out / "uv-cache"]
+
+
 SELF_BUILD_BACKEND = '''import os, zipfile
 
 

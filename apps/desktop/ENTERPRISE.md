@@ -193,6 +193,53 @@ value, and it is never written into `config.yaml`.
 3. **Exact provider/model.** Replace the example values with the real
    enterprise endpoint once known.
 
+## 4. Payload size — the `HERMES_PAYLOAD_UV_CACHE` build switch
+
+The staged payload ships a lock-scoped copy of uv's package cache under
+`agent-payload/uv-cache/` (~1.9 GB: `archive-v0` ≈ 951 MB extracted wheels +
+`wheels-v6` ≈ 952 MB wheel ZIPs). It exists for exactly one reason: on the
+first `uv_cache_dir()` call on a sealed install it is copied out to
+`<HERMES_HOME>/cache/uv` (`pm/packages.py`), so a **per-install venv rebuild** —
+enabling a plugin extra, changing features — runs `uv sync --offline` with zero
+network. First launch never needs it: the payload already ships a ready venv,
+and there is no engine bootstrap to feed.
+
+There is **no upstream opt-out**. `website/docs/developer-guide/shared-bundle-builds.md`
+("Native staging retains `uv-cache/` for offline mutable-environment rebuilds")
+and `scripts/build/README.md` document retaining it as deliberate, and
+`pm/uv_cache_prune.py` only prunes *to lock* — it never drops the cache. So this
+fork adds one switch, read by `scripts/bundles/native.py:stage_uv_cache()`:
+
+| `HERMES_PAYLOAD_UV_CACHE` | Effect at **payload staging** (step 1 — not the pack step) |
+|---------------------------|------------------------------------------------------------|
+| unset / `1` | ship `uv-cache/` — upstream behaviour, the **default** |
+| `0` / `false` / `no` / `off` | omit `uv-cache/` entirely; payload is ~1.9 GB smaller |
+
+`stage_uv_cache` returns whether it staged anything; the caller skips the
+now-pointless lock prune when the switch is off. This is a **build** switch, not
+a runtime one: the pack step never restages the cache, so it must be set on the
+payload-staging command (step 1 below).
+
+**Cost of `=0`, stated plainly:** a per-install venv rebuild (new plugin extras /
+feature changes) can no longer resolve offline — it needs network to fetch the
+wheels. Nothing else changes: first launch, sessions, skills, the engine and the
+already-installed feature set are unaffected, because they run from the venv the
+payload already ships. Rollback is just unsetting the variable (or `=1`) and
+re-staging — the default path is untouched and no repo file is deleted in place.
+
+Measured on this host (Plankton `--dir`, unsigned; both artifacts verified to
+boot and list the same existing sessions on the UI):
+
+| Build | `agent-payload` | `Plankton.app` |
+|-------|-----------------|----------------|
+| `uv-cache/` shipped (default) | 4.3 GB | 4.9 GB |
+| `HERMES_PAYLOAD_UV_CACHE=0` | 2.5 GB | 3.0 GB |
+
+The switch only removes the cache directory: the payload is otherwise
+byte-for-identical (`bin`, `enabled-features.json`, `hermes-agent`, `manifest.json`,
+`pm-runtime`, `tools`, `venv`), so the app boots with no external Python exactly
+as before.
+
 ## Build / pack / rollback
 
 Two steps, mirroring upstream `dist:bundled`. Step 1 stages the in-artifact
@@ -206,6 +253,13 @@ cd apps/desktop
 
 # 1) stage the in-artifact runtime (needs a prepared Python 3.11+ interpreter)
 HERMES_PYTHON=<prepared-python> node ../../scripts/build/python.mjs \
+  ../../scripts/bundles/stage.py --out build/agent-payload
+
+#    Smaller installer? Drop the offline venv-rebuild cache at staging with
+#    HERMES_PAYLOAD_UV_CACHE=0 (~1.9 GB off, at the cost of offline venv
+#    rebuilds — see §4). The pack step below is unaffected either way:
+HERMES_PAYLOAD_UV_CACHE=0 HERMES_PYTHON=<prepared-python> \
+  node ../../scripts/build/python.mjs \
   ../../scripts/bundles/stage.py --out build/agent-payload
 
 # 2) package the branded bundled app (unsigned).
@@ -231,8 +285,8 @@ it to `<Plankton.app>/Contents/Resources/agent-payload` and the stamp is baked
 with `payload: "bundled"` + `identityVariant: "plankton"`. The staged payload
 ships its own CPython + uv + Node + the ready dependency tree, so a first
 launch needs **no** external Python and **no** engine bootstrap. `uv-cache/`
-(offline venv-rebuild wheels) is the largest prunable chunk if a smaller
-installer is needed.
+(offline venv-rebuild wheels, ~1.9 GB) is the largest chunk the staging step can
+omit — via the `HERMES_PAYLOAD_UV_CACHE` build switch (§4).
 
 ### Rollback
 

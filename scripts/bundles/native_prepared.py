@@ -88,7 +88,14 @@ def _input_paths(inputs: AgentInputs, out: Path) -> list[Path]:
             or not inputs.site_packages.is_relative_to(inputs.environment)):
         raise ValueError("native prepared input layout changed")
     paths = [inputs.code, inputs.tools, inputs.environment, inputs.pm_runtime,
-             inputs.python, inputs.features, out / "uv-cache"]
+             inputs.python, inputs.features]
+    # The uv cache is a build switch (scripts.bundles.native:UV_CACHE_SWITCH):
+    # registration follows staging, so preparation and finish agree on the
+    # inventory instead of demanding a path the switch intentionally omitted.
+    from scripts.bundles.native import payload_uv_cache_enabled
+
+    if payload_uv_cache_enabled():
+        paths.append(out / "uv-cache")
     for path in [inputs.project, inputs.site_packages, *inputs.resources.values(), *paths]:
         _owned(path, out)
     return paths

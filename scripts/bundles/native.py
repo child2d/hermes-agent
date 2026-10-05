@@ -54,10 +54,23 @@ def _arch_guard(store_dir: Path) -> list[str]:
 
 from pm.uv_cache_prune import lock_package_names, prune_uv_cache_to_lock
 
-__all__ = ["prune_uv_cache_to_lock", "lock_package_names", "stage_uv_cache"]
+__all__ = ["prune_uv_cache_to_lock", "lock_package_names", "stage_uv_cache",
+           "UV_CACHE_SWITCH", "payload_uv_cache_enabled"]
+
+# Build switch. The payload's `uv-cache/` (~1.9 GB) is what lets a per-install
+# venv rebuild — plugin extras, feature changes — resolve with zero network.
+# An enterprise installer that never rebuilds the venv can drop it; the cost is
+# exactly that offline guarantee, so the switch is explicit and ships the cache
+# by default. See apps/desktop/ENTERPRISE.md §4.
+UV_CACHE_SWITCH = "HERMES_PAYLOAD_UV_CACHE"
 
 
-def stage_uv_cache(source: Path, destination: Path) -> None:
+def payload_uv_cache_enabled() -> bool:
+    """Ship the payload's uv cache unless explicitly disabled (0/false/no/off)."""
+    return os.environ.get(UV_CACHE_SWITCH, "").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def stage_uv_cache(source: Path, destination: Path, *, include: bool | None = None) -> bool:
     """Ship everything a per-install venv rebuild resolves from offline.
 
     sdist source trees (including Rust target/ outputs) are build-only bulk —
@@ -65,7 +78,16 @@ def stage_uv_cache(source: Path, destination: Path) -> None:
     source — so they stay out. Built wheel ZIPs (including the copies uv keeps
     beside sdist metadata.msgpack shards) ship: without them an offline
     rebuild falls back to wanting the sdist download and fails closed.
+
+    Returns whether the cache was staged. `include` defaults to the build
+    switch (`HERMES_PAYLOAD_UV_CACHE`), so a build can omit the cache without
+    changing this call — the caller only has to skip the now-pointless prune.
     """
+    if include is None:
+        include = payload_uv_cache_enabled()
+    if not include:
+        return False
+
     def ignore(directory: str, names: list[str]) -> set[str]:
         path = Path(directory)
         parts = path.relative_to(source).parts
@@ -79,6 +101,7 @@ def stage_uv_cache(source: Path, destination: Path) -> None:
         return set()
 
     shutil.copytree(source, destination, ignore=ignore)
+    return True
 
 
 def stage_pm_runtime(root: Path, python: Path, repo: Path, *, offline: bool = False,
@@ -245,10 +268,15 @@ def _prepare_native(*, out: Path, ref: str, source: Path, cache: Path,
         shutil.rmtree(payload_cache, ignore_errors=True)
     src_cache = cache
     if src_cache.is_dir():
-        print(f"  uv-cache: copying {src_cache} → payload...", flush=True)
-        stage_uv_cache(src_cache, payload_cache)
-        pruned = prune_uv_cache_to_lock(payload_cache, repo_dir)
-        print(f"✓ uv-cache (lock-scoped: pruned {pruned} stale entries; offline rebuilds resolve from shipped wheels)", flush=True)
+        if payload_uv_cache_enabled():
+            print(f"  uv-cache: copying {src_cache} → payload...", flush=True)
+        if stage_uv_cache(src_cache, payload_cache):
+            pruned = prune_uv_cache_to_lock(payload_cache, repo_dir)
+            print(f"✓ uv-cache (lock-scoped: pruned {pruned} stale entries; offline rebuilds resolve from shipped wheels)", flush=True)
+        else:
+            print(f"✓ uv-cache skipped ({UV_CACHE_SWITCH} off): payload ships no offline rebuild "
+                  "cache; a per-install venv rebuild (plugin extras / feature changes) now needs "
+                  "network — see apps/desktop/ENTERPRISE.md", flush=True)
     else:
         raise InstallError("uv-cache", "runtime dependency cache is missing")
 
