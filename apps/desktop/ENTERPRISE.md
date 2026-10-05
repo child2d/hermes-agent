@@ -73,6 +73,63 @@ fresh-install rehearsals). `resolveDesktopHermesHome`'s upstream platform
 default (`~/.hermes`) is unchanged whenever `defaultHome` is absent, so every
 upstream variant resolves bit-for-bit as before.
 
+### ⚠️ The isolation trap: `HERMES_HOME` must live OUTSIDE `~/.hermes`
+
+**Rule: an enterprise `HERMES_HOME` that sits inside the personal Hermes root
+does not isolate anything — it silently becomes the personal home.**
+
+The engine resolves its real root through
+`hermes_constants.get_default_hermes_root()` (`hermes_constants.py:216-233`).
+That function does not use `HERMES_HOME` verbatim: if the value resolves to a
+path **under the platform default** (`~/.hermes`, or `~/.hermes<suffix>` when
+`HERMES_DATA_DIR_SUFFIX` is set), it is read as *a profile of the personal
+home* and the function returns the **personal root** instead:
+
+```python
+env_path = _expand_hermes_home(env_home) if env_home else None
+result = native_home                       # ~/.hermes
+if env_path is not None:
+    try:
+        env_path.resolve().relative_to(native_home.resolve())   # under ~/.hermes
+    except ValueError:
+        result = env_path.parent.parent if env_path.parent.name == "profiles" else env_path
+return result                              # ← still ~/.hermes for the "under" case
+```
+
+Consequences of getting this wrong — all silent, none of them an error:
+
+- `~/.hermes/enterprise` (or `~/.hermes/profiles/enterprise`, or `~/.hermes`
+  itself) makes the "isolated" engine open the **personal** `state.db`, read the
+  personal `config.yaml` / sessions / skills, and write back to them.
+- The app looks configured and boots normally; nothing in the UI says the home
+  was swapped. A rehearsal that "worked" against a copy under `~/.hermes` was
+  actually driving the real personal state.
+- This bit us once in this branch's own verification runs. Treat any copy of
+  personal state made for a test — and every override passed to `npm run dev` /
+  a packaging rehearsal — as a **possible contamination** until its path is
+  confirmed to be outside `~/.hermes`.
+
+Safe shapes (all outside the personal root):
+
+| Shape | Example |
+|-------|---------|
+| Product root (the default) | `~/.plankton/engine/home` |
+| Scratch rehearsal dir | `~/plankton-verify/home` |
+| Sibling dot-dir | `~/.hermes-enterprise` (note: *not* a child of `~/.hermes`) |
+
+Unsafe (silently falls back to personal state): `~/.hermes`,
+`~/.hermes/anything`, `~/.hermes/profiles/<name>`, and the same under a
+`HERMES_DATA_DIR_SUFFIX` root such as `~/.hermes-canary/...`.
+
+**Startup self-check (implemented).** Home isolation is now
+verified at launch, not left to discipline: `enterpriseHomeIsolationIssue()`
+(`electron/enterprise-paths.ts`, behavior-tested in
+`electron/enterprise-paths.test.ts`) compares the *effective* home against the
+personal root and, on an enterprise build, main.ts logs a loud
+`ENTERPRISE HOME ISOLATION FAILURE` and — for a packaged artifact — shows a
+blocking `dialog.showErrorBox`. It never silently falls back: the app still
+starts, but the misconfiguration is impossible to miss.
+
 ### Two ambient personal-path leaks, closed
 
 1. **User-bin launcher discovery** (`resolveHermesBackend`, rung 5). The

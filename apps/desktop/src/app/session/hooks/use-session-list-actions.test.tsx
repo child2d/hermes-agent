@@ -758,6 +758,38 @@ describe('refreshSessions batches slices into one request', () => {
     )
   })
 
+  // ACP is an interactive attended surface (like cli/tui/desktop), not a
+  // separately-surfaced side channel — there is no other desktop view that can
+  // show an `acp` session. Excluding it here made an editor-driven user's whole
+  // history invisible: the sidebar asked the backend to drop every row it had
+  // and rendered the blank state while /api/sessions answered rows.
+  it('does not ask the backend to exclude ACP conversations from recents', async () => {
+    listSidebarSessions.mockResolvedValue(sidebar({ sessions: [] }))
+    const { result } = renderHook(() => useSessionListActions({ profileScope: 'default' }))
+
+    await act(async () => {
+      await result.current.refreshSessions()
+    })
+
+    const request = listSidebarSessions.mock.calls.at(-1)?.[0] as { recentsExclude: string[] }
+
+    expect(request.recentsExclude).not.toContain('acp')
+    // The genuinely non-conversational / separately-surfaced sources stay out.
+    expect(request.recentsExclude).toEqual(expect.arrayContaining(['cron', 'kanban', 'oneshot', 'telegram']))
+  })
+
+  it('publishes an ACP conversation returned by the backend into the recents store', async () => {
+    const acp = row('acp-1', { source: 'acp', title: '回复收到' })
+    listSidebarSessions.mockResolvedValue(sidebar({ sessions: [acp] }))
+    const { result } = renderHook(() => useSessionListActions({ profileScope: 'default' }))
+
+    await act(async () => {
+      await result.current.refreshSessions()
+    })
+
+    expect($sessions.get().map(session => session.id)).toEqual(['acp-1'])
+  })
+
   it('does not start a refresh callback captured before a profile switch', async () => {
     listSidebarSessions.mockResolvedValue(sidebar({ sessions: [] }))
 

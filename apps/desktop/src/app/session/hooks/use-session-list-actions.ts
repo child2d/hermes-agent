@@ -59,12 +59,24 @@ import { refreshCronJobs as refreshCronJobsStore } from '../../cron/cron-actions
 // (telegram, discord, …) is fetched separately into its own self-managed
 // sidebar section (refreshMessagingSessions). Excluding them here keeps
 // "Load more" paging through interactive local chats instead of
-// interleaving gateway threads that bury them. ACP rows are editor-driven
-// conversations: every editor wake mints an auto-titled row, so they would
-// bury local chats — and they were never ended before #118216, which also
-// kept prune/archive away from them.
+// interleaving gateway threads that bury them.
+//
+// ACP is deliberately NOT excluded. `acp` (`hermes acp`, an editor-spawned
+// stdio server) is an *interactive attended* surface exactly like `cli`, `tui`
+// and `desktop` — the same classification upstream uses elsewhere for tool
+// guardrails, coding context and engagement metrics (`_ATTENDED_PLATFORMS`,
+// `INTERACTIVE_CODING_PLATFORMS`, the "interactive" engagement bucket) — and
+// those three are not excluded either. ACP rows are real conversations with
+// titles, message counts, an `ended_at` (written since #118216, which also
+// brought them under prune/archive), and their own persisted list in
+// `acp_adapter`. Excluding them made a whole class of conversations
+// unreachable from the desktop — unlike cron/kanban/messaging there is no
+// other desktop surface that can show an ACP session — so a user whose only
+// history came through an ACP client got a permanent "No sessions yet" sidebar
+// whose own API answered 8 rows. The editor-flood the old exclusion guarded
+// against is a *ranking* concern already bounded by `min_message_count >= 1`
+// plus recency paging, and it is shared by cli/tui/desktop.
 const SIDEBAR_EXCLUDED_SOURCES = [
-  'acp',
   'cron',
   'kanban',
   'oneshot',

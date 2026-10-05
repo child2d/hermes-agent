@@ -25,6 +25,8 @@
 
 import path from 'node:path'
 
+import { platformDefaultHermesHome } from './data-paths'
+
 /** Segments appended to $HOME on POSIX (macOS/Linux). */
 export const ENTERPRISE_HOME_SEGMENTS = ['.plankton', 'engine', 'home'] as const
 
@@ -60,3 +62,40 @@ export function enterpriseHermesHomeFor(
 
   return path.posix.join(options.home, ...ENTERPRISE_HOME_SEGMENTS)
 }
+
+/**
+ * Detect the enterprise home ISOLATION trap: an effective `HERMES_HOME` that
+ * lives inside the personal Hermes root.
+ *
+ * The engine resolves its real root through `hermes_constants.get_default_hermes_root()`,
+ * which treats *any* `HERMES_HOME` under the platform default (`~/.hermes`, or
+ * `~/.hermes<suffix>`) as a **profile of that default** and returns the default
+ * root instead. So an "isolated" home placed inside `~/.hermes` silently reads
+ * and writes the PERSONAL state.db, config and sessions — the exact opposite of
+ * isolation. The only safe enterprise home is one *outside* the personal root.
+ *
+ * Returns a human-readable description of the trap, or `null` when the home is
+ * genuinely outside the personal root. Pure: every input is a parameter.
+ */
+export function enterpriseHomeIsolationIssue(
+  effectiveHome: string,
+  options: { home: string; platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv }
+): string | null {
+  const platform = options.platform ?? process.platform
+  const paths = platform === 'win32' ? path.win32 : path.posix
+  // Windows paths are case-insensitive; compare folded so C:\ vs c:\ matches.
+  const fold = (value: string): string => (platform === 'win32' ? value.toLowerCase() : value)
+  const personal = fold(paths.resolve(platformDefaultHermesHome(options.home, options.env ?? process.env, platform)))
+  const resolved = fold(paths.resolve(effectiveHome))
+
+  if (resolved === personal) {
+    return `HERMES_HOME is the personal Hermes root itself (${resolved})`
+  }
+
+  if (resolved.startsWith(personal + paths.sep)) {
+    return `HERMES_HOME (${resolved}) is inside the personal Hermes root (${personal})`
+  }
+
+  return null
+}
+

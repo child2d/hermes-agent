@@ -216,7 +216,7 @@ import {
 import { resolveDashboardWebDist } from './dashboard-web-dist'
 import { resolveDesktopHermesHome, resolveDesktopUserData } from './data-paths'
 import { seedEnterpriseModelConfig } from './enterprise-model-seed'
-import { enterpriseHermesHomeFor } from './enterprise-paths'
+import { enterpriseHermesHomeFor, enterpriseHomeIsolationIssue } from './enterprise-paths'
 import { loadOrCreateInstallationId, sshOwnershipId } from './desktop-installation'
 import { formatDesktopLogLine, formatLogStamp } from './desktop-log-line'
 import {
@@ -1275,6 +1275,43 @@ const HERMES_HOME: string = resolveDesktopHermesHome({
 // Skip when the environment already set one (override / multi-instance).
 if (ENTERPRISE_HERMES_HOME_DEFAULT && !process.env.HERMES_HOME) {
   process.env.HERMES_HOME = HERMES_HOME
+}
+
+// Enterprise isolation SELF-CHECK (fail loud, never silent).
+//
+// The engine resolves its real root through
+// `hermes_constants.get_default_hermes_root()`, which treats any `HERMES_HOME`
+// that sits *inside* the personal root (~/.hermes) as a profile of that root
+// and returns the personal root instead. An enterprise home placed there — by
+// a bad override, an installer bug, or a rehearsal script — would silently
+// read and write the user's PERSONAL state.db, config and sessions. That is
+// the one failure this fork exists to prevent, and it must never be quiet.
+//
+// Warn loudly on every enterprise launch and, for a packaged artifact, put a
+// blocking error box in front of the operator. The app still starts (a hard
+// exit would strand a working app over a path preference), but nothing about
+// the misconfiguration is silent.
+if (PRODUCT_IDENTITY.enterprise) {
+  const isolationIssue = enterpriseHomeIsolationIssue(HERMES_HOME, {
+    home: app.getPath('home'),
+    platform: process.platform
+  })
+
+  if (isolationIssue) {
+    const message =
+      `[hermes] ENTERPRISE HOME ISOLATION FAILURE: ${isolationIssue}. ` +
+      'The engine treats a HERMES_HOME under the personal root as a profile of that root and ' +
+      'falls back to the personal home (hermes_constants.get_default_hermes_root), so this app ' +
+      'would read and write personal Hermes state. Move HERMES_HOME outside the personal root ' +
+      '(see apps/desktop/ENTERPRISE.md §2).'
+
+    console.error(message)
+
+    if (IS_PACKAGED) {
+      // showErrorBox is safe before `ready` and does not need a window.
+      dialog.showErrorBox('Plankton: Hermes home is not isolated', message)
+    }
+  }
 }
 
 // The SSH control socket default is a personal ~/.hermes/desktop-ssh. Pin it
