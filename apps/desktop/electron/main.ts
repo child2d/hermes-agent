@@ -1559,11 +1559,14 @@ function planktonGateSelfCheckFailure(detail: string): never {
  * disk do so for UI plumbing, NOT enterprise data: `hermes:skin:local` reads
  * just `config.yaml → display.skin` plus a symlink-guarded `skins/<name>.yaml`
  * (a colour palette) for the pre-paint theme, and `hermes:logs:renderer-*`
- * APPENDS renderer-supplied text to `HERMES_HOME/logs/desktop.log`. Persisted
- * theme/translucency/screenshot preferences live under `app.getPath('userData')`,
- * not the enterprise home. (The `renderer-line`/`renderer-error` append is the
- * one home-touching `.on` channel; it is a WRITE of caller-supplied UI text, not
- * a data read, and cannot spawn.)
+ * appends renderer-supplied text to `HERMES_HOME/logs/desktop.log` — but ONLY
+ * once a session is live: while logged out the append is refused by
+ * `desktopLogDiskWriteAllowed()`, so nothing is written and no engine home is
+ * created. Persisted theme/translucency/screenshot preferences live under
+ * `app.getPath('userData')`, not the enterprise home. (The
+ * `renderer-line`/`renderer-error` append is the one home-touching `.on`
+ * channel; when it does write — post-login only — it is a WRITE of
+ * caller-supplied UI text, not a data read, and cannot spawn.)
  *
  * No-op for every upstream variant, so their surface is byte-for-byte unchanged.
  */

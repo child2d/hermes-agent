@@ -439,7 +439,9 @@ Everything else is a small Plankton-specific layer, because it has to be.
      plumbing, not enterprise data: `hermes:skin:local` reads only
      `config.yaml → display.skin` plus a symlink-guarded `skins/<name>.yaml` for
      the pre-paint palette, and `hermes:logs:renderer-*` appends renderer-
-     supplied text to `HERMES_HOME/logs/desktop.log`. Persisted
+     supplied text to `HERMES_HOME/logs/desktop.log` **only once a session is
+     live — while logged out the append is refused by
+     `desktopLogDiskWriteAllowed()` and nothing is written**. Persisted
      theme/translucency/screenshot preferences live under
      `app.getPath('userData')`, not the enterprise home.
 2. **Backend spawn — the lowest chokepoint.** `assertPlanktonAuthenticated()` is
