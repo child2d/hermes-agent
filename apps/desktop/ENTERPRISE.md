@@ -7,6 +7,8 @@ logic and the other four variants untouched.
 
 Everything is driven by **one build selector**: `HERMES_DESKTOP_VARIANT=plankton`.
 
+> **旧版功能清单与迁移方案**见 [PLANKTON-MIGRATION.md](./PLANKTON-MIGRATION.md)（旧版 plankton 能力盘点 + 已有/需迁移/不再采用三类处置 + 迁移批次与验收标准）。
+
 | Item | Value |
 |------|-------|
 | Variant key | `plankton` |
