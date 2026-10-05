@@ -1180,6 +1180,12 @@ if (IS_WINDOWS || process.platform === 'linux') {
   })
 }
 
+// Enterprise (Plankton) single IPC registration point: install the fail-closed
+// gate BEFORE the first `ipcMain.handle` below, so every invoke channel
+// registered after it is wrapped. No-op on upstream variants. See
+// installPlanktonIpcGate() and plankton-session-gate.ts.
+installPlanktonIpcGate()
+
 ipcMain.handle('hermes:get-remote-display-reason', () => REMOTE_DISPLAY_REASON)
 ipcMain.handle('hermes:embed-host:origin', () => embedHostOrigin())
 
@@ -1366,11 +1372,15 @@ if (PRODUCT_IDENTITY.enterprise && !process.env.HERMES_DESKTOP_SSH_CONTROL_DIR) 
 // First-launch model seed (enterprise only). Values come from an install-time
 // file, never from the repo or the bundle; an existing config.yaml is never
 // overwritten. No-op ('no-source') until the operator drops the seed file.
+//
+// GATED ON LOGIN: the seed WRITES `<HERMES_HOME>/config.yaml`, so running it
+// before a session exists would create/write the enterprise home while logged
+// out — the exact thing the fail-closed gate forbids. It therefore runs here
+// only for an already-signed-in relaunch, and again right after a successful
+// `plankton:sso-login` (see the handler below). A packaged first launch with no
+// session writes no home at all.
 if (PRODUCT_IDENTITY.enterprise) {
-  const seed = seedEnterpriseModelConfig({ identity: PRODUCT_IDENTITY, hermesHome: HERMES_HOME })
-  console.log(
-    `[hermes] enterprise model seed: ${seed.seeded ? `wrote ${seed.configPath}` : `skipped (${seed.reason})`}`
-  )
+  runPlanktonModelSeedIfSignedIn()
 }
 
 // ── Enterprise (Plankton) SSO identity + fail-closed gate ────────────────
@@ -1419,7 +1429,15 @@ function getPlanktonAuth(): PlanktonAuth {
     planktonAuth = createPlanktonAuth({
       resolveConfig: planktonConfigResolver({
         stateDir,
-        configDir: __dirname,
+        // `configDir` is a DEV-ONLY fallback for a bundled sso-config.local.json
+        // (ignored entirely when isPackaged). It must be a bundler-safe path:
+        // the Electron main is emitted as ESM (`dist/electron-main.mjs`), where
+        // `__dirname` is undefined — using it threw a ReferenceError and made
+        // EVERY plankton handler (sso-status / sso-login / hermes:api) reject,
+        // so the login button was dead. `app.getAppPath()` is the desktop root
+        // in dev (`electron .` → apps/desktop) and the asar path when packaged,
+        // and needs no import.meta/__dirname shim.
+        configDir: app.getAppPath(),
         isPackaged: app.isPackaged
       }),
       sessionDir: path.join(stateDir, 'sso'),
@@ -1433,14 +1451,95 @@ function getPlanktonAuth(): PlanktonAuth {
   return planktonAuth
 }
 
-/** True only while the enterprise build has a live SSO session. */
-function planktonSignedIn(): boolean {
-  return PRODUCT_IDENTITY.enterprise === true && getPlanktonAuth().isLoggedIn()
+/**
+ * The enterprise fail-closed spawn gate. `true` only for the `plankton` build
+ * with a live SSO session; every other caller (upstream variants) passes.
+ * Throws — never returns a sentinel — so a caller cannot mistake a refusal for
+ * a connection descriptor. Called at the lowest local-spawn chokepoint
+ * (`spawnOwnedBackend`) and at each spawn entry; see plankton-session-gate.ts.
+ */
+function assertPlanktonAuthenticated(context: string): void {
+  if (PRODUCT_IDENTITY.enterprise === true && !getPlanktonAuth().isLoggedIn()) {
+    throw new Error(`not-authenticated: 未登录 SSO，不启动企业引擎（fail-closed: ${context}）`)
+  }
 }
+
+/**
+ * Run the first-launch model seed — but only once a session is live. Seeding
+ * before login would WRITE the enterprise home (`<HERMES_HOME>/config.yaml`)
+ * while logged out, which is exactly what the spawn/app gate forbids. Called at
+ * startup for an already-signed-in relaunch, and again right after a successful
+ * `plankton:sso-login`. Idempotent: the seeder never overwrites an existing
+ * config.yaml.
+ */
+function runPlanktonModelSeedIfSignedIn(): void {
+  if (PRODUCT_IDENTITY.enterprise !== true || !getPlanktonAuth().isLoggedIn()) {
+    return
+  }
+
+  const seed = seedEnterpriseModelConfig({ identity: PRODUCT_IDENTITY, hermesHome: HERMES_HOME })
+
+  console.log(
+    `[hermes] enterprise model seed: ${seed.seeded ? `wrote ${seed.configPath}` : `skipped (${seed.reason})`}`
+  )
+}
+
+/**
+ * THE single IPC registration point for the enterprise build — the old shell's
+ * `guardIpc` equivalence. Every `ipcMain.handle` (invoke) channel registered
+ * AFTER this call is wrapped: while no SSO session is live, the decision is
+ * made BEFORE the business handler runs, so an unauthenticated renderer — or a
+ * future call site that silently bypasses the UI — cannot read a session,
+ * connection, file, clipboard or log. Default-closed: anything not on
+ * `PLANKTON_PUBLIC_CHANNELS` is refused.
+ *
+ * Only `handle` (invoke) channels are wrapped, matching the old shell's scope.
+ * The synchronous `ipcMain.on` channels the preload needs to build
+ * `window.hermesDesktop` (translucency/feature-flags/skin) carry no enterprise
+ * data and must stay reachable or the login surface itself cannot paint.
+ *
+ * No-op for every upstream variant, so their surface is byte-for-byte unchanged.
+ */
+function installPlanktonIpcGate(): void {
+  if (PRODUCT_IDENTITY.enterprise !== true) {
+    return
+  }
+
+  const originalHandle = ipcMain.handle.bind(ipcMain) as typeof ipcMain.handle
+
+  ipcMain.handle = ((channel: string, listener: (...args: any[]) => any) => {
+    originalHandle(channel, (event, ...args) => {
+      const decision = planktonGateDecision({ channel, loggedIn: getPlanktonAuth().isLoggedIn() })
+
+      if (!decision.allow) {
+        rememberLog(`[plankton-gate] refused "${channel}" (${decision.reason})`)
+
+        return decision.payload
+      }
+
+      return listener(event, ...args)
+    })
+  }) as typeof ipcMain.handle
+}
+
+// NOTE: installPlanktonIpcGate() is CALLED near the first `ipcMain.handle`
+// registration below (before `hermes:get-remote-display-reason`), so it wraps
+// every subsequent invoke channel. It is not called here to avoid a second,
+// later invocation after handlers already registered.
 
 if (PRODUCT_IDENTITY.enterprise) {
   ipcMain.handle('plankton:sso-status', () => getPlanktonAuth().status())
-  ipcMain.handle('plankton:sso-login', async (_event, provider: unknown) => getPlanktonAuth().login(provider))
+  ipcMain.handle('plankton:sso-login', async (_event, provider: unknown) => {
+    const result = await getPlanktonAuth().login(provider)
+
+    if (result.ok) {
+      // The home write (model seed) is deferred until a session exists, so a
+      // logged-out launch never creates `<HERMES_HOME>/config.yaml`.
+      runPlanktonModelSeedIfSignedIn()
+    }
+
+    return result
+  })
   ipcMain.handle('plankton:sso-logout', () => {
     getPlanktonAuth().logout()
 
@@ -2100,6 +2199,14 @@ const localBackendLifecycle = createLocalBackendLifecycle<ChildProcess>({
 })
 
 function spawnOwnedBackend(...args: Parameters<typeof spawn>): ChildProcess {
+  // THE lowest local-spawn chokepoint: every `hermes serve` child (the primary
+  // in runHermesStart and every pooled / forced-local child in
+  // runPoolBackendStart) is created here, so gating here means NO caller —
+  // createWindow's startup, registry dials, restores, future code — can spawn
+  // the enterprise engine while logged out. Placed before `spawn` so no child
+  // (and thus no state.db / home write) is ever created.
+  assertPlanktonAuthenticated('spawnOwnedBackend')
+
   const child = localBackendLifecycle.spawn((): ChildProcess => spawn(...args))
   child.once('exit', (): boolean => localBackendLifecycle.release(child))
   child.once('error', (): void => {
@@ -2505,6 +2612,13 @@ function flushDesktopLogBufferSync() {
   const chunk = desktopLogBuffer
   desktopLogBuffer = ''
 
+  if (!desktopLogDiskWriteAllowed()) {
+    // Enterprise, logged out: desktop.log lives under HERMES_HOME, so writing it
+    // would create/write the engine home. Drop the chunk (the last 300 lines
+    // stay in memory `hermesLog`) until a session is live.
+    return
+  }
+
   try {
     fs.mkdirSync(path.dirname(DESKTOP_LOG_PATH), { recursive: true })
     rotateLogIfNeededSync(DESKTOP_LOG_PATH)
@@ -2522,6 +2636,11 @@ function flushDesktopLogBufferAsync() {
   const chunk = desktopLogBuffer
   desktopLogBuffer = ''
 
+  if (!desktopLogDiskWriteAllowed()) {
+    // See flushDesktopLogBufferSync: no enterprise-home write while logged out.
+    return desktopLogFlushPromise
+  }
+
   desktopLogFlushPromise = desktopLogFlushPromise
     .then(async () => {
       await fs.promises.mkdir(path.dirname(DESKTOP_LOG_PATH), { recursive: true })
@@ -2533,6 +2652,25 @@ function flushDesktopLogBufferAsync() {
     })
 
   return desktopLogFlushPromise
+}
+
+/**
+ * Whether desktop.log may be written to disk. On the enterprise build the log
+ * lives at `<HERMES_HOME>/logs/desktop.log`, so an unauthenticated launch must
+ * not touch it — otherwise the fail-closed gate would still create the engine
+ * home (and leave an identity-bearing desktop.log) before login. Upstream
+ * variants always write. Fail-closed: any error resolving the session → false.
+ */
+function desktopLogDiskWriteAllowed(): boolean {
+  if (PRODUCT_IDENTITY.enterprise !== true) {
+    return true
+  }
+
+  try {
+    return getPlanktonAuth().isLoggedIn()
+  } catch {
+    return false
+  }
 }
 
 function scheduleDesktopLogFlush() {
@@ -4256,6 +4394,10 @@ async function teardownBundledBackend(): Promise<void> {
 }
 
 async function restoreBundledBackend(): Promise<void> {
+  // Enterprise fail-closed gate (Plankton): the restore path respawns the
+  // primary; refuse before teardown/restart while logged out.
+  assertPlanktonAuthenticated('restoreBundledBackend')
+
   try {
     // A failed stop retains its process handle. Retry before enabling a new start.
     await teardownBundledBackend()
@@ -11240,9 +11382,7 @@ async function ensureBackend(
   // or spawn a backend. This is what keeps the enterprise engine home
   // (~/.plankton/engine/home) untouched while the user is logged out — no
   // state.db read, no session write. See plankton-session-gate.ts.
-  if (PRODUCT_IDENTITY.enterprise === true && !getPlanktonAuth().isLoggedIn()) {
-    throw new Error('not-authenticated: 未登录 SSO，不启动企业引擎（fail-closed）')
-  }
+  assertPlanktonAuthenticated('ensureBackend')
 
   const key = profile && String(profile).trim() ? String(profile).trim() : primaryProfileKey()
   const spawnPriority = spawnPriorityFrom(opts.spawnPriority)
@@ -11357,6 +11497,10 @@ async function ensureRegistryBackend(
   managedUpdateCorrelation = '',
   opts: { passive?: boolean; spawnPriority?: LocalBackendSpawnPriority } = {}
 ) {
+  // Enterprise fail-closed gate (Plankton): refuse before the registry dial can
+  // read the registry / resolve an SSH config / spawn a forced-local child.
+  assertPlanktonAuthenticated('ensureRegistryBackend')
+
   const spawnPriority = spawnPriorityFrom(opts.spawnPriority)
   const passive = Boolean(opts.passive)
   const registry = readDesktopConnectionsRegistry()
@@ -12378,6 +12522,15 @@ function spawnPoolBackend(
   entry: any,
   opts: PoolBackendStartOptions = {}
 ): Promise<PoolBackendConnection> {
+  // Enterprise fail-closed gate (Plankton): reject as a Promise (not a
+  // synchronous throw) so `spawnPoolBackend(...).catch(...)` at every call site
+  // still attaches and the refusal becomes a normal spawn failure.
+  try {
+    assertPlanktonAuthenticated('spawnPoolBackend')
+  } catch (error) {
+    return Promise.reject(error)
+  }
+
   return localBackendLifecycle.start((): Promise<PoolBackendConnection> => runPoolBackendStart(profile, entry, opts))
 }
 
@@ -13097,6 +13250,16 @@ function releaseHostSpawnReservation() {
 function startHermes({ supervisorRecovery = false }: { supervisorRecovery?: boolean } = {}): Promise<
   Awaited<ReturnType<typeof backendConnectionState.getPromise>>
 > {
+  // Enterprise fail-closed gate (Plankton). createWindow() calls startHermes()
+  // directly on the startup path (not through ensureBackend), so the gate must
+  // live here too, not only at the pool/registry entries. Reject (never a
+  // synchronous throw) because the caller does `startHermes().catch(...)`.
+  try {
+    assertPlanktonAuthenticated('startHermes')
+  } catch (error) {
+    return Promise.reject(error)
+  }
+
   primaryRecoverySuppressed = false
   primaryStartsInFlight += 1
 
@@ -15799,6 +15962,11 @@ async function connectDesktopProfileRoute(
   spawnPriority: LocalBackendSpawnPriority = 'foreground',
   sender?: Electron.WebContents
 ) {
+  // Enterprise fail-closed gate (Plankton): this is the direct createWindow
+  // startup call when a default route is pinned, so refuse here before any
+  // dial/claim work — not only in ensureBackend/ensureRegistryBackend.
+  assertPlanktonAuthenticated('connectDesktopProfileRoute')
+
   // Coalesce concurrent renderer dials for one profile scope (#90812): the
   // renderer-side reconnect lock is per-window, so two windows waking at once
   // both land here. The claim key mirrors ensureBackend()'s own profile

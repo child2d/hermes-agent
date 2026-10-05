@@ -9,9 +9,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  isPlanktonGatedChannel,
   isPlanktonPublicChannel,
-  PLANKTON_GATED_CHANNELS,
   PLANKTON_PUBLIC_CHANNELS,
   planktonDeniedPayload,
   planktonGateDecision,
@@ -19,9 +17,41 @@ import {
   planktonSessionIdentity
 } from './plankton-session-gate'
 
+/**
+ * Representative controlled channels — the ones the batch-1 review named. The
+ * gate is DEFAULT-CLOSED, so this list is illustrative, not the perimeter: any
+ * channel not on `PLANKTON_PUBLIC_CHANNELS` must be refused. The exhaustive
+ * perimeter proof is the main.ts-level test, which invokes every channel the
+ * app actually registers.
+ */
+const CONTROLLED_CHANNELS = [
+  'hermes:api',
+  'hermes:connection',
+  'hermes:connection:for',
+  'hermes:connection:revalidate',
+  'hermes:backend:touch',
+  'hermes:gateway:ws-url',
+  'hermes:gateway:ws-url-for',
+  'hermes:connections:list',
+  'hermes:connections:test',
+  'hermes:connection-config:test',
+  'hermes:agents:roster',
+  'hermes:plugin-profile-routes',
+  'hermes:saveGatewayFile',
+  'hermes:readFileText',
+  'hermes:readFileDataUrl',
+  'hermes:readFileDataUrlForAttach',
+  'hermes:readPluginSource',
+  'hermes:watchDirectory',
+  'hermes:watchPreviewFile',
+  'hermes:selectPaths',
+  'hermes:readClipboard',
+  'hermes:logs:recent'
+]
+
 describe('plankton session gate — fail-closed while unauthenticated', () => {
-  it('refuses every gated data channel while logged out (exhaustive, not sampled)', () => {
-    for (const channel of PLANKTON_GATED_CHANNELS) {
+  it('refuses controlled data channels while logged out (and any unlisted channel too)', () => {
+    for (const channel of [...CONTROLLED_CHANNELS, 'hermes:some-future-channel']) {
       const decision = planktonGateDecision({ channel, loggedIn: false })
 
       expect(decision.allow, `${channel} must be refused`).toBe(false)
@@ -42,8 +72,8 @@ describe('plankton session gate — fail-closed while unauthenticated', () => {
     }
   })
 
-  it('allows gated channels once authenticated', () => {
-    for (const channel of [...PLANKTON_GATED_CHANNELS, ...PLANKTON_PUBLIC_CHANNELS]) {
+  it('allows controlled channels once authenticated', () => {
+    for (const channel of [...CONTROLLED_CHANNELS, ...PLANKTON_PUBLIC_CHANNELS]) {
       expect(planktonGateDecision({ channel, loggedIn: true }).allow, `${channel} must be allowed`).toBe(true)
     }
   })
@@ -61,7 +91,6 @@ describe('plankton session gate — fail-closed while unauthenticated', () => {
     expect(isPlanktonPublicChannel('plankton:sso-login')).toBe(true)
     expect(planktonGateDecision({ channel: 'PLANKTON:SSO-LOGIN', loggedIn: false }).allow).toBe(false)
     expect(planktonGateDecision({ channel: ' plankton:sso-login', loggedIn: false }).allow).toBe(false)
-    expect(isPlanktonGatedChannel('hermes:api ')).toBe(false)
   })
 
   it('a malformed channel is a refusal, never a pass', () => {

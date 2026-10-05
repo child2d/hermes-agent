@@ -140,7 +140,16 @@ export function createPlanktonAuth(deps: PlanktonAuthDeps): PlanktonAuth {
   }
 
   const persist = (session: StoredSession): void => {
-    fs.mkdirSync(deps.sessionDir, { recursive: true })
+    // Owner-only (0700) directory AND 0600 file. `mkdirSync`'s mode applies only
+    // to directories it actually creates, so chmod the leaf dir explicitly too —
+    // otherwise a pre-existing world-readable dir would leak the session file.
+    fs.mkdirSync(deps.sessionDir, { recursive: true, mode: 0o700 })
+
+    try {
+      fs.chmodSync(deps.sessionDir, 0o700)
+    } catch {
+      // best-effort (e.g. a filesystem without POSIX modes)
+    }
 
     const payload = JSON.stringify(
       { whoami: { ...session.whoami, raw: undefined }, refreshToken: session.refreshToken },
@@ -148,7 +157,6 @@ export function createPlanktonAuth(deps: PlanktonAuthDeps): PlanktonAuth {
       2
     )
 
-    // 0600 on the file; the directory stays owner-only too.
     fs.writeFileSync(sessionFile(), payload, { mode: 0o600 })
     fs.chmodSync(sessionFile(), 0o600)
   }
@@ -247,6 +255,12 @@ export function createPlanktonAuth(deps: PlanktonAuthDeps): PlanktonAuth {
       return { ok: false, error: `SSO 回调地址无效：${config.redirectUri}` }
     }
 
+    // The redirect URI pins a fixed loopback port (18922 by default) because the
+    // IdP has that redirect registered. If another local process holds the port,
+    // `listen` fails and login is refused (server 'error' → finishEarly) — a
+    // local DoS on login, not a data leak: no token is exchanged and no session
+    // is created. Accepted for now (a random port would need IdP-side dynamic
+    // redirect registration); the failure surfaces as a clear bind error.
     const requestedPort = redirect.port ? Number(redirect.port) : redirect.protocol === 'https:' ? 443 : 80
     const createServer = deps.createServer || http.createServer
 
@@ -265,6 +279,23 @@ export function createPlanktonAuth(deps: PlanktonAuthDeps): PlanktonAuth {
         )
 
         if (settled) {
+          return
+        }
+
+        // Only the configured callback PATH is a candidate (fail-closed): a
+        // request to any other path — a favicon probe, a stray local page —
+        // must not reach the token exchange even if it happens to carry
+        // `?code=`. Without this, a cross-origin/local request could feed an
+        // attacker-chosen code/state into the flow.
+        let callbackPath = ''
+
+        try {
+          callbackPath = new URL(url, 'http://127.0.0.1').pathname
+        } catch {
+          return
+        }
+
+        if (callbackPath !== redirect.pathname) {
           return
         }
 

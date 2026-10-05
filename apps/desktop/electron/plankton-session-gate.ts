@@ -15,20 +15,47 @@
  * WHAT CHANGED FROM THE OLD SHELL
  * -------------------------------
  * The old shell routed every renderer action through one `guardIpc` wrapper and
- * enumerated ~21 channel names. This base is a different architecture: the
- * renderer talks to a spawned `hermes serve` backend through the single
- * `hermes:api` IPC transport (electron/main.ts), and the backend is spawned by
- * `ensureBackend()`. So the gate is expressed over *data paths*, not a channel
- * list, and is enforced at two seams:
- *   1. `hermes:api` — refuse before `handleHermesApiRequest` (no data read/write,
- *      no session list);
- *   2. `ensureBackend` — refuse before spawn (`startHermes`), so an unauthenticated
- *      build never reads or writes the enterprise engine home at all.
+ * enumerated ~21 channel names. The lesson of that design is what matters, not
+ * the enumeration: the gate must live at the ONE registration point, so a new
+ * channel cannot be forgotten. This base keeps that shape — an explicit public
+ * allowlist and *everything else denied* while logged out — but adapts it to
+ * this architecture, which has two enforcement surfaces:
+ *
+ *   1. **IPC** — `installPlanktonIpcGate()` in electron/main.ts wraps the single
+ *      `ipcMain.handle` registration point. Every invoke channel (chat/session
+ *      `hermes:api`, connections, agents roster, gateway WS URLs, file reads,
+ *      clipboard, logs, …) is refused before its business handler runs unless it
+ *      is on the public allowlist. This is the old `guardIpc` equivalence:
+ *      default-closed, so an omitted channel is refused, not allowed.
+ *   2. **Backend spawn** — `assertPlanktonAuthenticated()` is called at the
+ *      lowest local-spawn chokepoint (`spawnOwnedBackend`) AND at each spawn
+ *      entry (`startHermes`, `ensureBackend`, `ensureRegistryBackend`,
+ *      `spawnPoolBackend`, `restoreBundledBackend`), so no caller can reach a
+ *      `hermes serve` child — and thus create/append the enterprise engine home
+ *      (`~/.plankton/engine/home`) — while logged out.
  *
  * PURE: every input is a parameter; no electron, no fs, no network.
  */
 
-/** Channels the login surface itself needs. Exactly these, nothing more. */
+/**
+ * The one and only public surface while logged out: the login flow itself and
+ * the pre-render identity facts the shell reads before any window content.
+ * EVERYTHING else is refused (default-closed). Kept explicit and frozen, as the
+ * old shell's list was: adding an entry must be a conscious change.
+ *
+ * Channels the default-closed IPC wrap therefore refuses while logged out
+ * include (not exhaustive — it is the point that the list need not be): the
+ * session/chat transport `hermes:api`; connection resolution
+ * (`hermes:connection`, `:for`, `:revalidate`, `hermes:backend:touch`); gateway
+ * URLs (`hermes:gateway:ws-url`, `:ws-url-for`); `hermes:connections:list` /
+ * `:test` and `hermes:connection-config:test`; `hermes:agents:roster`;
+ * `hermes:plugin-profile-routes`; `hermes:saveGatewayFile`; and every
+ * file / clipboard / log channel (`hermes:readFileText`,
+ * `hermes:readFileDataUrl`, `hermes:readFileDataUrlForAttach`,
+ * `hermes:readPluginSource`, `hermes:watchDirectory`,
+ * `hermes:watchPreviewFile`, `hermes:selectPaths`, `hermes:readClipboard`,
+ * `hermes:logs:recent`).
+ */
 export const PLANKTON_PUBLIC_CHANNELS = Object.freeze([
   // The login flow (this batch) — the only new channels.
   'plankton:sso-login',
@@ -39,25 +66,6 @@ export const PLANKTON_PUBLIC_CHANNELS = Object.freeze([
   'hermes:version',
   'hermes:feature-flags',
   'hermes:boot-progress:get'
-])
-
-/**
- * Data-carrying channels that must be refused while unauthenticated. Kept as an
- * explicit, auditable list (the old shell's lesson: an omitted channel must be a
- * conscious change, not an accident). `hermes:api` is the one every session /
- * chat / config read goes through; the others open backend connections.
- */
-export const PLANKTON_GATED_CHANNELS = Object.freeze([
-  'hermes:api',
-  'hermes:connection',
-  'hermes:connection:for',
-  'hermes:connection:revalidate',
-  'hermes:connection-config:get',
-  'hermes:connection-config:probe',
-  'hermes:gateway:ws-url',
-  'hermes:gateway:ws-url-for',
-  'hermes:backend:touch',
-  'hermes:agents:roster'
 ])
 
 export type PlanktonGateReason = 'authenticated' | 'public-channel' | 'not-authenticated' | 'bad-channel'
@@ -71,10 +79,6 @@ export interface PlanktonGateDecision {
 
 export function isPlanktonPublicChannel(channel: unknown): boolean {
   return typeof channel === 'string' && PLANKTON_PUBLIC_CHANNELS.includes(channel)
-}
-
-export function isPlanktonGatedChannel(channel: unknown): boolean {
-  return typeof channel === 'string' && PLANKTON_GATED_CHANNELS.includes(channel)
 }
 
 /** The uniform refusal payload — identical shape to every handler's `{ok:false}`. */

@@ -397,27 +397,55 @@ Everything else is a small Plankton-specific layer, because it has to be.
 | Piece | File | Role |
 |-------|------|------|
 | Config + URL + callback logic (pure) | `electron/plankton-sso.ts` | env → `<userData>/plankton-state/sso-config.local.json` → (dev only) bundled; packaged never reads a bundled secret |
-| Gate contract (pure) | `electron/plankton-session-gate.ts` | `PLANKTON_PUBLIC_CHANNELS` / `PLANKTON_GATED_CHANNELS`, `planktonGateDecision`, identity injection |
+| Gate contract (pure) | `electron/plankton-session-gate.ts` | `PLANKTON_PUBLIC_CHANNELS`, `planktonGateDecision`, identity injection |
 | Login driver + session store | `electron/plankton-auth.ts` | loopback listener, `client_secret` exchange, `session.json` at **0600** (no access token) |
-| Wiring | `electron/main.ts` | `plankton:sso-{login,status,logout}` (plankton only); `hermes:api` refuses before the backend; `ensureBackend` refuses before spawn |
+| Wiring | `electron/main.ts` | `installPlanktonIpcGate()` (single IPC registration point) + `assertPlanktonAuthenticated()` (spawn chokepoint + every spawn entry); `plankton:sso-{login,status,logout}` (plankton only) |
 | Bridge | `electron/preload.ts` (`planktonAuth`), `src/global.d.ts` | present only on an enterprise build |
 | Login UI | `src/app/plankton-auth-gate.tsx`, `src/main.tsx` | replaces the app until a session is live (pass-through upstream) |
 
-### The gate is enforced at two seams
+### The gate is fail-closed at two enforcement surfaces
 
-1. **`hermes:api`** — every session/chat/config read rides it; while logged out
-   it returns `{ok:false, code:'not-authenticated'}` instead of forwarding.
-2. **`ensureBackend`** — throws before a local spawn, so an unauthenticated build
-   reads/writes **no** enterprise engine home (`~/.plankton/engine/home`).
-3. The renderer never mounts the app while logged out, so the session list is
-   never requested in the first place.
+1. **IPC — the single registration point.** `installPlanktonIpcGate()` wraps
+   `ipcMain.handle` once, before the first channel is registered, so **every**
+   invoke channel (the `hermes:api` session transport, connections, roster,
+   gateway WS URLs, file reads, clipboard, logs, …) is refused before its
+   business handler runs unless it is on `PLANKTON_PUBLIC_CHANNELS`. This is the
+   old shell's `guardIpc` equivalence, and it is *default-closed*: a channel
+   added later is refused, not allowed. (`ipcMain.on` channels the preload needs
+   to build `window.hermesDesktop` carry no enterprise data and stay reachable.)
+2. **Backend spawn — the lowest chokepoint.** `assertPlanktonAuthenticated()` is
+   called inside `spawnOwnedBackend` (through which every `hermes serve` child is
+   created) AND at each spawn entry — `startHermes`, `ensureBackend`,
+   `ensureRegistryBackend`, `spawnPoolBackend`, `connectDesktopProfileRoute`,
+   `restoreBundledBackend` — so no caller can reach the engine while logged out.
+   `createWindow`'s direct `startHermes()` / `connectDesktopProfileRoute(...)`
+   startup is covered by the same chokepoint, not only by `ensureBackend`.
+3. **No enterprise-home write while logged out.** The desktop log lives under
+   `<HERMES_HOME>/logs/desktop.log`, so the first-launch model seed and the
+   `desktop.log` disk flush are both **deferred until a session is live** — a
+   logged-out launch creates no `config.yaml`, no `desktop.log` and no
+   `state.db` in the engine home. The renderer never mounts the app while logged
+   out, so the session list is never requested in the first place.
 
 ### Tests
 
-`npx vitest run --project electron electron/plankton-session-gate.test.ts
-electron/plankton-sso.test.ts electron/plankton-auth.test.ts` — 31 behavior
-tests, including a **local stub OIDC service** that drives the full chain
-(发起 → 回调正确/错误 → 令牌落盘 0600 → 门禁放行/拒绝) over real HTTP.
+```bash
+npx vitest run --project electron \
+  electron/plankton-session-gate.test.ts electron/plankton-sso.test.ts \
+  electron/plankton-auth.test.ts electron/plankton-login-gate-main.test.ts
+```
+
+- `plankton-session-gate.test.ts` / `plankton-sso.test.ts` / `plankton-auth.test.ts`
+  — the pure contracts + a local stub OIDC service driving the full chain
+  (发起 → 回调正确/错误 → 令牌落盘 0600 → 门禁放行/拒绝) over real HTTP.
+- `plankton-login-gate-main.test.ts` — the **execution carrier**: it esbuild-
+  bundles the real `main.ts`, loads it with `electron` stubbed in a sandbox
+  (home outside `~/.hermes`, no session), then (a) invokes **every** registered
+  invoke channel and asserts each non-public one returns the uniform
+  `{ok:false, code:'not-authenticated'}` denial — i.e. its business handler did
+  not run — and (b) resolves `app.whenReady()` so the real `createWindow()`
+  startup path runs, asserting `child_process.spawn` was never called and the
+  engine home (`state.db`/`config.yaml`/`desktop.log`) was never created.
 
 ### Still to verify here
 
