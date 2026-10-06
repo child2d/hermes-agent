@@ -1938,6 +1938,733 @@ const {
   attestation
 } = packSession
 
+// ─────────────────────────────────────────────────────────────────────────────
+// W2 · the SINGLE assembly point + the baymax pack (plugin face + ONE skill)
+//
+// Design: N7-20261006-plankton-session-packs §8 (W2 = `packs.js` +
+// `packs/baymax/declaration.js`, merged into `plankton-enterprise`) with §6
+// (the measured command surface) and N2 §0.1 (concept convergence, 裁定 3).
+//
+// TWO CARRIERS, ONE PACK (裁定 3 / the N2 §0.1 bridge table):
+//   * the PLUGIN carries "what can be drawn / what can be clicked" — the
+//     presentation & interaction face;
+//   * ONE SKILL carries "the domain's command surface / what instructions the
+//     agent may emit / how to onboard a new domain".
+// There is NO standalone "pack declaration" contract layer any more. The old
+// 15-item contract is still VALIDATED at load time (that rule moved into the
+// plugin registry together with the carrier — N2 §0.1), but its semantics are
+// owned by the two carriers; `PACK_CARRIERS` below is the machine-readable copy
+// of the bridge table, and `carrierOf()` is the only reader.
+//
+// The skill text is the PACK's own words: the host writes not one character
+// (N7 §3 item 15 / §6). plugin.js is evaluated as a blob and cannot read a
+// sibling file, so the markdown is inlined here — the committed
+// `skills/baymax/SKILL.md` is the agent-facing realization, and a node:test
+// pins the two BYTE-IDENTICAL so the copies cannot drift (SAME-VALUE LOCK;
+// same pattern as the W1 `EXEC_KINDS` registration and the batch-2 locks).
+//
+// NO I/O anywhere in this section: the assembly point reads the declaration it
+// was handed (`load()` is a function the pack owns — a load error is recorded
+// as a load failure, never silently dropped).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The 15-item bridge table (N2 §0.1 「旧装载契约 15 项的去向」) as machine data.
+ * `plugin` = presentation/interaction; `skill` = domain command surface /
+ * agent instructions / onboarding; `boundary` = the block tag is BOTH the
+ * carrier marker the agent emits AND the render key, so the presentation side
+ * stays with the plugin while the instruction NAME is the skill's.
+ */
+const PACK_CARRIERS = Object.freeze({
+  discriminant: 'plugin',
+  failureMap: 'plugin',
+  fieldTiers: 'plugin',
+  destructiveParams: 'plugin',
+  broadcastPredicate: 'plugin',
+  landing: 'plugin',
+  outputs: 'boundary',
+  requiredParams: 'skill',
+  valueLookup: 'skill',
+  steps: 'skill',
+  lookupFields: 'skill',
+  outputParsing: 'skill',
+  templates: 'skill',
+  skill: 'skill',
+  skillDoc: 'skill'
+})
+
+/** Which carrier owns a contract item. Unknown key ⇒ `null` (never guess). */
+function carrierOf(key) {
+  return Object.hasOwn(PACK_CARRIERS, key) ? PACK_CARRIERS[key] : null
+}
+
+/** The ONE skill's markdown — the single source, byte-locked to skills/baymax/SKILL.md. */
+const BAYMAX_SKILL_MARKDOWN = [
+  "---",
+  "name: baymax",
+  "description: 在对话里把工作沉淀成 Baymax 工单——本域的命令面、agent 能发的指令与接入一个新域的纪律（plankton 企业包 baymax）。",
+  "---",
+  "",
+  "# 把对话里的工作沉淀成工单（baymax）",
+  "",
+  "这套能力由 plankton 的 **baymax 包**提供：**对话里产生的工作，落成工单**。",
+  "你负责起草、把「还缺什么」问清楚；**写台账这个动作由人在界面上点确认**，你不直接写。",
+  "",
+  "一份 skill 承载三件事：**这个域有哪些命令**（下称「域命令面」）、**你能发什么指令**、",
+  "以及**接一个新域怎么接**。画法（画成卡片还是表格、算哪些统计）**不归你管**。",
+  "",
+  "## 一、什么时候沉淀",
+  "",
+  "- 有决定产生、动作要留痕、需要跨人协作时 → 沉淀（**不为了记而记**）。",
+  "- 还只是聊聊、没有结论 → 先不落；结论出来了再落。",
+  "- 一次对话的产物是**一棵小树**：父项一条，子项各一条。",
+  "",
+  "## 二、你能发的指令（只给数据，不管画法）",
+  "",
+  "在你的回复正文里发一个**指令块**：`::<指令名>{<引用键>=\"<值>\"}` —— 数据由 plankton 在渲染期",
+  "取回并画好（**你不要把整份 JSON 塞进指令里**，指令属性只放扁平键值、不能嵌套花括号、长度有上限）。",
+  "",
+  "| 指令名 | 记录形态 | 用途 |",
+  "|---|---|---|",
+  "| `plankton-baymax-new` | 单条 | 新建一条工单的草稿 |",
+  "| `plankton-baymax-update` | 单条 | 改一条既有工单的草稿 |",
+  "| `plankton-baymax-plan` | 多条 | 本次对话的计划（一串记录） |",
+  "",
+  "- 引用键用 `key`（如 `::plankton-baymax-new{key=\"tree-1\"}`）：**同一 `key` = 同一张卡片**，",
+  "  改措辞就重新发一次同名同 key 的指令，不会冒出第二张；一次要落多张同类的东西（父项 + 子项）",
+  "  就给每张一个不同的 `key`（`key` 只用于区分，不参与呈现）。",
+  "- **字段键只能用该指令声明过的那些**。自造键 ⇒ 整个指令被拒、**退回原文显示**（内容不丢，但没卡片）。",
+  "- 每张卡片上能点什么，由 plankton 声明（新建＝确认新建／丢草稿；更新＝确认更新／丢草稿；",
+  "  计划＝刷新／标记推进）。**你不要自己去算统计**（统计由 plankton 从你给的记录里算）。",
+  "",
+  "### 字段纪律（最要紧的一条）",
+  "",
+  "三类字段，错一类就写不进去：",
+  "",
+  "1. **可代笔**（`agent-drafted`）：标题措辞、描述整理、评论、状态变更说明 —— 你来写。",
+  "2. **必须是本人给的事实**（`user-fact`）：计划开始／计划结束、预估／实际工时、负责人、验收结论。",
+  "   有值就必须**带佐证**（使用者原话，且原话必须真的在本会话里出现过）。没给就留空",
+  "   —— 卡片会显示「等你给」。**不要替人猜一个**：拿不出佐证，这张卡连造都造不出来。",
+  "3. **必须是本人指定**（`user-designated`）：项目、类型、优先级、标签、上级项、状态。",
+  "   值必须来自台账清单（确认前 plankton 会真查一次），而且**由本人说** —— 不要替他挑。",
+  "   查不到、查不动 ⇒ 不写。",
+  "",
+  "### 必填（写台账要用到）",
+  "",
+  "`project-id`（项目）、`type-id`（类型）、`title`（标题）。",
+  "",
+  "缺任一项时：卡片照常显示、确认按钮点不动，界面会直说「还缺：类型」。",
+  "你的活是**问清楚**（「这条按需求还是缺陷建？」），不是猜一个类型填上。",
+  "",
+  "## 三、域命令面（取值与核对，都用 shaoke-cli 读，别凭记忆）",
+  "",
+  "本域共实测 **15 条命令**（读 10 / 写 5）；本期**用 13 条**，显式排除 2 条：",
+  "",
+  "- ✅ 读 10：`+issue-list` `+issue-get` `+issue-history` `+relation-list` `+project-list`",
+  "  `+project-get` `+status-list` `+type-list` `+user-list` `+whoami`",
+  "- ✅ 写 3（对应 5 条写命令中的 3 条）：`+issue-create` `+issue-update` `+issue-comment`",
+  "- 🚫 排除 `+issue-link`（实测走 `setIssueRelations`，建的是**无向关联**，参数名里的 parent/child",
+  "  有误导性；父子关系一律用 `--parent-id`）",
+  "- 🚫 排除 `+relation-remove`（需关联 id，而「关联」本期不在流程内）",
+  "",
+  "取值出口（本人指定类字段的合法取值就从这里查）：",
+  "",
+  "- 项目：`shaoke-cli baymax +project-list`",
+  "- 类型：`shaoke-cli baymax +type-list --project-id <项目>`",
+  "- 状态：`shaoke-cli baymax +status-list --project-id <项目>`",
+  "- 人：`shaoke-cli baymax +user-list`",
+  "- 已有工单：`shaoke-cli baymax +issue-list --project-id <项目> [--assignee <账号>] [--status <状态>]`",
+  "- 单条详情：`shaoke-cli baymax +issue-get --project-id <项目> --id <id>`",
+  "- **无字典出口**：`priority-id`、`label-ids` 没有 `+priority-list` / `+label-list` ——",
+  "  取值由本人给出，不要编一个 id。",
+  "- `parent-id` 是**派生**：先建父项、拿回编号、按编号回读拿 id。",
+  "",
+  "命令面纪律（实测结论，照着来）：",
+  "",
+  "- **判别式是输出信封的 `ok`，不是退出码**。退出码只是可机器区分的**旁证**：",
+  "  参数错＝`2`、接口错＝`1`、正常＝`0`；空结果一律 `ok:true`。",
+  "- **类型没有人类可读名**（只有 `typeId`）：`+type-list --project-id <项目>` 拿到的是 id 与",
+  "  形如 `Requirements/需求` 的 name，而 `+issue-list` 回来的条目里**没有 `type` 对象** ——",
+  "  要给人看类型名，必须**按 typeId 去 `+type-list` 的清单里对**。",
+  "- **`+type-list` 不给 `--project-id` 会静默按项目 1 出结果**（`--help` 写 `default \"1\"`）——",
+  "  各项目的类型 id 空间完全不同，因此**永远显式带上 `--project-id`**，不要用默认值。",
+  "- **`+issue-create` 的 `--type-id` 虽然 CLI 标 optional，服务端会真拒**（`缺少 projectTypeId 上下文，",
+  "  无法进行权限校验`，FORBIDDEN）⇒ 建单必须带类型。",
+  "- **`+issue-update --label-ids` 是全量替换**：传的是完整标签集合；省略＝不动、传空＝清空。",
+  "  后果要先跟本人说清。",
+  "- **分页**：`+issue-list` 默认 `-n 20`、`+project-list` 默认 `-n 50`；总数在 `data.total`（全量），",
+  "  本页在 `data.data`（**双层 data**）。取完一页要**按 total 判全没全**，空页不等于没有数据。",
+  "- `--fields` 可点名要哪些键；`_meta.fields` 会回显你请求的字段。**键缺失 ≠ 字段不受支持**",
+  "  （值为 null 的键直接不出现）。",
+  "- `+relation-list` 没有关联时返回**空数组** `data:[]`（不是 `null`）。",
+  "- 查一个不存在的 id：**实测报的是权限类错误**（`缺少 projectTypeId 上下文…`），",
+  "  **不是**「未找到」⇒ **「查不到」不等于「不存在」**（项目号写错、权限、分页都会让人看不见）。",
+  "- **写命令的 `--dry-run` 只回将要发出的请求，不校验取值**（非法 id 仍 `ok:true`）；",
+  "  读命令的 `--dry-run` 是**真跑**。别拿它当「安全的预检」。",
+  "- 失败时信封走 **stderr**（混着升级提示），取信封要**逐行找可解析的 JSON 对象**，不要整体 `JSON.parse`。",
+  "",
+  "## 四、落树",
+  "",
+  "- 先建父项 → 拿到编号 → 用 `+issue-get` 回读 id → 子项带 `--parent-id` 建。",
+  "- 父子只用 `--parent-id`；`+issue-link` 是**无向关联**，别拿它当父子。",
+  "- 中间态：父已建、某子未建＝**半成状态** —— 逐项显示（哪条成了、哪条没成），",
+  "  **不回滚已成的项、也不重试已成的项**。",
+  "",
+  "## 五、失败怎么处置",
+  "",
+  "- **结果未知**（超时 / 写成功但回执取不到）：先按标题去台账查一遍，确认没写再重来。",
+  "  **不要自动重试。** 注意 `ok:true` 只是信封层信号 —— 回执只回显 `id / title / issueKey /",
+  "  status{name} / statusId / 时间戳`（**有单号、无 URL**），**不回显** `parentId / assigneeName /",
+  "  labels`；写入是否落到位必须另行 `+issue-get` / `+issue-history` 读回。",
+  "- **被拒**：台账要说的话会原样显示在卡片上 —— 照它改，然后请人再确认一次。",
+  "- 「确定没写进去」的卡片可以再来一次；「结果未知／部分写入／可能重复」的**先别点**，先核对。",
+  "- **命令面没有删除命令**（15 条里没有）⇒ 误建的单**只能关闭、不能删除**；真有误建，交给本人处置。",
+  "",
+  "## 六、不要做的事",
+  "",
+  "- 不代填人类字段，不替人挑类型／项目／优先级，不猜日期。",
+  "- **不要指定画法，也不要自己算合计** —— 数据是你的活，画法是 plankton 的活。",
+  "- 描述里只放 spec 链接槽位；技术偏好、讨论过程进评论（评论也是人确认后才写）。",
+  "- 不绕开卡片直接写台账：**宿主只认卡片**；`--dry-run` 只能用来预演，不是「预检」。",
+  "",
+  "## 七、接一个新域怎么接（接入）",
+  "",
+  "本包是「插件（能画什么／能点什么）+ **一份 skill**（域命令面／agent 指令／接入）」两件套；",
+  "**没有**独立的「包声明」契约层。接一个新域按这四步：",
+  "",
+  "1. **先实测命令面**：把该域 CLI 的 `+<cmd> --help` 逐条抓下来（命令名、参数、必填、读写方向），",
+  "   形成事实基线。**漂移要能被发现** —— 声明与实测不一致就是缺陷，不是「文档旧了」。",
+  "2. **写声明（数据面在插件里，命令面在这份 skill 里）**：",
+  "   - 留在**插件**的是「能画什么／能点什么」：成败判别式与结果→呈现态映射、字段分级、",
+  "     破坏性参数、播报谓词、落点（装配点唯一）、标准输出（块名／记录形态／字段键／动作）。",
+  "   - 放进**这份 skill** 的是「域命令面／agent 指令／接入」：每命令必填与依赖、取值出口、",
+  "     多步流程与中间态、可查字段与存在性核对算法、输出解析（信封／分页／失败信封）、",
+  "     写模板（命令、必填、参数序列、回执路径）。",
+  "3. **登记装配点**：在**唯一**的装配点里加一行（包 id + `load()`）；宿主核心不得出现任何",
+  "   具体域的包名或命令名。**拔掉那一行 ⇒ 写路径与呈现能力整体消失**，宿主不留残留开关。",
+  "4. **别把画法带进来**：声明里一旦出现版式指令（用什么版式／排序／算什么统计），装载即拒。",
+  "   统计只能由宿主从同一份产出算；值必须是**状态名**而不是散文字符串（宿主真按它落态）。",
+  "",
+].join('\n')
+
+/** Write templates: the executor validates only these four things (N7 §5.5). */
+const BAYMAX_WRITE_TEMPLATES = [
+  {
+    id: 'create-item',
+    // **写模板**：读路径（runRead）据 kind 一律拒跑；不再靠「有没有被视图动作引用」判断
+    kind: 'write',
+    module: 'baymax',
+    command: '+issue-create',
+    // `type-id` 是**必填**，尽管 CLI 的 --help 标它 optional：实测不带它服务端直接拒
+    //   {"error":{"type":"api","subtype":"api_error","message":"…缺少 projectTypeId 上下文，无法进行权限校验"}}
+    // （rc=1、ok:false、FORBIDDEN）。比 CLI 更严是 fail-closed。
+    required: ['project-id', 'type-id', 'title'],
+    optional: [
+      'description',
+      'status-id',
+      'priority-id',
+      'assignee-id',
+      'estimate-start',
+      'estimate-end',
+      'estimate-workload',
+      'label-ids',
+      'parent-id'
+    ],
+    args: [
+      '--project-id',
+      { field: 'project-id' },
+      '--title',
+      { field: 'title' },
+      { when: 'description', args: ['--description', { field: 'description' }] },
+      { when: 'type-id', args: ['--type-id', { field: 'type-id' }] },
+      { when: 'status-id', args: ['--status-id', { field: 'status-id' }] },
+      { when: 'priority-id', args: ['--priority-id', { field: 'priority-id' }] },
+      { when: 'assignee-id', args: ['--assignee-id', { field: 'assignee-id' }] },
+      { when: 'estimate-start', args: ['--estimate-start', { field: 'estimate-start' }] },
+      { when: 'estimate-end', args: ['--estimate-end', { field: 'estimate-end' }] },
+      { when: 'estimate-workload', args: ['--estimate-workload', { field: 'estimate-workload' }] },
+      { when: 'label-ids', args: ['--label-ids', { field: 'label-ids' }] },
+      { when: 'parent-id', args: ['--parent-id', { field: 'parent-id' }] }
+    ],
+    // 实测（2026-10-06 写侧最小验证，真建 PM-3268）：写响应把工单**平铺**进 data
+    //   {"data":{"id":"3268","title":"…","issueKey":"PM-3268","status":{"name":"…"},…},"ok":true}
+    // ⇒ 主路径就是 data.issueKey；回执**有单号、无 URL 字段**。
+    refPath: 'data.issueKey',
+    refPathFallbacks: ['data.id', 'data.createIssue.issueKey']
+  },
+  {
+    id: 'update-item',
+    kind: 'write',
+    module: 'baymax',
+    command: '+issue-update',
+    required: ['project-id', 'id'],
+    optional: [
+      'title',
+      'description',
+      'status-id',
+      'type-id',
+      'priority-id',
+      'assignee-id',
+      'estimate-start',
+      'estimate-end',
+      'estimate-workload',
+      'actual-workload',
+      'label-ids',
+      'parent-id'
+    ],
+    args: [
+      '--project-id',
+      { field: 'project-id' },
+      '--id',
+      { field: 'id' },
+      { when: 'title', args: ['--title', { field: 'title' }] },
+      { when: 'description', args: ['--description', { field: 'description' }] },
+      { when: 'status-id', args: ['--status-id', { field: 'status-id' }] },
+      { when: 'type-id', args: ['--type-id', { field: 'type-id' }] },
+      { when: 'priority-id', args: ['--priority-id', { field: 'priority-id' }] },
+      { when: 'assignee-id', args: ['--assignee-id', { field: 'assignee-id' }] },
+      { when: 'estimate-start', args: ['--estimate-start', { field: 'estimate-start' }] },
+      { when: 'estimate-end', args: ['--estimate-end', { field: 'estimate-end' }] },
+      { when: 'estimate-workload', args: ['--estimate-workload', { field: 'estimate-workload' }] },
+      { when: 'actual-workload', args: ['--actual-workload', { field: 'actual-workload' }] },
+      { when: 'label-ids', args: ['--label-ids', { field: 'label-ids' }] },
+      { when: 'parent-id', args: ['--parent-id', { field: 'parent-id' }] }
+    ],
+    // 实测（2026-10-06 写侧最小验证，真改 PM-3268）：写响应同样把工单平铺进 data。
+    refPath: 'data.issueKey',
+    refPathFallbacks: ['data.id', 'data.updateIssue.issueKey']
+  },
+  {
+    id: 'add-comment',
+    kind: 'write',
+    module: 'baymax',
+    command: '+issue-comment',
+    required: ['issue-id', 'content'],
+    optional: [],
+    args: ['--issue-id', { field: 'issue-id' }, '--content', { field: 'content' }],
+    // 实测（2026-10-06）：评论响应也是平铺 {"data":{"id":"…","content":"…","authorName":"陈涛"…},"ok":true}
+    refPath: 'data.id',
+    refPathFallbacks: ['data.createComment.id']
+  }
+]
+
+/** Read templates: refresh a card, resolve a value, confirm existence — all read-only. */
+const BAYMAX_READ_TEMPLATES = [
+  { id: 'list-issues', kind: 'read', module: 'baymax', command: '+issue-list', required: ['project-id'], optional: ['scene', 'status', 'assignee', 'label-ids', 'offset', 'limit', 'fields'],
+    // 实测：`-n/--limit` 默认 20；总数是**全量**（data.total），本页在 data.data（**双层 data**）
+    shape: 'paged',
+    itemsPath: 'data.data', totalPath: 'data.total',
+    args: ['--project-id', { field: 'project-id' },
+      { when: 'scene', args: ['--scene', { field: 'scene' }] },
+      { when: 'status', args: ['--status', { field: 'status' }] },
+      { when: 'assignee', args: ['--assignee', { field: 'assignee' }] },
+      { when: 'label-ids', args: ['--label-ids', { field: 'label-ids' }] },
+      { when: 'offset', args: ['--offset', { field: 'offset' }] },
+      { when: 'limit', args: ['--limit', { field: 'limit' }] },
+      { when: 'fields', args: ['--fields', { field: 'fields' }] }] },
+  // 实测：`+issue-get` 的 data **就是工单对象本体**（不是列表、不是 {issue:{…}}）
+  { id: 'get-issue', kind: 'read', module: 'baymax', command: '+issue-get', required: ['project-id', 'id'], optional: [], refPath: 'data.issueKey', shape: 'object',
+    args: ['--project-id', { field: 'project-id' }, '--id', { field: 'id' }] },
+  { id: 'issue-history', kind: 'read', module: 'baymax', command: '+issue-history', required: ['project-id', 'id'], optional: [], shape: 'array',
+    args: ['--project-id', { field: 'project-id' }, '--id', { field: 'id' }] },
+  // 实测（2026-10-06 漂移复核）：没有关联时返回**空数组** `data:[]`（不是 null）；`-n` 是 unknown flag
+  { id: 'relation-list', kind: 'read', module: 'baymax', command: '+relation-list', required: ['issue-id'], optional: [], shape: 'array',
+    args: ['--issue-id', { field: 'issue-id' }] },
+  { id: 'project-list', kind: 'read', module: 'baymax', command: '+project-list', required: [], optional: ['offset', 'limit'],
+    shape: 'paged', itemsPath: 'data.data', totalPath: 'data.total',
+    args: [{ when: 'offset', args: ['--offset', { field: 'offset' }] },
+      { when: 'limit', args: ['--limit', { field: 'limit' }] }] },
+  { id: 'project-get', kind: 'read', module: 'baymax', command: '+project-get', required: ['project-id'], optional: [], shape: 'object',
+    args: ['--project-id', { field: 'project-id' }] },
+  { id: 'status-list', kind: 'read', module: 'baymax', command: '+status-list', required: ['project-id'], optional: [], shape: 'array',
+    args: ['--project-id', { field: 'project-id' }] },
+  // 实测：`+type-list --help` 写 `Project ID (default "1")` —— 不传就静默按项目 1 出类型，
+  // 而各项目的类型 id 空间不同。声明把它定成**必填**：宁可让执行器拒，也不让 CLI 替人猜。
+  { id: 'type-list', kind: 'read', module: 'baymax', command: '+type-list', required: ['project-id'], optional: [], shape: 'array',
+    args: ['--project-id', { field: 'project-id' }] },
+  { id: 'user-list', kind: 'read', module: 'baymax', command: '+user-list', required: [], optional: [], shape: 'array', args: [] },
+  // 实测形状：data 是本人对象 {account,id,name,permissionCodes}
+  { id: 'whoami', kind: 'read', module: 'baymax', command: '+whoami', required: [], optional: [], shape: 'object', args: [] }
+]
+
+const BAYMAX_TEMPLATES = [...BAYMAX_READ_TEMPLATES, ...BAYMAX_WRITE_TEMPLATES]
+
+/** Commands actually used by the templates (the host accepts only this set). */
+const BAYMAX_USED_COMMANDS = [...new Set(BAYMAX_TEMPLATES.map((t) => t.command))]
+
+/** The two commands of the measured 15 this pack deliberately does NOT use. */
+const BAYMAX_EXCLUDED_COMMANDS = Object.freeze({
+  '+issue-link': '实测走 setIssueRelations（无向关联），参数名里的 parent/child 有误导性；父子关系用 --parent-id',
+  '+relation-remove': '需要关联 id，而「关联」本期不在流程内'
+})
+
+/**
+ * The baymax declaration — re-cut by the two carriers (裁定 3), then JOINTED so
+ * the registry's 15-item load-time validation still runs over one object.
+ * `pluginFace` carries presentation/interaction; `skillFace` carries the domain
+ * command surface + the one skill. No key appears in both.
+ */
+const BAYMAX_PLUGIN_FACE = {
+  // ① 成功/失败判别式（实测 2026-10-06）：信封顶层 `ok` 判成败；**退出码不作判别式**
+  // （退出码可机器区分：参数错＝2／接口错＝1／正常＝0 —— 是旁证，不是判据）。
+  discriminant:
+    '以输出信封顶层 `ok` 判成败（配 `_meta`／`data`／`error`）；**退出码不作判别式** —— 实测（2026-10-06）参数错 `ok:false` 配 rc=2、接口错配 rc=1、正常 rc=0，空结果一律 `ok:true`。',
+
+  // ② 结果形态 → 卡片状态。**值是状态名（机器可读）**，宿主真按它落态。
+  // 判定原则：**只要进程可能已经跑过，就不许判「确定没写」**（那张卡可以重试）。
+  failureMap: {
+    ok: 'written',
+    rejected: 'failed',
+    unparsed: 'write-unknown',
+    timeout: 'write-unknown',
+    'spawn-error': 'write-unknown',
+    refused: 'blocked'
+  },
+  // 同一份映射的**说明**（给人读；宿主不消费，别声称它被机器使用）
+  failureNotes: {
+    ok: '有回执＝写进去了；无回执＝结果未知（写是成功的，编号没拿到，先核对再补交）',
+    rejected: '命令被拒／参数不合法／权限不足：`error.type/subtype/message/param` 如实呈现到卡片上',
+    unparsed: '输出解析不了 ⇒ 结果未知（不得自动重试；先核对存在性）',
+    timeout: '超时 ⇒ 结果未知（同上）',
+    'spawn-error': '进程没起来或非零退出且没有信封 ⇒ 结果未知（可能已跑过一半）',
+    refused: '宿主侧校验未过 ⇒ 没执行，卡片留在原态，人可改后再确认'
+  },
+
+  // ④ 破坏性语义（逐条带依据）
+  destructiveParams: [
+    { name: 'label-ids', semantics: '**全量替换**：传的是完整标签集合，省略即不动、传空即清空', evidence: '--help 原文：Replace labels (full replacement set; empty clears all labels)' },
+    { name: 'parent-id', semantics: '改挂父项即改变树的归属（当前批次只用来落树，不做跨树搬迁）', evidence: '--help 只为 (for subtasks)/(for reparenting)，未写替换语义 —— 按「改变归属」保守加严' },
+    { name: 'status-id', semantics: '状态跳变会改「扭转时间」口径（该值取自变更历史里最新一次状态变更）', evidence: '--help 无 danger/replacement 字样；依据是业务口径（状态变了＝扭转时间变），保守加严' }
+  ],
+
+  // ⑨ 字段分级（机器可读；宿主据此判断「agent 能不能代笔」）
+  fieldTiers: {
+    title: 'agent-drafted',
+    description: 'agent-drafted',
+    content: 'agent-drafted',
+    'status-id': 'user-designated',
+    'type-id': 'user-designated',
+    'priority-id': 'user-designated',
+    'label-ids': 'user-designated',
+    'parent-id': 'user-designated',
+    'project-id': 'user-designated',
+    id: 'user-designated',
+    'issue-id': 'user-designated',
+    'assignee-id': 'user-fact',
+    'estimate-start': 'user-fact',
+    'estimate-end': 'user-fact',
+    'estimate-workload': 'user-fact',
+    'actual-workload': 'user-fact'
+  },
+
+  // ⑩ 包落点、装配点与排除集（新底座：Batch-2 的插件投递形态）
+  landing: {
+    module: 'desktop/plugin.js — the W2 section (assembly point and the baymax pack)',
+    assemblyPoint: 'desktop/plugin.js — installedPacks() is the only place that names a pack',
+    note: '宿主核心不得出现本包的专有字面；本包声明与那份技能构成宿主边界护栏的**声明排除集**（包本来就有专有字面）。投递沿用批 2 的插件形态：产物 Contents/Resources/enterprise/plankton-enterprise → <HERMES_HOME>/plugins 与 <HERMES_HOME>/desktop-plugins。'
+  },
+
+  // ⑬ 标准输出声明：**本包给数据，宿主给画法**。只说四件事：有哪些块（agent 产出载荷的标记）、
+  //    每块的记录形态、每条记录携带哪些字段键、这块上可发生哪些动作（以及动作绑定的模板）。
+  //    **不声明版式与统计** —— 声明里出现原语名／版式槽位／形状 id ⇒ 装载即拒。
+  //    字段语义里的 `role` 是宿主认的**语义角色**（哪个是标题、哪个是到期日），不是版式。
+  outputs: {
+    blocks: [
+      {
+        tag: 'plankton-baymax-new',
+        record: 'single',
+        fields: [
+          'project-id',
+          'type-id',
+          'title',
+          'description',
+          'status-id',
+          'priority-id',
+          'assignee-id',
+          'estimate-start',
+          'estimate-end',
+          'estimate-workload',
+          'label-ids',
+          'parent-id'
+        ],
+        actions: ['confirm-create', 'discard']
+      },
+      {
+        tag: 'plankton-baymax-update',
+        record: 'single',
+        fields: [
+          'id',
+          'project-id',
+          'title',
+          'description',
+          'status-id',
+          'type-id',
+          'priority-id',
+          'assignee-id',
+          'estimate-start',
+          'estimate-end',
+          'estimate-workload',
+          'actual-workload',
+          'label-ids',
+          'parent-id'
+        ],
+        actions: ['confirm-update', 'discard']
+      },
+      {
+        tag: 'plankton-baymax-plan',
+        record: 'collection',
+        fields: ['issueKey', 'title', 'status', 'assignee', 'estimateEnd'],
+        actions: ['refresh', 'mark-progress']
+      }
+    ],
+    // 字段键 → 语义（label／含义／是否必填／何时给／语义角色）。宿主**按语义取舍，不按它定版式**。
+    fields: {
+      'project-id': { label: '项目', meaning: '工单所属项目（读与写都以它为作用域）', required: true, when: '总是需要' },
+      'type-id': { label: '类型', meaning: '工单类型；取值来自台账清单', required: true, when: '新建时必填（比 CLI 更严，见 requiredBeyondCli）' },
+      title: { label: '标题', meaning: '这条工单要做什么（一句话）', role: 'title', required: true, when: '新建时必填；改措辞＝重新发同一个指令' },
+      description: { label: '描述', meaning: '背景与结论（明文契约：纯文本 + 单一链接）', when: '有整理好的背景时给' },
+      id: { label: '工单 id', meaning: '更新目标；编号与 id 不是一回事，须按编号回读确认', required: true, when: '更新时必填' },
+      'status-id': { label: '状态', meaning: '状态取值；取值来自台账清单', when: '要推进时给' },
+      'priority-id': { label: '优先级', meaning: '无字典出口：取值由本人给出', when: '本人指定时给' },
+      'assignee-id': { label: '负责人', meaning: '人名 → id；本人给的事实', when: '本人指定负责人时给' },
+      'estimate-start': { label: '计划开始', meaning: '计划开始日期；本人给的事实', when: '本人给时' },
+      'estimate-end': { label: '计划结束', meaning: '计划结束日期；本人给的事实', when: '本人给时' },
+      'estimate-workload': { label: '预估工时', meaning: '预估工时；本人给的事实', when: '本人给时' },
+      'actual-workload': { label: '实际工时', meaning: '实际工时；本人给的事实', when: '本人给时' },
+      'label-ids': { label: '标签', meaning: '标签集合（全量替换语义）；无字典出口：取值由本人给出', when: '本人指定时' },
+      'parent-id': { label: '上级工单', meaning: '父项 id；落树时由新建回执的编号回读取得', when: '落子项时' },
+      issueKey: { label: '编号', meaning: '工单编号（人看得懂的引用）' },
+      status: { label: '状态', meaning: '状态名（读回来的展示值）' },
+      assignee: { label: '负责人', meaning: '负责人名（读回来的展示值）' },
+      estimateEnd: { label: '计划结束', meaning: '计划结束日期（读回来的展示值）', role: 'due-date' }
+    },
+    actions: {
+      'confirm-create': { label: '确认新建', human: 'confirm', writes: 'create-item' },
+      'confirm-update': { label: '确认更新', human: 'confirm', writes: 'update-item', destructive: true },
+      discard: { label: '丢弃草稿', human: 'discard' },
+      refresh: { label: '刷新', human: 'progress', reads: 'list-issues' },
+      'mark-progress': { label: '标记推进', human: 'progress', writes: 'update-item' }
+    }
+  },
+
+  // ⑫ 播报谓词（宿主只问「有没有」，内容口径在本包）
+  broadcastPredicate: (context = {}) => {
+    const items = Array.isArray(context?.items) ? context.items : []
+    const today = typeof context?.todayIso === 'string' && context.todayIso ? context.todayIso : null
+    const dueSoon = items.filter((item) => item && item.dueSoon === true).length
+    const hasDue = (item) => typeof item?.dueEnd === 'string' && item.dueEnd.trim() !== ''
+    const overdue = today ? items.filter((item) => hasDue(item) && item.dueEnd < today).length : 0
+    const missingDue = items.filter((item) => item && !item.dueEnd).length
+    const hasContent = overdue + dueSoon > 0
+    return {
+      hasContent,
+      detail: hasContent ? { overdue, dueSoon, missingDue } : null,
+      note: '口径：逾期＝计划结束早于今天（本地按列表取值判）；今日截止取自服务端 DUE_SOON 场景，是 24 小时窗口而非自然日'
+    }
+  }
+}
+
+const BAYMAX_SKILL_FACE = {
+  // ③ 每命令必填参数与依赖（＝CLI 自己强制的必填，实测 --help 的镜像；
+  //    装载时用来校验「模板不得比 CLI 更松」）
+  requiredParams: {
+    '+issue-create': ['--project-id', '--title'],
+    '+issue-update': ['--project-id', '--id'],
+    '+issue-comment': ['--issue-id', '--content'],
+    '+issue-list': ['--project-id'],
+    '+issue-get': ['--project-id', '--id'],
+    '+issue-history': ['--project-id', '--id'],
+    '+relation-list': ['--issue-id'],
+    '+project-get': ['--project-id'],
+    '+project-list': [],
+    '+status-list': ['--project-id'],
+    '+type-list': [],
+    '+user-list': [],
+    '+whoami': []
+  },
+
+  // 实测命令面（15 条）里每条命令的**方向**（读/写）。模板的 kind 必须与它一致。
+  surface: {
+    '+issue-create': 'write',
+    '+issue-update': 'write',
+    '+issue-comment': 'write',
+    '+issue-link': 'write',
+    '+relation-remove': 'write',
+    '+issue-get': 'read',
+    '+issue-list': 'read',
+    '+issue-history': 'read',
+    '+relation-list': 'read',
+    '+project-get': 'read',
+    '+project-list': 'read',
+    '+status-list': 'read',
+    '+type-list': 'read',
+    '+user-list': 'read',
+    '+whoami': 'read'
+  },
+
+  // 比 CLI 更严的必填（每条带依据）。装载时校验：模板的 required 不得比 requiredParams 松，
+  // 多出来的 flag 必须在这里有登记（「更严」不许悄悄加）。
+  requiredBeyondCli: {
+    '+issue-create': [
+      {
+        flag: '--type-id',
+        why: '实测不带 --type-id 真建：rc=1、ok:false、`缺少 projectTypeId 上下文，无法进行权限校验`（FORBIDDEN）——服务端要类型上下文做鉴权，CLI 的 --help 却标它 optional'
+      }
+    ],
+    '+type-list': [
+      {
+        flag: '--project-id',
+        why: '实测 --help 写 `Project ID (default "1")`：不传就静默按项目 1 出类型，而各项目的类型 id 空间完全不同（项目 1 与项目 3 无公共 id）'
+      }
+    ]
+  },
+
+  // ⑤ 取值查询路径（须本人指定的字段，取值一律查表；无出口的如实标缺口）
+  valueLookup: {
+    'project-id': { template: 'project-list', labelField: 'projectName', valueField: 'id', note: '`project-list` 是分页形状' },
+    'status-id': { template: 'status-list', labelField: 'name', valueField: 'id', scope: ['project-id'], note: '状态属具体项目，必须带 --project-id' },
+    'type-id': { template: 'type-list', labelField: 'name', valueField: 'id', scope: ['project-id'], note: '类型属具体项目；`--project-id` 缺省值是 1，属静默错域陷阱，因此模板把它设为必填' },
+    'assignee-id': { template: 'user-list', labelField: 'name', valueField: 'id', note: '人名 → id；人名不保证唯一，选值时须连账号一起看' },
+    'priority-id': { gap: '无字典出口（实测无 +priority-list）：取值须由使用者给出' },
+    'label-ids': { gap: '无字典出口（实测无 +label-list）：取值须由使用者给出；且为全量替换语义' },
+    'parent-id': { derived: '落树时先建父项，取新建回执的编号，再按编号回读拿 id（编号与 id 不是一回事）' },
+    // 出口分四类，**决定了该字段的佐证形态**（宿主据此判，见 read-side.evidenceOk）：
+    //   template → 值从清单里选（佐证须为取数 lookup）／readback → 按编号回读确认／
+    //   gap → 无字典出口，用原话／derived → 值来自本会话某一步（须写明来源）
+    // 注意：`id` 与 `issue-id` 必须**各自成条**（合成一条会按字段名查不到）。
+    id: { readback: '编号（issueKey）与 id 不是一回事：更新目标须按编号回读确认' },
+    'issue-id': { readback: '编号（issueKey）与 id 不是一回事：评论目标须按编号回读确认' }
+  },
+
+  // ⑥ 多步流程（一次落一棵小树）与中间态语义
+  steps: [
+    {
+      name: '一次落一棵小树',
+      sequence: [
+        { template: 'create-item', role: '父（需求）', ref: 'data.createIssue.issueKey' },
+        { template: 'create-item', role: '子（要做的事）', requires: { 'parent-id': '父项的 id（由回执的编号回读取得）' } },
+        { template: 'add-comment', role: '留痕', requires: { 'issue-id': '同上' }, content: '来源：会话（谁起草、何时确认）' }
+      ],
+      templateSequence: ['create-item', 'get-issue', 'create-item', 'add-comment'],
+      intermediate: '父已建、某子未建＝**半成状态**：逐项显示（哪条成了、哪条没成），不得整棵回滚、也不得重试已成的项'
+    }
+  ],
+
+  // ⑦ 可查字段集与存在性核对算法
+  lookupFields: {
+    fields: ['--project-id', '--scene', '--status', '--assignee', '--label-ids', '--fields', '--offset', '--limit'],
+    gaps: '**无标题过滤、无类型过滤、无关键字搜索**（实测 flags 仅上列）',
+    fieldNames:
+      '`--fields` 的合法字段名由 CLI 在错误里自带（实测 message：valid: id, title, description, projectId, issueKey, statusId, status, priorityId, priority, typeId, assigneeId, assigneeName, createdBy, createdByName, parentId, estimateStartDate, estimateEndDate, estimateWorkload, actualWorkload, createdAt, updatedAt, labels）—— 拼错一个字段名会连合法清单一起回给你，这就是字段名的字典出口',
+    algorithm:
+      '核对「某条是否已写入」只能：按 --project-id（+ --scene/--status）取数后**本地比对标题**；须处理分页截断（按 `data.total` 判完整性，空页不等于没有数据）。**不得**把「查不到」当「不存在」——项目号写错与真的没有结果同形；实测查不存在的 id 报的是**权限类错误**（缺少 projectTypeId 上下文），不是「未找到」。'
+  },
+
+  // ⑧ 输出解析、信封与分页语义（含 2026-10-06 漂移复核的漏记事实）
+  outputParsing: {
+    envelope: '顶层 `ok` 布尔；数据在 `data`；错误在 `error`；`_meta` 含 command/dry_run/system 与 `fields` 回显',
+    exitCodes: '**退出码可机器区分**：参数错＝2（`error.type=validation`）、接口错＝1（`error.type=api`）、正常＝0；但**判别式是信封的 `ok`，不是退出码**',
+    paging: '`--offset` 越界返回 `ok:true` + 空 `data`（**与「没有数据」同形**）；`+issue-list` 默认 `-n 20`、`+project-list` 默认 `-n 50`；`data.total` 是全量、`data.data` 是本页（**双层 data**）',
+    fields: '`--fields` 生效（实测点名 title/estimateEndDate 即只回这些键）且回显于 `_meta.fields`；**默认集已含人名与状态/优先级名**（assigneeName／status.name／priority.name／labels／createdByName），**但类型例外**：条目只有 `typeId`、**没有 type 对象** —— 类型名必须按 typeId 去 `+type-list` 的清单里对',
+    keyMissing: '**键缺失 ≠ 字段不受支持**：值为 null 的键直接不出现（实测同一场景 9 条里只有 5 条带 estimateEndDate）。读侧必须把「键不存在」与「无值」同等对待',
+    relationList: '实测（2026-10-06 漂移复核）：`+relation-list` 没有关联时返回**空数组** `data:[]`（skill 文档旧记 `null`，以实测为准）；且 `+issue-history`/`+relation-list` **不吃 `-n`**（unknown flag）',
+    dryRun:
+      '**写命令**的 `--dry-run` 只回将要发出的请求（`data.body.{query,variables}`），**不校验取值**（非法 id 仍 `ok:true`）；**读命令**的 `--dry-run` 是**真跑** —— 别拿它当「安全的预演」',
+    failureEnvelope:
+      '**失败时信封走 stderr**（实测 rc=2、stdout 0 字节、stderr = 升级提示若干行 + 一整行 `{"error":{...},"ok":false}`）⇒ 取信封必须逐行找可解析的 JSON 对象，**不得整体 JSON.parse**',
+    refMissing: '写成功但回执没取到 ⇒ 按 write-unknown 处置，**不得**当写失败（那会诱发重写＝造重复）。`ok:true` 只是信封层信号：实测回执只回显 id/title/issueKey/status{name}/statusId/时间戳（**有单号、无 URL**），**不回显** parentId/assigneeName/labels',
+    errorFields: '`error.type/subtype/message/param/log_id`（实测 subtype 有 missing_flag / invalid_value）—— 结构化失败原因，只透传不改写',
+    noDelete: '**命令面无删除命令**（实测 15 条）⇒ 卡片／动作集只能提供「关闭」，不能提供「删除」；误建的处置权属产品决策'
+  },
+
+  // ⑪ 技能内容清单（由 §15 的这份技能逐条落成）
+  skill: [
+    '何时把对话沉淀成工单（决定已产生／动作要留痕／需要跨人协作时才沉淀，不为了记而记）',
+    '字段纪律：措辞类可代笔，事实类必须本人给，指定类必须本人指且查表',
+    '描述只留 spec 链接槽位；时间进时间字段；技术偏好写进评论（不塞描述）',
+    '落树纪律：一次对话一棵小树，子项一次带 parent-id，不用关联命令代替父子',
+    '失败处置：超时＝结果未知先核对；查不到不等于不存在；标签全量替换的后果先说清',
+    '命令调用样例与参数拼法（由模板拼出，技能不另造写法）',
+    '接一个新域：先实测命令面、按「插件＋一份技能」两件套切、装配点只加一行、别把画法带进来'
+  ],
+
+  // ⑮ 这份技能 = 域命令面／agent 指令／接入。**逐字**落成企业侧技能文件，宿主一个字都不写
+  //（宿主一旦参与撰写，「拔包即消失」就不成立）。
+  // 呈现归属：技能里**不教 agent 选形态** —— 只教它产出标准输出（指令名 + 记录形态 +
+  // 声明过的字段键 + 动作）；画法、统计归宿主。
+  skillDoc: {
+    fileName: 'SKILL.md',
+    // 与仓库内 skills/baymax/SKILL.md **逐字节相同**（node:test 锁住）；
+    // 落点路径只作呈现（宿主不写盘、不复制）：引擎以插件技能只读方式暴露给 agent。
+    path: 'skills/baymax/SKILL.md',
+    markdown: BAYMAX_SKILL_MARKDOWN
+  },
+
+  // 写模板 / 读模板（声明第 13 项；模板归属声明）
+  templates: BAYMAX_TEMPLATES
+}
+
+/** The baymax declaration: both faces, no key in both, validated as one object. */
+const BAYMAX_DECLARATION = Object.freeze({
+  id: 'baymax',
+  displayName: 'Baymax 工单',
+  ...BAYMAX_PLUGIN_FACE,
+  ...BAYMAX_SKILL_FACE,
+  // 命令面（实测 15 条中本期使用的 13 条 + 明确排除的 2 条）
+  commandSurface: Object.freeze({
+    used: Object.freeze(BAYMAX_USED_COMMANDS),
+    excluded: BAYMAX_EXCLUDED_COMMANDS,
+    readTemplates: Object.freeze(BAYMAX_READ_TEMPLATES.map((t) => t.id))
+  })
+})
+
+/**
+ * The instruction names the agent may emit (N2 §0.1: the block tag is the
+ * boundary — the render key stays with the plugin, the NAME is the skill's).
+ * Derived from the declared blocks so the two can never disagree.
+ */
+const BAYMAX_INSTRUCTIONS = Object.freeze(
+  BAYMAX_DECLARATION.outputs.blocks.map((block) =>
+    Object.freeze({
+      name: block.tag,
+      record: block.record,
+      fields: Object.freeze([...block.fields]),
+      actions: Object.freeze([...block.actions])
+    })
+  )
+)
+
+/**
+ * **The single assembly point** — the only place in the host that names a pack.
+ * Comment out the one entry and the registry is empty ⇒ no write path, no card
+ * ability, no residual switch anywhere else (PLK-REQ-0034).
+ */
+function installedPacks() {
+  return [
+    { id: 'baymax', load: () => BAYMAX_DECLARATION }
+  ]
+}
+
+/** Load every installed pack into the registry; a load error is a visible failure. */
+function assemblePacks(entries = installedPacks()) {
+  const registry = createPackRegistry()
+  const results = []
+  for (const entry of entries ?? []) {
+    const id = String(entry?.id ?? '')
+    let declaration = null
+    try {
+      declaration = typeof entry?.load === 'function' ? entry.load() : null
+    } catch (error) {
+      registry.noteFailure(id, [`load-failed:${String(error?.message ?? error)}`])
+      results.push({ ok: false, id, errors: ['load-failed'] })
+      continue
+    }
+    const result = registry.register(declaration ?? {})
+    results.push({ ok: result.ok, id: result.id || id, errors: result.errors })
+  }
+  return { registry, results }
+}
+
 
 
 const ID = 'plankton-enterprise'
@@ -2700,5 +3427,19 @@ export {
   readSide,
   planCard,
   packRegistry,
-  packSession
+  packSession,
+  // W2 · assembly point + the pack (plugin face + one skill)
+  PACK_CARRIERS,
+  carrierOf,
+  BAYMAX_DECLARATION,
+  BAYMAX_INSTRUCTIONS,
+  BAYMAX_SKILL_MARKDOWN,
+  BAYMAX_TEMPLATES,
+  BAYMAX_WRITE_TEMPLATES,
+  BAYMAX_READ_TEMPLATES,
+  BAYMAX_USED_COMMANDS,
+  BAYMAX_EXCLUDED_COMMANDS,
+  installedPacks,
+  assemblePacks,
+  PACK_EXEC_SCOPE
 }
