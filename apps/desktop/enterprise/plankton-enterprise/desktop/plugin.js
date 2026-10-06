@@ -63,18 +63,11 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 // payload, N7 §8) — this layer stays carrier-neutral and consumes a payload it
 // has already been handed.
 //
-// SAME-VALUE LOCK · PRE-W3 REGISTRATION (recorded here and ONLY here):
-// pack-exec itself is W3, so its EXEC_KINDS list is inlined below. Its value is
-// byte-identical to the old shell's `desktop/electron/pack-exec.js:35`. BEFORE
-// W3 lands this inline copy MUST be deleted and the constant MUST be sourced
-// from the re-homed pack-exec module — never keep two copies drifting abreast.
-// (Deliberately NOT restated in N7 §8: one registration, not two.)
+// SAME-VALUE LOCK · RESOLVED BY W3: the pre-W3 inline copy of `EXEC_KINDS` is
+// GONE. The one and only definition now lives in the W3 `packExec` module below
+// (`const { EXEC_KINDS } = packExec`); the registry reads it from there. There
+// is no second copy to drift against the old shell's `pack-exec.js:35`.
 // ─────────────────────────────────────────────────────────────────────────────
-
-// 同值锁 · W3 前必须改为从模块取（口径源＝旧壳 desktop/electron/pack-exec.js:35；此处冻结同值）
-const PACK_EXEC_SCOPE = Object.freeze({
-  EXEC_KINDS: Object.freeze(['ok', 'rejected', 'unparsed', 'timeout', 'spawn-error', 'refused'])
-})
 
 // ── render-protocol.js ──────────────────────────────────────────────────────────────────
 const renderProtocol = (function () {
@@ -1390,8 +1383,6 @@ const PACK_CONTRACT_ITEMS = Object.freeze([
   Object.freeze({ key: 'skillDoc', kind: 'object', label: '技能文档（用这个包要知道的事，逐字落成文件）' }),
 ])
 
-const { EXEC_KINDS } = PACK_EXEC_SCOPE
-// 版式词汇表归**宿主呈现规则**（`presentation.js`）：装载期用它判「声明里有没有在指挥宿主怎么画」。
 const { findLayoutTokens } = presentation
 const { OUTPUT_RECORD_KINDS } = renderProtocol
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -1517,6 +1508,16 @@ function validateDeclaration(declaration) {
       if (kind !== 'read' && kind !== 'write') {
         invalid.push(`templates: ${String(template.id ?? '?')} 缺 kind（read/write 二选一）`)
       }
+    }
+    // W3 · 读回交叉引用（`ok:true` 不可单独作成功依据 ⇒ 写回的成功判据是「读回确认」）：
+    // 写模板声明的 `readback.template` 必须指向**本声明里 `kind:'read'` 的**模板；指向不存在
+    // 或非读的模板 ⇒ 装载即拒（一张永远读不回确认的写卡，等于把「写成功」建在信封 ok 上）。
+    for (const template of templates) {
+      if (!isPlainObject(template) || !isPlainObject(template.readback)) continue
+      const rbTemplate = String(template.readback.template ?? '')
+      const target = templates.find((t) => isPlainObject(t) && t.id === rbTemplate)
+      if (!target) invalid.push(`templates: ${String(template.id ?? '?')} 的 readback 指向未声明模板 ${rbTemplate || '?'}`)
+      else if (String(target.kind ?? '') !== 'read') invalid.push(`templates: ${String(template.id ?? '?')} 的 readback 指向非读模板 ${rbTemplate}`)
     }
     // 必填三集合不许互相打架：模板不得比 CLI 松；比 CLI 严的必须登记依据；登记了就必须真用到。
     // `requiredParams` 整体为空＝**没声明**（走 missing 通道），此时不做交叉校验（否则「没声明」
@@ -1939,6 +1940,796 @@ const {
 } = packSession
 
 // ─────────────────────────────────────────────────────────────────────────────
+// W3 · action execution — pack-exec (the ONLY write entry) + pack-actions (the
+// orchestrator that turns a human "confirm" into one restricted write).
+//
+// Design: N7-20261006-plankton-session-packs §8 (W3 = `pack-actions` + `pack-exec`),
+// §5 (write path) / §5.5 (executor) / 裁定 4 (写动作落实到人) / §9.0 #6 (the measured
+// write-side facts). Acceptance is "语义等价、换载体" (裁定 5): the semantics of the
+// old shell's modules are carried; the carrier (directive component + reference
+// payload) is W4's and is NOT in this layer.
+//
+// FOUR HARD BOUNDARIES — all machine-enforced HERE, not by convention:
+//   * 落实到人 — the confirmer is the INJECTED server-issued session identity
+//     (`identityOf`), never a caller-supplied name; no identity, or a
+//     system/anonymous identity, ⇒ fail-closed refusal (`not-signed-in` /
+//     `system-identity`). The write path refuses without a concrete person.
+//   * 一律经 shaoke-cli — the single spawn point runs `[module, command, ...argv]`
+//     with `shell:false`, array args, no shell, no free-text; there is no direct
+//     API call anywhere. The spawner is INJECTED (`execFileImpl`) because this
+//     file is evaluated as a renderer blob and must not import `child_process`;
+//     with no spawner wired the executor REFUSES (`spawner-missing`, fail-closed).
+//   * `ok:true` 不可单独作成功依据 — a card becomes `written` ONLY after the write
+//     template's declared READ-BACK (a declared read template) confirms the intended
+//     fields landed; missing / failed / mismatched read-back ⇒ `write-unknown`
+//     (`readback-not-declared` / `readback-read-failed` / `readback-mismatch:*`).
+//   * 无删除 — the command surface has no delete command, and BOTH layers refuse
+//     any delete-shaped command (`command-forbidden-delete` / `action-forbidden-delete`).
+//
+// NO I/O of its own: the spawner and the session are injected; every fixture in
+// the tests is synthetic (no enterprise data, no home directory touched).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const packExec = (function () {
+// electron/pack-exec.js — 宿主侧**受限写执行骨架**（全宿主唯一的执行入口）。
+//
+// 边界（N7 §5.5／§10）：
+//   - 命令模板由**包声明**，宿主侧不内联任何命令名；调用方只能给模板 id + 一张卡片；
+//   - 参数逐个映射进**数组**、不经 shell（`shell: false`），不接受自由命令文本；
+//   - 只此一处执行点；不新增任何「执行任意命令」的通道。
+//   - **写路径只接卡片，不接裸参数**：参数由卡片翻出来，确认人只能来自卡片的确认动作。
+//   - 成败判别式是**输出信封的 ok 字段**，不是退出码；**信封在失败时走 stderr**（混着升级
+//     提示噪声）⇒ 取信封必须能逐行认出可解析的 JSON 对象。
+//   - **解析不了 ≠ 成功**：rc=0 却读不懂 ⇒ `unparsed`；rc≠0 且无信封 ⇒ `spawn-error`。
+//   - 超时判 `timeout`（写侧按「结果未知」处置，**不得自动重试**）。
+
+const DEFAULT_TIMEOUT_MS = 20000
+const MAX_BUFFER = 8 * 1024 * 1024
+/** 失败态要能看原始输出，但不把整份东西灌进界面 */
+const RAW_EXCERPT_LIMIT = 2000
+
+/** 执行结果的全部形态。`timeout` 与 `unparsed` 都不是成功，也都不可自动重试。 */
+const EXEC_KINDS = Object.freeze(['ok', 'rejected', 'unparsed', 'timeout', 'spawn-error', 'refused'])
+
+/**
+ * **删除类命令一律不提供**（N7 §9.0 #6：命令面无删除命令，卡片／动作集只能给「关闭」）。
+ * 这是动作集边界的机器载体：即使某份声明写进来一条删除命令，执行器在 `resolveTemplate`
+ * 就拒（`command-forbidden-delete`），绝不落到 spawn。
+ */
+const FORBIDDEN_COMMAND = /(^|[^a-z])delete([^a-z]|$)|issue-delete/i
+const isDeleteCommand = (command) => FORBIDDEN_COMMAND.test(String(command ?? ''))
+
+/** 系统／匿名身份 —— 记录里必须是**具体的人**（裁定 4），这类名字一律 fail-closed。 */
+const SYSTEM_IDENTITIES = Object.freeze(['system', 'anonymous', 'nobody', 'root', 'unknown', '-'])
+const isSystemIdentity = (name) => SYSTEM_IDENTITIES.includes(String(name ?? '').trim().toLowerCase())
+
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+const nonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0
+const filled = (v) => (Array.isArray(v) ? v.length > 0 : v !== null && v !== undefined && String(v).trim() !== '')
+
+function excerpt(text) {
+  const s = typeof text === 'string' ? text : text == null ? '' : String(text)
+  return s.length > RAW_EXCERPT_LIMIT ? `${s.slice(0, RAW_EXCERPT_LIMIT)}…` : s
+}
+
+const refuse = (reason) => Object.freeze({ kind: 'refused', refusal: reason })
+
+/** 人类字段的值不是本人给的 —— 执行前的第二道闸（第一道在造卡片时） */
+function humanFieldsNotFromHuman(card) {
+  const fields = Array.isArray(card?.fields) ? card.fields : []
+  return fields
+    .filter((f) => HUMAN_TIERS.includes(String(f?.tier ?? '')) && filled(f?.value) && f?.source !== 'human')
+    .map((f) => String(f?.key ?? ''))
+}
+
+/**
+ * 取值**能不能无损进 argv**：判据是**正面白名单**（＝协议层 `isLosslessValue`，全宿主唯一一份）。
+ * 这道闸的自述职责是「**伪造卡片**也不许把变形值送进命令行」。
+ */
+function fieldsWithUnwritableValue(card) {
+  const fields = Array.isArray(card?.fields) ? card.fields : []
+  return fields.filter((f) => !isLosslessValue(f?.value)).map((f) => String(f?.key ?? ''))
+}
+
+/** 指定类字段的佐证形态（执行前的第三道闸，与另两层**同一判据**：`read-side.evidenceOk`）。 */
+function designatedEvidenceViolations(card, tiers, declaration) {
+  const fields = Array.isArray(card?.fields) ? card.fields : []
+  const out = []
+  for (const f of fields) {
+    if (String(tiers[String(f?.key ?? '')] ?? '') !== 'user-designated') continue
+    if (!filled(f?.value)) continue
+    const verdict = evidenceOk(declaration, f)
+    if (!verdict.ok) out.push({ key: String(f?.key ?? ''), reason: verdict.reason })
+  }
+  return out
+}
+
+/**
+ * 逐项拼 argv。允许的形态只有三种：字面量 / `{ field }` / 可选组 `{ when, args }`。
+ * `field` 只能引用模板声明的字段（required ∪ optional）—— 模板不得越过声明取参数。
+ */
+function buildArgs(items, { fields, params, argv }) {
+  if (!Array.isArray(items)) return { ok: false, refusal: 'template-arg-unsupported' }
+  for (const arg of items) {
+    if (nonEmptyString(arg)) {
+      argv.push(arg)
+      continue
+    }
+    if (isPlainObject(arg) && nonEmptyString(arg.field)) {
+      if (!fields.has(arg.field)) return { ok: false, refusal: `template-arg-not-declared:${arg.field}` }
+      argv.push(String(params[arg.field]))
+      continue
+    }
+    if (isPlainObject(arg) && nonEmptyString(arg.when)) {
+      if (!fields.has(arg.when)) return { ok: false, refusal: `template-when-not-declared:${arg.when}` }
+      if (!filled(params?.[arg.when])) continue
+      const verdict = buildArgs(arg.args, { fields, params, argv })
+      if (!verdict.ok) return verdict
+      continue
+    }
+    return { ok: false, refusal: 'template-arg-unsupported' }
+  }
+  return { ok: true }
+}
+
+/** 命令集 = 包声明里 `requiredParams` 的键。宿主不认识任何具体命令名，只做成员判定。 */
+function declaredCommands(declaration) {
+  return Object.keys(isPlainObject(declaration?.requiredParams) ? declaration.requiredParams : {})
+}
+
+/** 破坏性参数名集合（包声明） */
+function destructiveNames(declaration) {
+  const list = Array.isArray(declaration?.destructiveParams) ? declaration.destructiveParams : []
+  return list.map((item) => (isPlainObject(item) ? String(item.name ?? '') : String(item ?? ''))).filter(Boolean)
+}
+
+/**
+ * 把模板解析成 argv。**逐一校验**：模板属于包声明、命令在声明集合内、命令**不是删除类**、
+ * 必填字段齐全、参数项只允许「字面量」或「字段引用」两种形态 —— 没有任何路径能让调用方塞进自由文本。
+ */
+function resolveTemplate(declaration, templateId, params) {
+  const templates = Array.isArray(declaration?.templates) ? declaration.templates : []
+  const template = templates.find((t) => isPlainObject(t) && t.id === templateId)
+  if (!template) return { ok: false, refusal: 'unknown-template' }
+
+  const commands = declaredCommands(declaration)
+  if (!commands.includes(String(template.command ?? ''))) return { ok: false, refusal: 'command-not-declared' }
+  // 动作集不得提供删除（N7 §9.0 #6）：声明里就算写了删除命令，这里也拒。
+  if (isDeleteCommand(template.command)) return { ok: false, refusal: 'command-forbidden-delete' }
+  if (!nonEmptyString(template.module)) return { ok: false, refusal: 'template-missing-module' }
+  if (!Array.isArray(template.args)) return { ok: false, refusal: 'template-missing-args' }
+
+  const required = Array.isArray(template.required) ? template.required.map(String) : []
+  const optional = Array.isArray(template.optional) ? template.optional.map(String) : []
+  const missing = required.filter((key) => !filled(params?.[key]))
+  if (missing.length) return { ok: false, refusal: 'missing-required-param', fields: missing }
+
+  const fields = new Set([...required, ...optional])
+  const argv = []
+  const verdict = buildArgs(template.args, { fields, params, argv })
+  if (!verdict.ok) return verdict
+
+  const destructiveTouched = destructiveNames(declaration).filter((name) => fields.has(name) && filled(params?.[name]))
+  return { ok: true, template, argv, destructiveTouched }
+}
+
+/** 单个流里认信封：整份就一份 JSON 最好；混着噪声（升级提示/日志）就逐行从后往前找。 */
+function findEnvelope(stream) {
+  const source = String(stream ?? '').trim()
+  if (!source) return null
+  const whole = tryParseObject(source)
+  if (whole) return whole
+  const lines = source.split('\n')
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i].trim()
+    if (!line.startsWith('{')) continue
+    const parsed = tryParseObject(line)
+    if (parsed) return parsed
+  }
+  return null
+}
+
+function tryParseObject(text) {
+  try {
+    const value = JSON.parse(text)
+    return isPlainObject(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 失败信封的可读摘录：直接 `String(envelope.error)` 拿到的是 `[object Object]`，等于没给信息。
+ * 优先取信封里的 `error.message`（台账自己的话），拿不到才退回原始输出。
+ */
+function errorExcerpt(envelope, stderr) {
+  const error = envelope?.error
+  const message = isPlainObject(error) ? String(error.message ?? '').trim() : ''
+  if (message) return excerpt(message)
+  return excerpt(typeof stderr === 'string' ? stderr : '')
+}
+
+/** 失败信封里的结构化原因（`error.type/subtype/message/param/log_id`）—— 只透传，不改写。 */
+function envelopeError(envelope) {
+  const error = envelope?.error
+  if (!isPlainObject(error)) return null
+  return Object.freeze({
+    type: String(error.type ?? ''),
+    subtype: String(error.subtype ?? ''),
+    message: String(error.message ?? ''),
+    param: error.param === undefined ? null : String(error.param),
+    logId: error.log_id === undefined ? null : String(error.log_id),
+  })
+}
+
+/**
+ * 造一个执行器。`execFileImpl` 与 `cliPath` **注入**（`execFileImpl(file, argsArray, options, cb)`）。
+ *
+ * **口径差异（如实登记）**：旧壳默认 `execFile = require('child_process').execFile`；新底座里
+ * 本文件是渲染器 blob，**不得 import `child_process`**，故默认实现**不存在** —— 未注入即
+ * `spawner-missing` **fail-closed 拒写**，绝不静默「没执行却说成功」。运行期由适配层（引擎
+ * 后端或主进程，N7 §8「不限层」）注入真正的 spawner。
+ */
+function createPackExecutor({ execFileImpl, cliPath, timeoutMs = DEFAULT_TIMEOUT_MS, registry } = /** @type {any} */ ({})) {
+  const spawnable = typeof execFileImpl === 'function' && nonEmptyString(cliPath)
+
+  /** 唯一的子进程出口：参数是**数组**、`shell: false`、不看退出码看信封 */
+  async function spawnCli(argv) {
+    return await new Promise((resolve) => {
+      execFileImpl(cliPath, argv, { timeout: timeoutMs, maxBuffer: MAX_BUFFER, shell: false }, (error, stdout, stderr) => {
+        if (error) {
+          const timedOut = error.killed === true || error.signal === 'SIGTERM' || /ETIMEDOUT/.test(String(error.code ?? ''))
+          // 命令没找到／不是可执行文件 ⇒ **根本没跑**：这是确定的事（区别于超时那种「不知道写没写」）
+          if (error.code === 'ENOENT' || error.errno === -2) {
+            resolve({ kind: 'not-found', stdout: '', stderr: String(error.message ?? '') })
+            return
+          }
+          resolve({
+            kind: timedOut ? 'timeout' : 'process-error',
+            rc: typeof error.code === 'number' ? error.code : null,
+            stdout: String(stdout ?? ''),
+            stderr: String(stderr ?? error.message ?? ''),
+          })
+          return
+        }
+        resolve({ kind: 'raw', stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), rc: 0 })
+      })
+    })
+  }
+
+  /**
+   * **读数**（不写）：宿主只允许它跑**没有绑定到任何动作的写模板之外**的模板 ——
+   * 判据是机器可算的：写模板 id 集合来自包声明（模板自己的 `kind` + 标准输出动作的 `writes`），
+   * 因此「把一条写命令伪装成取数」在这里走不通。
+   */
+  async function runRead({ packId, templateId, params = {} } = /** @type {any} */ ({})) {
+    const pack = registry?.get?.(packId) ?? null
+    if (!pack) return refuse('pack-not-loaded')
+    if (!spawnable) return refuse('spawner-missing')
+    const declaration = pack.declaration ?? {}
+    const templates = Array.isArray(declaration.templates) ? declaration.templates : []
+    if (!templates.some((t) => isPlainObject(t) && t.id === templateId)) return refuse('unknown-template')
+    if (writeTemplateIds(declaration).includes(String(templateId))) return refuse('read-path-cannot-use-write-template')
+
+    const resolved = resolveTemplate(declaration, templateId, params)
+    if (!resolved.ok) return Object.freeze({ ...refuse(resolved.refusal), ...(resolved.fields ? { fields: resolved.fields } : {}) })
+    if (resolved.destructiveTouched.length) {
+      return Object.freeze({ ...refuse('read-path-touches-destructive-param'), fields: resolved.destructiveTouched })
+    }
+
+    const argv = [resolved.template.module, resolved.template.command, ...resolved.argv]
+    const outcome = await spawnCli(argv)
+    if (outcome.kind === 'not-found') return refuse('cli-not-found')
+    if (outcome.kind === 'timeout') {
+      return Object.freeze({ kind: 'timeout', rc: outcome.rc, excerpt: excerpt(outcome.stderr || outcome.stdout), note: 'read-unknown' })
+    }
+    const envelope = findEnvelope(outcome.stdout) ?? findEnvelope(outcome.stderr)
+    if (!envelope) {
+      return Object.freeze({
+        kind: outcome.kind === 'process-error' ? 'spawn-error' : 'unparsed',
+        rc: outcome.rc,
+        excerpt: excerpt(outcome.stderr || outcome.stdout),
+        note: 'read-failed',
+      })
+    }
+    if (typeof envelope.ok !== 'boolean') {
+      return Object.freeze({ kind: 'unparsed', rc: outcome.rc, excerpt: excerpt(outcome.stdout || outcome.stderr), note: 'read-failed' })
+    }
+    if (envelope.ok !== true) {
+      return Object.freeze({ kind: 'rejected', rc: outcome.rc, error: envelopeError(envelope), excerpt: errorExcerpt(envelope, outcome.stderr), note: 'read-failed' })
+    }
+    return Object.freeze({ kind: 'ok', rc: outcome.rc, envelope })
+  }
+
+  async function runTemplate({ packId, templateId, card } = /** @type {any} */ ({})) {
+    const pack = registry?.get?.(packId) ?? null
+    if (!pack) return refuse('pack-not-loaded')
+
+    if (!spawnable) return refuse('spawner-missing')
+    if (!isPlainObject(card)) return refuse('card-required')
+    if (!nonEmptyString(card.id)) return refuse('card-missing-id')
+    if (card.fields !== undefined && !Array.isArray(card.fields)) return refuse('card-malformed')
+    const tiers = isPlainObject(pack.declaration?.fieldTiers) ? pack.declaration.fieldTiers : {}
+    const unknownFields = card.fields.map((f) => String(f?.key ?? '')).filter((key) => !Object.hasOwn(tiers, key))
+    if (unknownFields.length) return Object.freeze({ ...refuse('field-not-declared'), fields: unknownFields })
+    const mismatched = card.fields
+      .filter((f) => String(f?.tier ?? '') !== String(tiers[String(f?.key ?? '')]))
+      .map((f) => String(f?.key ?? ''))
+    if (mismatched.length) return Object.freeze({ ...refuse('field-tier-mismatch'), fields: mismatched })
+    const offending = humanFieldsNotFromHuman(card)
+    if (offending.length) return Object.freeze({ ...refuse('human-field-filled-by-agent'), fields: offending })
+    const unwritable = fieldsWithUnwritableValue(card)
+    if (unwritable.length) return Object.freeze({ ...refuse('field-value-malformed'), fields: unwritable })
+    const evidenceViolations = designatedEvidenceViolations(card, tiers, pack.declaration)
+    if (evidenceViolations.length) {
+      return Object.freeze({
+        ...refuse(evidenceViolations[0].reason),
+        fields: evidenceViolations.map((violation) => violation.key),
+      })
+    }
+    try {
+      assertWritable(card)
+    } catch {
+      // 未确认（或不是卡片）⇒ 不写。这里的拒绝不是礼貌，是「人确认」这一步的机器载体。
+      return Object.freeze({ ...refuse('card-not-confirmed'), state: String(card?.state ?? 'none') })
+    }
+
+    // 落实到人（裁定 4）：记录里必须是**具体的人**，系统／匿名一律拒（纵深；主闸在编排层）。
+    const confirmedBy = String(card.confirmedBy ?? '').trim()
+    if (!confirmedBy) return refuse('confirmer-missing')
+    if (isSystemIdentity(confirmedBy)) return refuse('system-identity')
+
+    // 写路径只跑写模板（读要走 `runRead`）：否则「确认」按钮能触发一次只读命令。
+    const templatesDecl = Array.isArray(pack.declaration?.templates) ? pack.declaration.templates : []
+    const declaredKind = String(templatesDecl.find((t) => t?.id === templateId)?.kind ?? '')
+    if (declaredKind && declaredKind !== 'write') return refuse('write-path-cannot-use-read-template')
+
+    // 到这里的值已经过类型收口 ⇒ `toParams` 只做「有值才带上」的筛选，并把数字/布尔统一成串。
+    const params = toParams(card)
+    const resolved = resolveTemplate(pack.declaration, templateId, params)
+    if (!resolved.ok) return Object.freeze({ ...refuse(resolved.refusal), ...(resolved.fields ? { fields: resolved.fields } : {}) })
+
+    // 破坏性写：必须有人在环。确认人**来自卡片的确认动作**，调用方传不进来。
+    if (resolved.destructiveTouched.length && !confirmedBy) {
+      return Object.freeze({ ...refuse('destructive-requires-confirmation'), fields: resolved.destructiveTouched })
+    }
+
+    const argv = [resolved.template.module, resolved.template.command, ...resolved.argv]
+    const outcome = await spawnCli(argv)
+    if (outcome.kind === 'not-found') return refuse('cli-not-found')
+
+    if (outcome.kind === 'timeout') {
+      // 超时＝「写入结果未知」：调用方必须先核对存在性，不得自动重试
+      return Object.freeze({ kind: 'timeout', rc: outcome.rc, excerpt: excerpt(outcome.stderr || outcome.stdout), note: 'write-unknown' })
+    }
+
+    // 判别式：信封的 ok（成功在 stdout；失败时信封在 stderr，且可能混着升级提示等噪声）
+    const envelope = findEnvelope(outcome.stdout) ?? findEnvelope(outcome.stderr)
+    if (!envelope) {
+      return Object.freeze({
+        kind: outcome.kind === 'process-error' ? 'spawn-error' : 'unparsed',
+        rc: outcome.rc,
+        excerpt: excerpt(outcome.stderr || outcome.stdout),
+        note: 'not-written',
+      })
+    }
+    if (typeof envelope.ok !== 'boolean') {
+      return Object.freeze({ kind: 'unparsed', rc: outcome.rc, excerpt: excerpt(outcome.stdout || outcome.stderr), note: 'not-written' })
+    }
+    if (envelope.ok !== true) {
+      // **矛盾信封**：`ok:false` 却带回执。只要取得到回执，一律按**结果未知**处置（带上回执供核对）。
+      const contradictoryRef = pickRefFrom(envelope, [
+        resolved.template.refPath,
+        ...(resolved.template.refPathFallbacks ?? []),
+      ].filter(Boolean))
+      if (contradictoryRef) {
+        return Object.freeze({
+          kind: 'rejected',
+          rc: outcome.rc,
+          envelope,
+          error: envelopeError(envelope),
+          ref: contradictoryRef,
+          refMissing: false,
+          excerpt: errorExcerpt(envelope, outcome.stderr),
+          note: 'rejected-with-ref',
+        })
+      }
+      return Object.freeze({
+        kind: 'rejected',
+        rc: outcome.rc,
+        error: envelopeError(envelope),
+        excerpt: errorExcerpt(envelope, outcome.stderr),
+        note: 'not-written',
+      })
+    }
+    // 成功：把回执按包声明的路径取出来。**取不到回执不等于写失败** —— 写是成功的（ok:true），
+    // 只是「编号拿不到」，调用方须按 write-unknown 处置（先核对，别重写）。
+    const paths = [resolved.template.refPath, ...(resolved.template.refPathFallbacks ?? [])].filter(Boolean)
+    const ref = pickRefFrom(envelope, paths)
+    return Object.freeze({
+      kind: 'ok',
+      rc: outcome.rc,
+      envelope,
+      ref,
+      refMissing: ref === null,
+      note: ref === null ? 'ref-missing' : '',
+      destructive: resolved.destructiveTouched.length > 0,
+    })
+  }
+
+  return Object.freeze({ runTemplate, runRead, timeoutMs, spawnable })
+}
+
+/**
+ * 包声明的**写模板 id 集合**：按模板自己声明的 `kind` ∪ 标准输出动作引用（fail-closed）。
+ */
+function writeTemplateIds(declaration) {
+  const templates = Array.isArray(declaration?.templates) ? declaration.templates : []
+  const byKind = templates
+    .filter((t) => isPlainObject(t) && String(t.kind ?? '') === 'write')
+    .map((t) => String(t.id ?? ''))
+  const actions = isPlainObject(declaration?.outputs?.actions) ? declaration.outputs.actions : {}
+  const byOutput = Object.values(actions).map((action) => String(action?.writes ?? ''))
+  return [...new Set([...byKind, ...byOutput].filter(Boolean))]
+}
+
+/** 按一组候选路径取回执：命中第一个有值的。全都不中返回 null —— 不编造回执。 */
+function pickRefFrom(envelope, paths) {
+  for (const path of paths) {
+    const value = pickRef(envelope, path)
+    if (value !== null && value !== undefined) return value
+  }
+  return null
+}
+
+/** 从信封里按点分路径取回执（如 `data.id`）。取不到返回 null —— 不编造回执。 */
+function pickRef(envelope, refPath) {
+  let cursor = envelope
+  for (const segment of String(refPath).split('.')) {
+    if (!isPlainObject(cursor) && !Array.isArray(cursor)) return null
+    cursor = cursor[segment]
+    if (cursor === undefined || cursor === null) return null
+  }
+  return cursor
+}
+
+return Object.freeze({
+  EXEC_KINDS,
+  DEFAULT_TIMEOUT_MS,
+  SYSTEM_IDENTITIES,
+  isSystemIdentity,
+  isDeleteCommand,
+  buildArgs,
+  createPackExecutor,
+  resolveTemplate,
+  declaredCommands,
+  destructiveNames,
+  findEnvelope,
+  pickRef,
+  pickRefFrom,
+  writeTemplateIds,
+})
+})()
+
+/** 执行结果形态的**唯一口径**：注册点从这里读，不再有第二份内联副本。 */
+const { EXEC_KINDS } = packExec
+// Re-homed executor helpers (tests read them from the top level too).
+const { createPackExecutor, isDeleteCommand, resolveTemplate: resolveExecTemplate, writeTemplateIds } = packExec
+
+const packActions = (function () {
+// electron/pack-actions.js — **会话内动作的编排层**（把「人点了确认」变成一次受限写入）。
+//
+// 职责边界（N7 §5）：
+//   - 动作**只能来自包声明**（`outputs.actions`）：没声明过的按钮不存在，声明了但没绑定写模板的一律拒。
+//   - 写路径**只接卡片**：卡片来自会话存储（`pack-session.js`），执行器不接受任何自报参数。
+//   - **确认人由宿主注入**：会话主体身份（服务端铸发）→ 卡片确认人；渲染层/调用方传来的名字一律不采信。
+//   - 指定类字段若用「取数佐证」填的值，确认前**真的去查一次**：值不在声明的那份清单里就拒。
+//   - **`ok:true` 不可单独作成功依据**：写后按模板声明的 `readback` **读回交叉验证**，只有读回
+//     确认到位才落 `written`；读不回／对不上／未声明读回 ⇒ `write-unknown`（先核对，别重写）。
+//   - 结果映射到卡片八态，**不把未知说成失败**。
+//
+// 纯逻辑 + 注入的执行器/会话：本模块自己不 spawn、不读盘。
+
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+const nonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0
+const filled = (v) => (Array.isArray(v) ? v.length > 0 : v !== null && v !== undefined && String(v).trim() !== '')
+
+/** 卡片字段取值（一律当文本）。 */
+function fieldValue(card, key) {
+  const field = (Array.isArray(card?.fields) ? card.fields : []).find((f) => String(f?.key ?? '') === String(key))
+  return field ? field.value : ''
+}
+
+/**
+ * 会话身份 → 确认人。
+ * 身份取**服务端铸发**的登录身份（`planktonAuth.status()` → `whoami{subject,displayName,email}`，
+ * 见 N7 §5.5）；这里接受「一个字符串」或「一个 whoami 形态的对象」，但**系统／匿名一律归零**
+ * ⇒ 上层 fail-closed 拒写。绝不接受调用方自报一个名字（那是「无法证明有人在环」）。
+ */
+function normalizeIdentity(raw) {
+  if (raw === null || raw === undefined) return ''
+  if (typeof raw === 'string') return raw.trim()
+  if (isPlainObject(raw)) {
+    const whoami = isPlainObject(raw.whoami) ? raw.whoami : raw
+    const candidate = String(whoami.displayName ?? '').trim() || String(whoami.email ?? '').trim() || String(whoami.subject ?? '').trim()
+    return candidate
+  }
+  return ''
+}
+
+/**
+ * 失败原因：优先用 CLI 自己的话（`error.message`）。只回一个内部标记等于没说。
+ */
+function failureReason(outcome, kind) {
+  const err = outcome?.error && typeof outcome.error === 'object' ? outcome.error : null
+  const parts = []
+  if (err) {
+    if (err.message) parts.push(String(err.message))
+    if (err.param) parts.push(`参数 ${err.param}`)
+    if (!err.message && err.subtype) parts.push(String(err.subtype))
+  }
+  if (!parts.length && outcome?.note) parts.push(String(outcome.note))
+  return parts.length ? parts.join(' · ') : String(kind || 'unknown')
+}
+
+/**
+ * 结果 → 卡片状态：**按包声明的 `failureMap` 落态**（声明是唯一来源，装载时已校验值的合法性）。
+ *
+ * **W3 加严（N7 §9.0 #6）**：`ok` 不再是「写成功」的充分条件 —— 只有**读回交叉验证通过**
+ * （`readback.ok === true`，由 `verifyReadback` 产出）才落 `written`；读回未声明／失败／对不上
+ * 一律落 `write-unknown`（保守：宁可让人核对，不可判「确定没写」而诱发重复写）。
+ */
+function applyOutcome(session, card, outcome, declaration = {}, { readback = null } = {}) {
+  const kind = String(outcome?.kind ?? '')
+  const map = isPlainObject(declaration?.failureMap) ? declaration.failureMap : {}
+  const target = String(map[kind] ?? '')
+
+  if (kind === 'ok' && outcome.ref) {
+    if (readback && readback.ok === true) {
+      return { card: session.replace(markWritten(card, { ref: outcome.ref }).card).card, blocked: null }
+    }
+    const reason = readback ? String(readback.reason ?? 'readback-failed') : 'readback-not-declared'
+    return { card: session.replace(markWriteUnknown(card, { reason: `ok:true 但读回未确认（${reason}）` }).card).card, blocked: null }
+  }
+  if (kind === 'ok') return { card: session.replace(markWriteUnknown(card, { reason: 'ref-missing' }).card).card, blocked: null }
+
+  if (target === 'blocked' || kind === 'refused') {
+    // 宿主侧校验没过：**没触达执行**，卡片留在原态（人改完还能再确认），只回报原因
+    return { card, blocked: String(outcome?.refusal ?? outcome?.note ?? 'refused') }
+  }
+  if (outcome?.ref) {
+    // 「被拒」却带回执 ⇒ 台账那边已经有东西了 ⇒ 结果未知（判「确定没写」会诱发重复写）
+    return {
+      card: session.replace(markWriteUnknown(card, { reason: `${failureReason(outcome, kind)} · 但回执是 ${outcome.ref}，先核对` }).card).card,
+      blocked: null,
+    }
+  }
+  if (target === 'failed') {
+    return { card: session.replace(markFailed(card, { reason: failureReason(outcome, kind) }).card).card, blocked: null }
+  }
+  // 声明没覆盖到的形态：**保守当结果未知**（不许默认判「确定没写」）
+  return {
+    card: session.replace(markWriteUnknown(card, { reason: failureReason(outcome, kind) }).card).card,
+    blocked: null,
+  }
+}
+
+/**
+ * 指定类字段的「取数佐证」核对：按**包声明**的取数路径真查一次，取值必须在结果里。
+ * 查不动（缺作用域参数/取数失败）一律拒 —— 核不了就不写，不猜。
+ */
+async function verifyLookups({ pack, card, template, executor }) {
+  const declaration = pack.declaration ?? {}
+  const lookupDecl = isPlainObject(declaration.valueLookup) ? declaration.valueLookup : {}
+  const scopes = {}
+  for (const field of card.fields) if (field.value !== '' && field.value !== null) scopes[field.key] = field.value
+
+  // **指定类字段的佐证必须与它自己的出口相配**：判据只调 `read-side.evidenceOk` 一处。
+  for (const field of card.fields) {
+    if (String(field.tier ?? '') !== 'user-designated') continue
+    const verdict = evidenceOk(declaration, field)
+    if (!verdict.ok) return { ok: false, reason: verdict.reason, field: field.key }
+  }
+  for (const field of card.fields) {
+    if (field.attestation?.kind !== 'lookup') continue
+    // 只有 `template` 出口才谈得上「值在那份清单里」；`readback` 出口本就**没有清单可查**。
+    if (readSide.outletOf(declaration, field.key).kind !== 'template') continue
+    // **佐证出口必须属于这个字段自己**：`attestation.field` 指到别的字段的取数出口即拒。
+    if (String(field.attestation.field ?? '') !== String(field.key ?? '')) {
+      return { ok: false, reason: 'lookup-field-mismatch', field: field.key }
+    }
+    const declared = lookupDecl[field.attestation.field]
+    if (!isPlainObject(declared) || !declared.template) {
+      return { ok: false, reason: 'lookup-not-declared', field: field.key }
+    }
+    const lookupTemplate = (declaration.templates ?? []).find((t) => t.id === declared.template)
+    if (!lookupTemplate) return { ok: false, reason: 'lookup-template-missing', field: field.key }
+    const params = {}
+    for (const scope of Array.isArray(declared.scope) ? declared.scope : []) {
+      if (scopes[scope] === undefined) return { ok: false, reason: 'lookup-scope-missing', field: field.key, scope }
+      params[scope] = scopes[scope]
+    }
+    const read = await executor.runRead({ packId: pack.id, templateId: declared.template, params, template: lookupTemplate })
+    if (read?.kind !== 'ok') return { ok: false, reason: 'lookup-read-failed', field: field.key, detail: read?.note ?? read?.kind ?? '' }
+    const options = readSide.listValueOptions(pack, field.attestation.field, read.envelope)
+    if (!options.ok) return { ok: false, reason: `lookup-unusable:${String(/** @type {any} */ (options).reason)}`, field: field.key }
+    const hit = options.options.some((option) => String(option.value) === String(field.value))
+    if (!hit) return { ok: false, reason: 'lookup-value-not-found', field: field.key }
+  }
+  return { ok: true }
+}
+
+/**
+ * **读回交叉验证**（`ok` 不是成功依据；N7 §5.5／§6／§9.0 #6）。
+ *
+ * 写模板用 `readback` 声明「怎么写回按什么读」：
+ *   `{ template: 'item-get', idFrom: 'data.id', scope: ['project-id'],
+ *      check: [{ field: 'title', read: 'title' }, { field: 'status', read: 'status' }] }`
+ * 规则：
+ *   - 未声明 `readback` ⇒ `{ ok:false, reason:'readback-not-declared' }`（fail-closed：ok 单独不算数）；
+ *   - 读模板必须是**声明里那份**、`kind:'read'`（防「写被伪装成读」）；
+ *   - 作用域字段（`scope`）必须**卡片里有值**，id 取 `idFrom` 指的回执路径（缺则回退卡片 `id`）；
+ *   - 读回**不是 ok** ⇒ `readback-read-failed`；
+ *   - 每条 `check`：卡片里**有值**的预期字段，读回值必须逐字相等（文本口径），否则 `readback-mismatch:<字段>`。
+ * 返回 `{ ok, reason?, checked? }`；任何不确定都回 ok:false（上层落 write-unknown）。
+ */
+async function verifyReadback({ pack, card, template, envelope, executor }) {
+  const declaration = pack.declaration ?? {}
+  const spec = isPlainObject(template?.readback) ? template.readback : null
+  if (!spec) return { ok: false, reason: 'readback-not-declared' }
+
+  const readTemplateId = String(spec.template ?? '')
+  const readTemplate = (declaration.templates ?? []).find((t) => t?.id === readTemplateId)
+  if (!readTemplate) return { ok: false, reason: 'readback-template-missing' }
+  if (String(readTemplate.kind ?? '') !== 'read') return { ok: false, reason: 'readback-not-a-read-template' }
+
+  const params = {}
+  for (const scope of Array.isArray(spec.scope) ? spec.scope : []) {
+    const value = fieldValue(card, scope)
+    if (!filled(value)) return { ok: false, reason: `readback-scope-missing:${scope}` }
+    params[scope] = value
+  }
+  const declaredParams = [...(readTemplate.required ?? []), ...(readTemplate.optional ?? [])].map(String)
+  const idParam = declaredParams.find((key) => key === 'id' || key === 'issue-id')
+  if (!idParam) return { ok: false, reason: 'readback-id-param-undeclared' }
+  let id = spec.idFrom ? packExec.pickRef(envelope, String(spec.idFrom)) : null
+  if (id === null || id === undefined) id = fieldValue(card, 'id')
+  if (!filled(id)) return { ok: false, reason: 'readback-id-missing' }
+  params[idParam] = String(id)
+
+  const read = await executor.runRead({ packId: pack.id, templateId: readTemplateId, params, template: readTemplate })
+  if (read?.kind !== 'ok') return { ok: false, reason: 'readback-read-failed', detail: String(read?.note ?? read?.kind ?? '') }
+
+  const checks = Array.isArray(spec.check) ? spec.check : []
+  const mismatched = []
+  const checked = []
+  for (const entry of checks) {
+    const key = String(entry?.field ?? '')
+    const intent = fieldValue(card, key)
+    if (!filled(intent)) continue // 本次没写的字段不参与比对（空值＝没有这个事实）
+    const actual = packExec.pickRef(read.envelope, `data.${String(entry?.read ?? '')}`)
+    if (String(actual ?? '') !== String(intent)) mismatched.push(key)
+    checked.push(key)
+  }
+  if (mismatched.length) return { ok: false, reason: `readback-mismatch:${mismatched.join(',')}` }
+  return { ok: true, checked }
+}
+
+function createPackActions({ registry, executor, session, identityOf = () => '' } = /** @type {any} */ ({})) {
+  /** 包：按 id 取（卡片 id 与渲染事件都带包 id，编排层不需要认识任何具体包） */
+  const packById = (packId) => (typeof registry?.get === 'function' ? registry.get(packId) : null)
+
+  /**
+   * 跑一个动作。
+   * `run({ packId, cardId, actionId })` —— 渲染层只报「哪张卡片的哪个动作」，
+   * 参数与取值一律以宿主手里的卡片为准（不是渲染层传什么就用什么）。
+   */
+  async function run({ packId = '', cardId = '', actionId = '' } = {}) {
+    const pack = packById(packId) ?? packById(String(cardId).split(':')[0])
+    if (!pack) return { ok: false, reason: 'pack-not-loaded' }
+    const resolved = renderProtocol.resolveAction(pack, actionId)
+    if (!resolved.ok) return resolved
+    const action = resolved.action
+
+    // 落实到人（裁定 4）：身份取**服务端铸发**的会话身份；拿不到（或系统/匿名）即 fail-closed 拒写。
+    const identity = normalizeIdentity(identityOf())
+    if (!identity) return { ok: false, reason: 'not-signed-in' }
+    if (packExec.isSystemIdentity(identity)) return { ok: false, reason: 'system-identity' }
+
+    if (action.human === 'discard') {
+      const result = session.discard(cardId, { by: identity })
+      if (!result.ok) return result
+      return { ok: true, action: action.id, card: Object.freeze(toPresentation(result.card)) }
+    }
+
+    // ── 刷新：读一次，按声明取数并回一个渲染模型（读路径，不写任何东西）──────
+    if (action.human === 'progress' && !action.writes) {
+      const reads = String(action.reads ?? '')
+      const template = (pack.declaration?.templates ?? []).find((t) => t.id === reads)
+      if (!template) return { ok: false, reason: 'action-read-template-missing', detail: reads }
+      const read = await executor.runRead({ packId: pack.id, templateId: reads, template, params: {} })
+      if (read?.kind !== 'ok') return { ok: false, reason: 'read-failed', detail: read?.note ?? read?.kind ?? '' }
+      const page = readSide.readPage(read.envelope, template)
+      return {
+        ok: true,
+        action: action.id,
+        page: Object.freeze({ shape: page.shape, total: page.total, returned: page.items.length, truncated: page.truncated }),
+        items: page.items,
+      }
+    }
+
+    // ── 确认／推进：都要卡片（写路径的唯一入口）──────────────────────────
+    const card = session.get(cardId)
+    if (!card) return { ok: false, reason: 'card-not-found' }
+    // `failed`（确定没写进去）可以**再来一次**；`write-unknown`／`partial`／`duplicate-risk` 不行。
+    if (!['draft', 'confirmed', 'failed'].includes(card.state)) {
+      return { ok: false, reason: 'card-state-not-actionable', state: card.state }
+    }
+
+    // 动作集不得提供删除（N7 §9.0 #6）：即使某条动作指向删除模板，这里也拒（执行器另有同判）。
+    const writesTemplate = (pack.declaration?.templates ?? []).find((t) => t?.id === String(action.writes ?? ''))
+    if (writesTemplate && packExec.isDeleteCommand(writesTemplate.command)) {
+      return { ok: false, reason: 'action-forbidden-delete', detail: String(writesTemplate.command) }
+    }
+
+    let working = card
+    if (card.state === 'failed') {
+      const reopened = session.reopen(cardId, { by: identity })
+      if (!reopened.ok) return reopened
+      working = reopened.card
+    }
+
+    const verified = await verifyLookups({ pack, card: working, template: null, executor })
+    if (!verified.ok) return verified
+
+    const confirmed = working.state === 'confirmed' ? { ok: true, card: working } : session.confirm(cardId, { by: identity })
+    if (!confirmed.ok) return confirmed
+
+    const outcome = await executor.runTemplate({
+      packId: pack.id,
+      templateId: action.writes,
+      card: confirmed.card, // 确认人＝会话主体身份（由 session.confirm 落在卡片上，调用方传不进来）
+    })
+
+    // `ok:true` 不可单独作成功依据：只有真写成功、带回执时才去读回交叉验证。
+    const readback =
+      outcome?.kind === 'ok' && outcome.ref
+        ? await verifyReadback({ pack, card: confirmed.card, template: writesTemplate, envelope: outcome.envelope, executor })
+        : null
+
+    const outcomeOutcome = applyOutcome(session, confirmed.card, outcome, pack.declaration ?? {}, { readback })
+    const finalCard = outcomeOutcome.card
+    // 宿主侧校验没过（没触达执行）：如实回报原因，卡片留在原态可再确认
+    if (outcomeOutcome.blocked) {
+      return Object.freeze({ ok: false, reason: outcomeOutcome.blocked, card: Object.freeze(toPresentation(finalCard)) })
+    }
+    return Object.freeze({
+      ok: true,
+      action: action.id,
+      outcome: Object.freeze({ kind: String(outcome?.kind ?? ''), ref: outcome?.ref ?? null, note: outcome?.note ?? null }),
+      readback: readback ? Object.freeze({ ok: readback.ok === true, reason: readback.reason ?? null, checked: readback.checked ?? null }) : null,
+      card: Object.freeze(toPresentation(finalCard)),
+    })
+  }
+
+  /** 会话内全部卡片的只读呈现（界面首次绘制／重连时用） */
+  const cards = () => session.presentations()
+
+  return Object.freeze({ run, cards })
+}
+
+return Object.freeze({ createPackActions, applyOutcome, verifyLookups, verifyReadback, normalizeIdentity })
+})()
+
+const {
+  createPackActions,
+  applyOutcome,
+  verifyLookups,
+  verifyReadback,
+  normalizeIdentity
+} = packActions
+
+// ─────────────────────────────────────────────────────────────────────────────
 // W2 · the SINGLE assembly point + the baymax pack (plugin face + ONE skill)
 //
 // Design: N7-20261006-plankton-session-packs §8 (W2 = `packs.js` +
@@ -2187,10 +2978,23 @@ const BAYMAX_WRITE_TEMPLATES = [
       { when: 'parent-id', args: ['--parent-id', { field: 'parent-id' }] }
     ],
     // 实测（2026-10-06 写侧最小验证，真建 PM-3268）：写响应把工单**平铺**进 data
-    //   {"data":{"id":"3268","title":"…","issueKey":"PM-3268","status":{"name":"…"},…},"ok":true}
+    //   {"data":{"id":"3268","title":"…","issueKey":"PM-3268","status":{"name":"…"},"…},"ok":true}
     // ⇒ 主路径就是 data.issueKey；回执**有单号、无 URL 字段**。
     refPath: 'data.issueKey',
-    refPathFallbacks: ['data.id', 'data.createIssue.issueKey']
+    refPathFallbacks: ['data.id', 'data.createIssue.issueKey'],
+    // W3 · 读回交叉验证（N7 §9.0 #6：`ok:true` 不可单独作成功依据）。建后按回执的 `data.id`
+    // 读 `+issue-get --project-id <项目> --id <id>`，逐条比对卡片里**有值**的预期字段；
+    // 未声明 readback ⇒ 恒落 write-unknown（fail-closed）。
+    readback: {
+      template: 'get-issue',
+      idFrom: 'data.id',
+      scope: ['project-id'],
+      check: [
+        { field: 'title', read: 'title' },
+        { field: 'status-id', read: 'statusId' },
+        { field: 'type-id', read: 'typeId' }
+      ]
+    }
   },
   {
     id: 'update-item',
@@ -2232,7 +3036,19 @@ const BAYMAX_WRITE_TEMPLATES = [
     ],
     // 实测（2026-10-06 写侧最小验证，真改 PM-3268）：写响应同样把工单平铺进 data。
     refPath: 'data.issueKey',
-    refPathFallbacks: ['data.id', 'data.updateIssue.issueKey']
+    refPathFallbacks: ['data.id', 'data.updateIssue.issueKey'],
+    // W3 · 读回交叉验证：改后按回执的 `data.id` 读 `+issue-get`，逐条比对**有值**的预期字段；
+    // `--parent-id` 落到 parentId 已由读回可见（实测），标签写-读仍未测（见 §9.1 #4）。
+    readback: {
+      template: 'get-issue',
+      idFrom: 'data.id',
+      scope: ['project-id'],
+      check: [
+        { field: 'title', read: 'title' },
+        { field: 'status-id', read: 'statusId' },
+        { field: 'parent-id', read: 'parentId' }
+      ]
+    }
   },
   {
     id: 'add-comment',
@@ -2245,6 +3061,9 @@ const BAYMAX_WRITE_TEMPLATES = [
     // 实测（2026-10-06）：评论响应也是平铺 {"data":{"id":"…","content":"…","authorName":"陈涛"…},"ok":true}
     refPath: 'data.id',
     refPathFallbacks: ['data.createComment.id']
+    // W3 · 本模板**不声明 readback**（如实）：`+issue-get` 不回显评论、`+issue-history` 只记字段变更
+    // ⇒ 现有读命令**无法**读回确认评论是否落到位。按「ok 不可单独作成功依据」，它写成功也落
+    // `write-unknown`（先核对，别重写）。补评论回读命令后再登记（§9.1 #4 未测项）。
   }
 ]
 
@@ -3447,5 +4266,14 @@ export {
   BAYMAX_EXCLUDED_COMMANDS,
   installedPacks,
   assemblePacks,
-  PACK_EXEC_SCOPE
+  // W3 · action execution (pack-exec + pack-actions)
+  // `EXEC_KINDS` is the ONE definition; the registry reads it from the packExec
+  // module (no second inline copy — the pre-W3 same-value lock is resolved).
+  EXEC_KINDS,
+  packExec,
+  packActions,
+  createPackExecutor,
+  createPackActions,
+  verifyReadback,
+  normalizeIdentity
 }

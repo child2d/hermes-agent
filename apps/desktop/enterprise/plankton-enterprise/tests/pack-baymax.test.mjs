@@ -353,7 +353,7 @@ test('17 · 失败码地板：进程可能已经跑过的三种形态只能落 w
   for (const kind of ['unparsed', 'timeout', 'spawn-error']) assert.equal(D.failureMap[kind], 'write-unknown')
   assert.equal(D.failureMap.refused, 'blocked', '没触达执行的形态留原态')
   assert.equal(D.failureMap.ok, 'written')
-  for (const kind of M.PACK_EXEC_SCOPE.EXEC_KINDS) assert.ok(kind in D.failureMap, `failureMap 未覆盖执行结果形态 ${kind}`)
+  for (const kind of M.EXEC_KINDS) assert.ok(kind in D.failureMap, `failureMap 未覆盖执行结果形态 ${kind}`)
 })
 
 test('18 · 播报谓词：口径在包内，空集静默，逾期按计划结束早于今天判定', () => {
