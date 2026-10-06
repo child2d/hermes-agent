@@ -479,20 +479,20 @@ test('F1 · 空更新（只给 project-id/id，改不了任何东西）⇒ 执�
   assert.notEqual(session.current().state, 'written')
 })
 
-test('F1 · 地板：写成功（ok:true 带回执）但读回一个字段都没比到 ⇒ write-unknown，绝不落 written', async () => {
+test('F1 · 意图判据：写成功（ok:true 带回执）但本次只写了 unreadable 登记的字段 ⇒ write-unknown，绝不落 written', async () => {
   const registry = registryWith(updateDemo())
   const executor = fakeExecutor({
-    // 写成功打回执；读回照常返回数据 —— 但卡片里 check 的那个字段（title）本次是空的
+    // 写成功打回执；读回照常返回数据 —— 但本次写的是 parent-id（登记为读不回），title 空
     read: (req) => (req.templateId === 'item-get'
       ? { kind: 'ok', envelope: { ok: true, data: { id: '3268', title: '别的' } } }
       : { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', name: 'P1' }], total: 1 } } }),
   })
-  const session = fakeSession(updateCard({ parentId: '7' })) // parent-id 填了（避免落 no-op），但 title 空 ⇒ check 空
+  const session = fakeSession(updateCard({ parentId: '7' })) // parent-id 填了（避免落 no-op），它登记为 unreadable
   const actions = M.createPackActions({ registry, executor, session, identityOf: () => ({ whoami: { displayName: '陈涛' } }) })
   const res = await actions.run({ packId: 'demo', cardId: 'demo-update:abc', actionId: 'confirm-update' })
   assert.equal(res.ok, true)
   assert.equal(res.readback.ok, false)
-  assert.equal(res.readback.reason, 'readback-no-field-checked')
+  assert.equal(res.readback.reason, 'readback-intent-unreadable:parent-id')
   assert.deepEqual(res.readback.checked, [])
   assert.equal(session.current().state, 'write-unknown')
 })
@@ -614,7 +614,11 @@ test('F3 · 读路径同样拦（读写两路共用 resolveTemplate 的同一份
   assert.equal(res.refusal, 'command-forbidden-delete')
 })
 
-// ── 9 · W4 复核 B/A：读回清单覆盖全部可写字段；定位字段不得进 check ───────────
+// ── 9 · W4 复核 B/A + 复验 P1–P4：读回清单覆盖全部可写字段；形状无关口径；意图判据 ──
+//
+// 本节的**关键教训**（第二轮复验 P1/P2/P3）：回读夹具必须用**实测形状**。把回执写成与卡片
+// 同形（「自证式夹具」）会让逐字口径的缺陷永远照绿 —— P1/P2/P3 就是这么漏过去的。所以本节
+// 所有回读夹具都取自 2026-10-06 的只读实测（`+issue-get --project-id 1 --id 3268`）。
 
 /** 真实 BAYMAX 更新卡：定位字段（project-id/id，各带本包的佐证）+ 本次要改的内容字段。 */
 function baymaxCard(contentFields) {
@@ -628,15 +632,41 @@ function baymaxCard(contentFields) {
   }
 }
 
-/** 用真实 BAYMAX 声明 + 真会话 + 夹具执行器（无 spawn）跑一次 update-item。 */
-async function runBaymaxUpdate(contentFields, readData) {
+/**
+ * **真机回读形状表**（2026-10-06 实测 `+issue-get`；本节所有回读夹具的唯一形状来源）。
+ * 左＝卡片里用户填的值，右＝真机回读的同名字段值。三条不同形：
+ *   · 日期回 ISO8601 **带时分秒**（`"2026-09-07T00:00:00.000Z"`）而卡片是纯日期；
+ *   · 工时回 **JSON number**（8／0.5）而卡片是文本（`"8.0"`）；
+ *   · 描述回 **HTML**（`<p>…</p>`）而卡片是纯文本。
+ */
+const REAL_READBACK_SHAPE = {
+  title: { card: '写一份东西（已改）', read: '写一份东西（已改）', mode: 'text' },
+  description: { card: '自动化验证用，验完即删。', read: '<p>自动化验证用，验完即删。</p>', mode: 'text' },
+  'status-id': { card: '5', read: '5', mode: 'exact' },
+  'type-id': { card: '3', read: '3', mode: 'exact' },
+  'priority-id': { card: '3', read: '3', mode: 'exact' },
+  'assignee-id': { card: '5', read: '5', mode: 'exact' },
+  'estimate-start': { card: '2026-09-07', read: '2026-09-07T00:00:00.000Z', mode: 'date' },
+  'estimate-end': { card: '2026-11-01', read: '2026-11-01T00:00:00.000Z', mode: 'date' },
+  'estimate-workload': { card: '8.0', read: 8, mode: 'number' },
+  'actual-workload': { card: '1.0', read: 1, mode: 'number' },
+  'parent-id': { card: '3268', read: '3268', mode: 'exact' },
+}
+
+/** 形状不同形、逐字口径**恒不等**的那几个（反向证明用：口径拿掉必须变红）。 */
+const SHAPE_MISMATCHING_FIELDS = ['description', 'estimate-start', 'estimate-end', 'estimate-workload', 'actual-workload']
+
+/** 用真实 BAYMAX 声明 + 真会话 + 夹具执行器（无 spawn）跑一次 update-item。`reads` 可补读模板。 */
+async function runBaymaxUpdate(contentFields, readData, reads = {}) {
   const registry = M.createPackRegistry()
   const loaded = registry.register(M.BAYMAX_DECLARATION)
   assert.equal(loaded.ok, true, JSON.stringify(loaded))
   const executor = fakeExecutor({
-    read: (req) => (req.templateId === 'project-list'
-      ? { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', projectName: 'P1' }], total: 1 } } }
-      : { kind: 'ok', envelope: { ok: true, data: { id: '3268', ...readData } } }),
+    read: (req) => {
+      if (reads[req.templateId]) return reads[req.templateId]
+      if (req.templateId === 'project-list') return { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', projectName: 'P1' }], total: 1 } } }
+      return { kind: 'ok', envelope: { ok: true, data: { id: '3268', ...readData } } }
+    },
     write: () => ({ kind: 'ok', ref: 'PM-3268', envelope: { ok: true, data: { id: '3268', issueKey: 'PM-3268' } } }),
   })
   const session = fakeSession(baymaxCard(contentFields))
@@ -656,36 +686,61 @@ test('W4-B 声明面：create-item/update-item 的 check 覆盖全部可写字�
     const uncovered = writable.filter((f) => !check.includes(f) && !unreadable.includes(f))
     assert.deepEqual(uncovered, [], `${id} 仍有未覆盖的可写字段：${uncovered.join(',')}`)
     for (const u of t.readback.unreadable ?? []) assert.ok(u.reason && String(u.reason).trim(), `${id}.${u.field} 须写明读不回的理由`)
+    // 同一字段不得既在 check 又在 unreadable（P4 里 unreadable 是否决性的）
+    for (const field of unreadable) assert.equal(check.includes(field), false, `${id}.${field} 不得同时在 check 与 unreadable`)
   }
   // 唯一留白就是「读回是对象数组、逐字口径不适用」的 label-ids
   assert.deepEqual(D.templates.find((t) => t.id === 'update-item').readback.unreadable.map((u) => u.field), ['label-ids'])
 })
 
-test('W4-B 正控（读回层）：真实 update-item 声明，单项改任一可读字段 ⇒ 读回比中（ok:true 且 checked 含该字段）', async () => {
+test('P1/P2/P3 声明面：每条 check 的 compare 与真机形状一致（date/number/text）；口径名合法', () => {
+  const t = M.BAYMAX_DECLARATION.templates.find((x) => x.id === 'update-item')
+  const byField = new Map(t.readback.check.map((c) => [c.field, c]))
+  assert.deepEqual([...byField.keys()], Object.keys(REAL_READBACK_SHAPE), 'check 字段集必须与本节的真实形状表一一对应')
+  for (const [field, shape] of Object.entries(REAL_READBACK_SHAPE)) {
+    assert.equal(String(byField.get(field).compare ?? 'exact'), shape.mode, `${field} 的比对口径应与真机形状相配`)
+  }
+})
+
+test('P1/P2/P3 正控（读回层·真实形状）：单项改任一可读字段都按声明口径比中（11 × 真机形状）', async () => {
   const D = M.BAYMAX_DECLARATION
   const pack = { id: 'baymax', declaration: D }
   const template = D.templates.find((t) => t.id === 'update-item')
   const readKeyOf = (field) => template.readback.check.find((c) => c.field === field).read
-  const checkedFields = template.readback.check.map((c) => c.field)
-  assert.ok(checkedFields.length >= 11, `期望覆盖 11 个可读字段，实得 ${checkedFields.length}`)
-  for (const field of checkedFields) {
-    const value = `值-${field}`
-    const card = baymaxCard([{ key: field, label: field, value, tier: 'agent-drafted', source: 'agent' }])
+  for (const [field, shape] of Object.entries(REAL_READBACK_SHAPE)) {
+    const card = baymaxCard([{ key: field, label: field, value: shape.card, tier: 'agent-drafted', source: 'agent' }])
     const executor = fakeExecutor({ read: (req) => (req.templateId === 'get-issue'
-      ? { kind: 'ok', envelope: { ok: true, data: { id: '3268', [readKeyOf(field)]: value } } }
-      : { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', name: 'P1' }], total: 1 } } }) })
+      ? { kind: 'ok', envelope: { ok: true, data: { id: '3268', [readKeyOf(field)]: shape.read } } }
+      : { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', projectName: 'P1' }], total: 1 } } }) })
     const res = await M.verifyReadback({ pack, card, template, envelope: { ok: true, data: { id: '3268' } }, executor })
     assert.equal(res.ok, true, `${field}: ${JSON.stringify(res)}`)
-    assert.ok(res.checked.includes(field), `${field} 应计入命中，checked=${JSON.stringify(res.checked)}`)
+    assert.deepEqual(res.checked, [field], `${field} 应被比中，checked=${JSON.stringify(res.checked)}`)
   }
 })
 
-test('W4-B 正控（端到端）：真实声明 + 真会话 + 夹具读回，单项改 description／priority-id／assignee-id／estimate-end 均落 written', async () => {
+test('P1/P2/P3 反向证明（同一条真机夹具）：把口径退回逐字 ⇒ 三条不同形的字段必须变红 ⇒ 口径承重', async () => {
+  const D = M.BAYMAX_DECLARATION
+  const base = D.templates.find((t) => t.id === 'update-item')
+  // 只把 compare 抹掉（＝退回默认 exact），其余一字不动
+  const exactOnly = { ...base, readback: { ...base.readback, check: base.readback.check.map((c) => ({ field: c.field, read: c.read })) } }
+  const pack = { id: 'baymax', declaration: { ...D, templates: D.templates.map((t) => (t.id === 'update-item' ? exactOnly : t)) } }
+  for (const field of SHAPE_MISMATCHING_FIELDS) {
+    const shape = REAL_READBACK_SHAPE[field]
+    const readKey = base.readback.check.find((c) => c.field === field).read
+    const card = baymaxCard([{ key: field, label: field, value: shape.card, tier: 'agent-drafted', source: 'agent' }])
+    const executor = fakeExecutor({ read: () => ({ kind: 'ok', envelope: { ok: true, data: { id: '3268', [readKey]: shape.read } } }) })
+    const res = await M.verifyReadback({ pack, card, template: exactOnly, envelope: { ok: true, data: { id: '3268' } }, executor })
+    assert.equal(res.ok, false, `${field} 在逐字口径下必须对不上（这条夹具不是自证式）`)
+    assert.equal(res.reason, `readback-mismatch:${field}`, `${field}: ${JSON.stringify(res)}`)
+  }
+})
+
+test('P1/P2/P3 正控（端到端·真实形状）：单项改 description／estimate-end／estimate-workload ⇒ 落 written', async () => {
   const cases = [
-    ['description', { key: 'description', label: '描述', value: '新背景', tier: 'agent-drafted', source: 'agent' }, { description: '新背景' }],
-    ['priority-id', { key: 'priority-id', label: '优先级', value: '3', tier: 'user-designated', source: 'human', attestation: { kind: 'quote', quote: '3' } }, { priorityId: '3' }],
-    ['assignee-id', { key: 'assignee-id', label: '负责人', value: '88', tier: 'user-fact', source: 'human' }, { assigneeId: '88' }],
-    ['estimate-end', { key: 'estimate-end', label: '计划结束', value: '2026-11-01', tier: 'user-fact', source: 'human' }, { estimateEndDate: '2026-11-01' }],
+    ['description', { key: 'description', label: '描述', value: '自动化验证用，验完即删。', tier: 'agent-drafted', source: 'agent' }, { description: '<p>自动化验证用，验完即删。</p>' }],
+    ['estimate-end', { key: 'estimate-end', label: '计划结束', value: '2026-11-01', tier: 'user-fact', source: 'human' }, { estimateEndDate: '2026-11-01T00:00:00.000Z' }],
+    ['estimate-workload', { key: 'estimate-workload', label: '预估工时', value: '8.0', tier: 'user-fact', source: 'human' }, { estimateWorkload: 8 }],
+    ['actual-workload', { key: 'actual-workload', label: '实际工时', value: '1.0', tier: 'user-fact', source: 'human' }, { actualWorkload: 1 }],
   ]
   for (const [label, field, readData] of cases) {
     const { res, session } = await runBaymaxUpdate([field], readData)
@@ -696,7 +751,46 @@ test('W4-B 正控（端到端）：真实声明 + 真会话 + 夹具读回，单
   }
 })
 
-test('W4-B 边界：只改登记为 unreadable 的 label-ids ⇒ 零命中读回 ⇒ fail-closed（绝不假 written）', async () => {
+test('P5 存量复核：status-id 取值出口声明与真机一致；正控卡走真实数组形状 ⇒ written', async () => {
+  // 真机（2026-10-06 实测）：+status-list --project-id 1 ⇒ {"data":[{"id":"5","name":"DEVELOPMENT/开发中","isClosed":false},…],"ok":true}
+  // 声明 valueLookup['status-id'] = { template:'status-list', labelField:'name', valueField:'id' } ⇒ 与真机一致（无缺陷）。
+  const realShape = { kind: 'ok', envelope: { ok: true, data: [{ id: '5', name: 'DEVELOPMENT/开发中', isClosed: false }] } }
+  const cardField = { key: 'status-id', label: '状态', value: '5', tier: 'user-designated', source: 'human', attestation: { kind: 'lookup', field: 'status-id' } }
+  const ok = await runBaymaxUpdate([cardField], { statusId: '5' }, { 'status-list': realShape })
+  assert.equal(ok.res.ok, true, JSON.stringify(ok.res))
+  assert.equal(ok.session.current().state, 'written', JSON.stringify(ok.res.readback))
+  // 反例（解释复验看到的 lookup-value-not-found）：夹具若把 status-list 写成**分页双层 data**（错形状），
+  // 条目取不到 ⇒ 佐证判 lookup-value-not-found —— 那是夹具形状错，不是声明错。
+  const pagedShape = { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '5', name: 'DEVELOPMENT/开发中' }], total: 1 } } }
+  const bad = await runBaymaxUpdate([cardField], { statusId: '5' }, { 'status-list': pagedShape })
+  assert.equal(bad.res.ok, false)
+  assert.equal(bad.res.reason, 'lookup-value-not-found')
+  assert.notEqual(bad.session.current().state, 'written')
+})
+
+test('W4-P4 反例：只改 label-ids、卡片另带**未改但能比中**的 title ⇒ 不得落 written', async () => {
+  // 卡片里 title 没改（且读回与它一致，逐字能比中）、以及本次真正要改的 label-ids（登记 unreadable）
+  const title = '【测试勿动】Baymax 写侧验证（自动化，验完即删）'
+  const fields = [
+    { key: 'title', label: '标题', value: title, tier: 'agent-drafted', source: 'agent' },
+    { key: 'label-ids', label: '标签', value: '12', tier: 'user-designated', source: 'human', attestation: { kind: 'quote', quote: '12' } },
+  ]
+  const { res, session } = await runBaymaxUpdate(fields, { title, labels: [{ id: '12', name: 'x', color: '#fff' }] })
+  assert.equal(res.ok, true, '写命令本身发出并成功')
+  assert.equal(res.readback?.ok, false, `拿未改的 title 当担保必须不算确认：${JSON.stringify(res.readback)}`)
+  assert.equal(res.readback.reason, 'readback-intent-unreadable:label-ids')
+  assert.deepEqual(res.readback.checked, [])
+  assert.equal(session.current().state, 'write-unknown', '本次要写的字段读不回来 ⇒ 结果未知（先核对，别重写）')
+})
+
+test('W4-P4 正控：卡片里只有真改的字段（title）⇒ 仍落 written（意图判据不误伤真确认）', async () => {
+  const { res, session } = await runBaymaxUpdate([{ key: 'title', label: '标题', value: '改了标题', tier: 'agent-drafted', source: 'agent' }], { title: '改了标题' })
+  assert.equal(res.readback?.ok, true, JSON.stringify(res.readback))
+  assert.deepEqual(res.readback.checked, ['title'])
+  assert.equal(session.current().state, 'written')
+})
+
+test('W4-P4 边界：卡片里只有 label-ids（无其它字段）⇒ 同样 fail-closed（不落 written）', async () => {
   const D = M.BAYMAX_DECLARATION
   const pack = { id: 'baymax', declaration: D }
   const template = D.templates.find((t) => t.id === 'update-item')
@@ -704,8 +798,24 @@ test('W4-B 边界：只改登记为 unreadable 的 label-ids ⇒ 零命中读回
   const executor = fakeExecutor({ read: () => ({ kind: 'ok', envelope: { ok: true, data: { id: '3268', labels: [{ id: '12', name: 'x', color: '#fff' }] } } }) })
   const res = await M.verifyReadback({ pack, card, template, envelope: { ok: true, data: { id: '3268' } }, executor })
   assert.equal(res.ok, false)
-  assert.equal(res.reason, 'readback-no-field-checked')
+  assert.equal(res.reason, 'readback-intent-unreadable:label-ids')
   assert.deepEqual(res.checked, [])
+})
+
+test('W4 装载期（P1/P2/P3）：compare 口径名不在枚举内 ⇒ 装载即拒', () => {
+  const bad = M.validateDeclaration(
+    demo({ templates: demo().templates.map((t) => (t.id === 'item-create' ? { ...t, readback: { ...t.readback, check: [{ field: 'title', read: 'title', compare: 'texty' }] } } : t)) }),
+  )
+  assert.equal(bad.ok, false)
+  assert.ok(bad.invalid.some((e) => e.includes('比较口径 texty 未声明')), JSON.stringify(bad))
+})
+
+test('W4 装载期（P4）：同一字段既在 check 又在 unreadable ⇒ 装载即拒', () => {
+  const bad = M.validateDeclaration(
+    demo({ templates: demo().templates.map((t) => (t.id === 'item-create' ? { ...t, readback: { ...t.readback, unreadable: [{ field: 'title', reason: 'x' }] } } : t)) }),
+  )
+  assert.equal(bad.ok, false)
+  assert.ok(bad.invalid.some((e) => e.includes('同时在 check 与 unreadable 里')), JSON.stringify(bad))
 })
 
 test('W4-A 反证（装载期）：readback.check 含定位字段 ⇒ 装载即拒', () => {
@@ -716,17 +826,16 @@ test('W4-A 反证（装载期）：readback.check 含定位字段 ⇒ 装载即�
   assert.ok(withLocator.invalid.some((e) => e.includes('含定位字段 project-id')), JSON.stringify(withLocator))
 })
 
-test('W4-A 反证（地板口径）：check 只比未变的定位字段 ⇒ 命中数为零 ⇒ 不落 written', async () => {
+test('W4-A 反证（意图闸）：check 只比未变的定位字段、真改的字段未被覆盖 ⇒ 不落 written', async () => {
   const D = M.BAYMAX_DECLARATION
   const base = D.templates.find((t) => t.id === 'update-item')
   const template = { ...base, readback: { template: 'get-issue', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'project-id', read: 'projectId' }] } }
   const pack = { id: 'baymax', declaration: { ...D, templates: D.templates.map((t) => (t.id === 'update-item' ? template : t)) } }
-  // 卡片真改了 title，但 check 里只有**未变的** project-id ⇒ 地板必须拦住
+  // 卡片真改了 title，但 check 里只有**未变的** project-id
   const card = baymaxCard([{ key: 'title', label: '标题', value: '改了标题', tier: 'agent-drafted', source: 'agent' }])
   const executor = fakeExecutor({ read: () => ({ kind: 'ok', envelope: { ok: true, data: { projectId: '1', title: '改了标题' } } }) })
   const res = await M.verifyReadback({ pack, card, template, envelope: { ok: true, data: { id: '3268' } }, executor })
   assert.equal(res.ok, false)
-  assert.equal(res.reason, 'readback-no-field-checked')
+  assert.equal(res.reason, 'readback-intent-uncovered:title')
   assert.deepEqual(res.checked, [])
 })
-
