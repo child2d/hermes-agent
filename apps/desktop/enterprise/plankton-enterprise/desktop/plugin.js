@@ -1348,6 +1348,73 @@ const {
   toPresentation
 } = planCard
 
+// ── 命令面判据（注册点与执行器共用一份）───────────────────────────────────────────────
+/**
+ * 破坏性命令词表 —— 「不给删除」按**集合**判，不按名字字形（复核 F3）。
+ * 名字拼法千变万化（`delete` / `deleteIssue` / `remove` / `purge` 换个位置或换个名字），
+ * 只有把标识符切成**词**、再判词落不落在这个集合里，才拦得住「换个名字的同一件事」。
+ * 这份集合是装载期与执行期**同一份**判据（两处都指这里，不许各写一个正则）。
+ */
+const FORBIDDEN_COMMAND_TOKENS = Object.freeze([
+  'delete',
+  'remove',
+  'purge',
+  'rm',
+  'destroy',
+  'drop',
+  'archive',
+  'truncate',
+  'wipe'
+])
+
+/** 标识符切词：先拆 camelCase（lower→Upper），再按非字母数字切。 */
+function commandWords(value) {
+  return String(value ?? '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+}
+
+/** 值里命中的破坏性词（空数组＝干净）。 */
+function forbiddenCommandTokens(value) {
+  return commandWords(value).filter((word) => FORBIDDEN_COMMAND_TOKENS.includes(word))
+}
+
+const hasForbiddenCommandToken = (value) => forbiddenCommandTokens(value).length > 0
+
+/** 模板 `args` 里的**字面量**（递归；只取字符串，不取字段引用/取值）—— 参数里的 `--delete` 也是命令面。 */
+function argStringLiterals(args, out = []) {
+  for (const item of Array.isArray(args) ? args : []) {
+    if (typeof item === 'string') out.push(item)
+    else if (item && typeof item === 'object' && !Array.isArray(item) && Array.isArray(item.args)) argStringLiterals(item.args, out)
+  }
+  return out
+}
+
+/**
+ * 写模板的**定位字段**：按编号改一条已有记录所必需的字段 —— `readback.scope` ∪ 读模板的 id 参数
+ * （`id`／`issue-id`）。它们回答「改**谁**」；其余字段回答「改**什么**」。空更新的判据与
+ * readback 覆盖判据都用这一份（避免两处各定义一次「定位字段」）。
+ */
+function readbackLocatorFields(templates, template) {
+  const rb =
+    template && typeof template === 'object' && !Array.isArray(template) && template.readback && typeof template.readback === 'object'
+      ? template.readback
+      : null
+  if (!rb) return new Set()
+  const readTemplate = (Array.isArray(templates) ? templates : []).find(
+    (t) => t && typeof t === 'object' && !Array.isArray(t) && t.id === String(rb.template ?? '')
+  )
+  const params = readTemplate
+    ? [...(Array.isArray(readTemplate.required) ? readTemplate.required : []), ...(Array.isArray(readTemplate.optional) ? readTemplate.optional : [])].map(String)
+    : []
+  const idParam = params.find((key) => key === 'id' || key === 'issue-id')
+  const locators = new Set((Array.isArray(rb.scope) ? rb.scope : []).map(String))
+  if (idParam) locators.add(idParam)
+  return locators
+}
+
 // ── pack-registry.js ──────────────────────────────────────────────────────────────────
 const packRegistry = (function () {
 // electron/pack-registry.js — 宿主侧的**插件注册点**：只认「声明」，不认任何具体的包。
@@ -1518,6 +1585,38 @@ function validateDeclaration(declaration) {
       const target = templates.find((t) => isPlainObject(t) && t.id === rbTemplate)
       if (!target) invalid.push(`templates: ${String(template.id ?? '?')} 的 readback 指向未声明模板 ${rbTemplate || '?'}`)
       else if (String(target.kind ?? '') !== 'read') invalid.push(`templates: ${String(template.id ?? '?')} 的 readback 指向非读模板 ${rbTemplate}`)
+    }
+    // W3 加严（复核 F1）①：读回比对不能是**空集** —— `check` 为空＝没有任何字段会比，
+    // 那张写卡的「成功判据」就退回信封 `ok`（＝假的读回确认）⇒ 装载即拒。
+    // ② 且 `check` 必须覆盖写模板的必填集（**定位字段**除外：它们回答「改谁」，不是「改什么」）。
+    for (const template of templates) {
+      if (!isPlainObject(template) || !isPlainObject(template.readback)) continue
+      const id = String(template.id ?? '?')
+      const check = (Array.isArray(template.readback.check) ? template.readback.check : [])
+        .map((entry) => (isPlainObject(entry) ? String(entry.field ?? '') : ''))
+        .filter(Boolean)
+      if (check.length === 0) invalid.push(`templates: ${id} 的 readback.check 为空——没有要比对的字段，读回等于没确认`)
+      const locators = readbackLocatorFields(templates, template)
+      const uncovered = (Array.isArray(template.required) ? template.required : [])
+        .map(String)
+        .filter((field) => !locators.has(field) && !check.includes(field))
+      if (uncovered.length) invalid.push(`templates: ${id} 的 readback.check 未覆盖必填 ${uncovered.join(',')}`)
+    }
+    // W3 加严（复核 F3）：「不给删除」按**集合**判，不靠名字。装载期两条正向规则：
+    //   ① 写模板的命令必须属**本包声明的命令集**（未声明的写命令＝包面之外的命令，含各类删除／移除命令）；
+    //   ② 模板参数里的**字面量**不得命中破坏性词表（命令里的词由执行期同判据拦，这里补上参数面）。
+    const declaredCommandSet = new Set([
+      ...Object.keys(isPlainObject(declaration.requiredParams) ? declaration.requiredParams : {}),
+      ...(Array.isArray(declaration.commandSurface?.used) ? declaration.commandSurface.used.map(String) : []),
+    ])
+    for (const template of templates) {
+      if (!isPlainObject(template)) continue
+      const id = String(template.id ?? '?')
+      if (declaredCommandSet.size > 0 && String(template.kind ?? '') === 'write' && !declaredCommandSet.has(String(template.command ?? ''))) {
+        invalid.push(`templates: ${id} 的写命令 ${String(template.command ?? '?')} 不在本包声明的命令集内`)
+      }
+      const badLiterals = argStringLiterals(template.args).filter(hasForbiddenCommandToken)
+      if (badLiterals.length) invalid.push(`templates: ${id} 的参数含破坏性字面量 ${badLiterals.join('/')}`)
     }
     // 必填三集合不许互相打架：模板不得比 CLI 松；比 CLI 严的必须登记依据；登记了就必须真用到。
     // `requiredParams` 整体为空＝**没声明**（走 missing 通道），此时不做交叉校验（否则「没声明」
@@ -1995,9 +2094,12 @@ const EXEC_KINDS = Object.freeze(['ok', 'rejected', 'unparsed', 'timeout', 'spaw
  * **删除类命令一律不提供**（N7 §9.0 #6：命令面无删除命令，卡片／动作集只能给「关闭」）。
  * 这是动作集边界的机器载体：即使某份声明写进来一条删除命令，执行器在 `resolveTemplate`
  * 就拒（`command-forbidden-delete`），绝不落到 spawn。
+ *
+ * **判据是集合、不是名字字形**（复核 F3）：词表与判据见文件上方 `FORBIDDEN_COMMAND_TOKENS`
+ * 与 `hasForbiddenCommandToken` —— 装载期与执行期**共用同一份**，`remove`／`purge`／`rm`／
+ * `archive`／`drop` 之类换个名字的删除同样命中。
  */
-const FORBIDDEN_COMMAND = /(^|[^a-z])delete([^a-z]|$)|issue-delete/i
-const isDeleteCommand = (command) => FORBIDDEN_COMMAND.test(String(command ?? ''))
+const isDeleteCommand = (command) => hasForbiddenCommandToken(command)
 
 /** 系统／匿名身份 —— 记录里必须是**具体的人**（裁定 4），这类名字一律 fail-closed。 */
 const SYSTEM_IDENTITIES = Object.freeze(['system', 'anonymous', 'nobody', 'root', 'unknown', '-'])
@@ -2096,6 +2198,10 @@ function resolveTemplate(declaration, templateId, params) {
   if (!commands.includes(String(template.command ?? ''))) return { ok: false, refusal: 'command-not-declared' }
   // 动作集不得提供删除（N7 §9.0 #6）：声明里就算写了删除命令，这里也拒。
   if (isDeleteCommand(template.command)) return { ok: false, refusal: 'command-forbidden-delete' }
+  // 参数里的**字面量**同样按集合判（复核 F3）：`--delete`／`--purge` 换个位置还是同一件事。
+  // 只扫模板声明的字面量，不扫取值（取值是用户的文本，可能正好含这个词——那是内容不是命令）。
+  const forbiddenLiterals = argStringLiterals(template.args).filter(hasForbiddenCommandToken)
+  if (forbiddenLiterals.length) return { ok: false, refusal: 'arg-forbidden-delete', fields: forbiddenLiterals }
   if (!nonEmptyString(template.module)) return { ok: false, refusal: 'template-missing-module' }
   if (!Array.isArray(template.args)) return { ok: false, refusal: 'template-missing-args' }
 
@@ -2111,6 +2217,24 @@ function resolveTemplate(declaration, templateId, params) {
 
   const destructiveTouched = destructiveNames(declaration).filter((name) => fields.has(name) && filled(params?.[name]))
   return { ok: true, template, argv, destructiveTouched }
+}
+
+/**
+ * **空更新**（复核 F1 根因层）：一条写模板的必填**全是定位字段**（`readback.scope` ∪ id 参数，
+ * 回答「改谁」）、而定位字段之外一个都没填（回答「改什么」的字段全空）⇒ 这条写**改不了任何东西**。
+ * 只带 `--project-id --id` 的更新就是这种：发出去是空转，还占一次「写」的可观测面 ⇒ 执行前就拒。
+ * 建单模板（必填含标题之类的内容字段）**不落此判**：只给标题的新建是正当写入。
+ */
+function isEmptyWrite(declaration, template, params) {
+  const templates = Array.isArray(declaration?.templates) ? declaration.templates : []
+  const locators = readbackLocatorFields(templates, template)
+  if (!locators.size) return false
+  const required = Array.isArray(template?.required) ? template.required.map(String) : []
+  if (!required.length || !required.every((field) => locators.has(field))) return false
+  const declared = [...required, ...(Array.isArray(template?.optional) ? template.optional : []).map(String)]
+  const mutable = declared.filter((field) => !locators.has(field))
+  if (!mutable.length) return false
+  return !mutable.some((field) => filled(params?.[field]))
 }
 
 /** 单个流里认信封：整份就一份 JSON 最好；混着噪声（升级提示/日志）就逐行从后往前找。 */
@@ -2288,6 +2412,10 @@ function createPackExecutor({ execFileImpl, cliPath, timeoutMs = DEFAULT_TIMEOUT
     const params = toParams(card)
     const resolved = resolveTemplate(pack.declaration, templateId, params)
     if (!resolved.ok) return Object.freeze({ ...refuse(resolved.refusal), ...(resolved.fields ? { fields: resolved.fields } : {}) })
+
+    // **空更新**（复核 F1 根因层）：只有定位字段、改不了任何一件事情的写 ⇒ 执行前就拒，
+    // 不发一条无意义写入（既省一次写面，也不让「写成功但零字段可比」的场景出现）。
+    if (isEmptyWrite(pack.declaration, resolved.template, params)) return refuse('no-op-write')
 
     // 破坏性写：必须有人在环。确认人**来自卡片的确认动作**，调用方传不进来。
     if (resolved.destructiveTouched.length && !confirmedBy) {
@@ -2612,6 +2740,9 @@ async function verifyReadback({ pack, card, template, envelope, executor }) {
     checked.push(key)
   }
   if (mismatched.length) return { ok: false, reason: `readback-mismatch:${mismatched.join(',')}` }
+  // **地板**（复核 F1）：本次一个字段都没比对到 ⇒ 读回**没有确认任何东西**，绝不落 `written`。
+  // `check` 非空由装载期保证；这里覆盖「check 全是本次没写的可选字段」（如只改 project-id/id 的空更新）。
+  if (checked.length === 0) return { ok: false, reason: 'readback-no-field-checked', checked: [] }
   return { ok: true, checked }
 }
 

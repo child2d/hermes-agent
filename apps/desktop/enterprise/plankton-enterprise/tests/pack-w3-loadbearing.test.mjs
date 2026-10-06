@@ -54,6 +54,19 @@ async function mutated(from, to) {
   return loadPlugin(next)
 }
 
+/** Apply several exact anchors at once (each must be unique) — for "拿掉两道判据" 类反证. */
+async function mutatedAll(pairs) {
+  let next = SOURCE
+  for (const [from, to] of pairs) {
+    const first = next.indexOf(from)
+    assert.notEqual(first, -1, `mutation anchor not found: ${from}`)
+    assert.equal(next.indexOf(from, first + 1), -1, `mutation anchor is not unique: ${from}`)
+    next = next.slice(0, first) + to + next.slice(first + from.length)
+  }
+  assert.notEqual(next, SOURCE)
+  return loadPlugin(next)
+}
+
 const INTACT = await loadPlugin(SOURCE)
 
 function demo() {
@@ -175,4 +188,87 @@ test('(d) short-circuit the spawner guard ⇒ a write with no spawner is no long
   // Replace the single guard with a no-op AND give the spawner a body that cannot run.
   const M = await mutated("if (!spawnable) return refuse('spawner-missing')\n    if (!isPlainObject(card)) return refuse('card-required')", "if (false) return refuse('spawner-missing')\n    if (!isPlainObject(card)) return refuse('card-required')")
   await assert.rejects(res(M).catch((e) => { throw e }), /execFileImpl is not a function|not a function|Cannot read/, 'without the guard the missing spawner is dereferenced ⇒ the guard was the thing refusing')
+})
+
+// ── (e)(f) 复核 F1：空更新（根因）与「零字段比对」地板（拿掉即又落 written）────
+
+/** 一条纯更新写模板：必填＝定位字段（project-id/id）；readback.check 只认 title（本次为空）。 */
+function updateDecl() {
+  const base = demo()
+  return {
+    ...base,
+    requiredParams: { ...base.requiredParams, '+item-update': ['--project-id', '--id'] },
+    templates: [...base.templates, {
+      id: 'item-update', kind: 'write', module: 'demo', command: '+item-update',
+      required: ['project-id', 'id'], optional: ['title', 'parent-id'],
+      args: ['--project-id', { field: 'project-id' }, '--id', { field: 'id' },
+        { when: 'title', args: ['--title', { field: 'title' }] },
+        { when: 'parent-id', args: ['--parent-id', { field: 'parent-id' }] }],
+      refPath: 'data.id',
+      readback: { template: 'item-get', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'title', read: 'title' }] },
+    }],
+    outputs: { ...base.outputs, actions: { ...base.outputs.actions, 'confirm-update': { label: '确认更新', human: 'confirm', writes: 'item-update' } } },
+  }
+}
+
+/** 更新卡：定位字段恒有；内容字段（title / parent-id）按需。 */
+function updateCard({ title = '', parentId = '' } = {}) {
+  const fields = /** @type {any[]} */ ([
+    { key: 'project-id', label: '项目', value: '1', tier: 'user-designated', source: 'human', attestation: { kind: 'lookup', field: 'project-id' } },
+    { key: 'id', label: 'id', value: '3268', tier: 'user-designated', source: 'human', attestation: { kind: 'derived', from: 'item-get', source: 'by key' } },
+  ])
+  if (parentId !== '') fields.push({ key: 'parent-id', label: '上级', value: parentId, tier: 'user-designated', source: 'human', attestation: { kind: 'derived', from: 'item-get', source: 'by key' } })
+  if (title !== '') fields.push({ key: 'title', label: '标题', value: title, tier: 'agent-drafted', source: 'agent' })
+  return { id: 'demo-update:abc', title: 'Demo update card', state: 'confirmed', confirmedBy: '陈涛', fields }
+}
+
+const updateState = async (M, card) => {
+  const registry = registryWith(M, updateDecl())
+  const session = fakeSession(card)
+  const actions = M.createPackActions({ registry, executor: fakeExecutor(), session, identityOf: () => ({ whoami: { displayName: '陈涛' } }) })
+  await actions.run({ packId: 'demo', cardId: 'demo-update:abc', actionId: 'confirm-update' })
+  return session.current().state
+}
+
+test('(e) short-circuit the read-back floor ⇒ a zero-field read-back flips to `written`', async () => {
+  // parent-id 填了（避开空更新判据），title 空 ⇒ 本次**一个字段都没比到**
+  assert.equal(await updateState(INTACT, updateCard({ parentId: '7' })), 'write-unknown')
+  const M = await mutated(
+    "if (checked.length === 0) return { ok: false, reason: 'readback-no-field-checked', checked: [] }",
+    "if (false) return { ok: false, reason: 'readback-no-field-checked', checked: [] }",
+  )
+  assert.equal(await updateState(M, updateCard({ parentId: '7' })), 'written', '拿掉地板：零字段比对的写卡又落 written ⇒ 地板承重')
+})
+
+test('(f) 原场景复现（F1）：只给 project-id/id 的更新，修后不落 written；拿掉两道判据即又落 written', async () => {
+  assert.notEqual(await updateState(INTACT, updateCard()), 'written', '修后：空更新在执行前被拒 ⇒ 绝不落 written')
+  const M = await mutatedAll([
+    ["if (isEmptyWrite(pack.declaration, resolved.template, params)) return refuse('no-op-write')", "if (false) return refuse('no-op-write')"],
+    ["if (checked.length === 0) return { ok: false, reason: 'readback-no-field-checked', checked: [] }", "if (false) return { ok: false, reason: 'readback-no-field-checked', checked: [] }"],
+  ])
+  assert.equal(await updateState(M, updateCard()), 'written', '拿掉两道判据 ⇒ 空更新又落 written ⇒ 它们就是拦住这条路径的东西')
+})
+
+// ── (g) 复核 F3：参数里的破坏性字面量（拿掉判据即放行）────────────────────────
+
+test('(g) short-circuit the arg-literal guard ⇒ a template carrying `--delete` resolves', async () => {
+  const decl = () => ({
+    ...demo(),
+    templates: [{ id: 'x', kind: 'write', module: 'demo', command: '+item-get', required: [], optional: ['id'], args: ['--delete', { field: 'id' }] }],
+  })
+  const verdict = (M) => M.packExec.resolveTemplate(decl(), 'x', { id: '5' })
+  assert.equal(verdict(INTACT).refusal, 'arg-forbidden-delete')
+  const M = await mutated('if (forbiddenLiterals.length) return', 'if (false) return')
+  assert.equal(verdict(M).ok, true, '拿掉参数面判据 ⇒ 带 --delete 的模板又通过 ⇒ 该判据承重')
+})
+
+test('(h) short-circuit the load-time destructive-command rule ⇒ an undeclared write command loads', async () => {
+  const decl = () => ({
+    ...demo(),
+    templates: [...demo().templates, { id: 'item-remove', kind: 'write', module: 'demo', command: '+relation-remove', required: [], optional: [], args: [] }],
+  })
+  const loads = (M) => M.validateDeclaration(decl()).ok
+  assert.equal(loads(INTACT), false, '修后：未声明的写命令装载即拒')
+  const M = await mutated('if (declaredCommandSet.size > 0 && String(template.kind ', 'if (false && String(template.kind ')
+  assert.equal(loads(M), true, '拿掉装载期正向规则 ⇒ 该声明又通过 ⇒ 该规则承重')
 })

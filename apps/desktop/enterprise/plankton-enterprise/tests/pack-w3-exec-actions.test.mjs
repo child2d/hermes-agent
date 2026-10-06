@@ -413,3 +413,180 @@ test('actions: the write path is only entered through a card; discard needs a pe
   assert.equal(res.ok, true)
   assert.equal(res.action, 'discard')
 })
+
+// ── 7 · 复核 F1：空更新（根因层）与「零字段比对」地板 ────────────────────────
+
+/** 一条「更新」写模板：必填只有定位字段（project-id/id），内容字段全在 optional；读回只认 title。 */
+function updateDemo(overrides = {}) {
+  const base = demo()
+  return demo({
+    requiredParams: { ...base.requiredParams, '+item-update': ['--project-id', '--id'] },
+    templates: [
+      ...base.templates,
+      {
+        id: 'item-update', kind: 'write', module: 'demo', command: '+item-update',
+        required: ['project-id', 'id'], optional: ['title', 'parent-id'],
+        args: ['--project-id', { field: 'project-id' }, '--id', { field: 'id' },
+          { when: 'title', args: ['--title', { field: 'title' }] },
+          { when: 'parent-id', args: ['--parent-id', { field: 'parent-id' }] }],
+        refPath: 'data.id',
+        readback: {
+          template: 'item-get', idFrom: 'data.id', scope: ['project-id'],
+          check: [{ field: 'title', read: 'title' }],
+        },
+      },
+    ],
+    outputs: {
+      ...base.outputs,
+      actions: { ...base.outputs.actions, 'confirm-update': { label: '确认更新', human: 'confirm', writes: 'item-update' } },
+    },
+    ...overrides,
+  })
+}
+
+/** 更新卡：定位字段恒有（project-id/id），内容字段按需。`id` 出口是 readback ⇒ 佐证用写明来源的 derived。 */
+function updateCard({ title = '', parentId = '' } = {}) {
+  const fields = /** @type {any[]} */ ([
+    { key: 'project-id', label: '项目', value: '1', tier: 'user-designated', source: 'human', attestation: { kind: 'lookup', field: 'project-id' } },
+    { key: 'id', label: 'id', value: '3268', tier: 'user-designated', source: 'human', attestation: { kind: 'derived', from: 'item-get', source: 'by key' } },
+  ])
+  if (parentId !== '') fields.push({ key: 'parent-id', label: '上级', value: parentId, tier: 'user-designated', source: 'human', attestation: { kind: 'derived', from: 'item-get', source: 'by key' } })
+  if (title !== '') fields.push({ key: 'title', label: '标题', value: title, tier: 'agent-drafted', source: 'agent' })
+  return { id: 'demo-update:abc', title: 'Demo update card', state: 'confirmed', confirmedBy: '陈涛', fields }
+}
+
+test('F1 · 空更新（只给 project-id/id，改不了任何东西）⇒ 执行前就拒 no-op-write，绝不出写、绝不落 written', async () => {
+  const registry = registryWith(updateDemo())
+  const spawns = []
+  const executor = M.createPackExecutor({
+    registry, cliPath: '/fake/shaoke-cli',
+    execFileImpl: (file, args, opts, cb) => {
+      spawns.push(args)
+      const payload = args[1] === '+project-list'
+        ? '{"ok":true,"data":{"data":[{"id":"1","name":"P1"}],"total":1}}'
+        : '{"ok":true,"data":{"id":"3268"}}'
+      cb(null, payload, '')
+    },
+  })
+  const session = fakeSession(updateCard())
+  const actions = M.createPackActions({ registry, executor, session, identityOf: () => ({ whoami: { displayName: '陈涛' } }) })
+  const res = await actions.run({ packId: 'demo', cardId: 'demo-update:abc', actionId: 'confirm-update' })
+  assert.equal(res.ok, false)
+  assert.equal(res.reason, 'no-op-write')
+  assert.equal(spawns.filter((args) => args[1] === '+item-update').length, 0, '空更新不得 spawn 写命令（连读回都不必发生）')
+  assert.notEqual(session.current().state, 'written')
+})
+
+test('F1 · 地板：写成功（ok:true 带回执）但读回一个字段都没比到 ⇒ write-unknown，绝不落 written', async () => {
+  const registry = registryWith(updateDemo())
+  const executor = fakeExecutor({
+    // 写成功打回执；读回照常返回数据 —— 但卡片里 check 的那个字段（title）本次是空的
+    read: (req) => (req.templateId === 'item-get'
+      ? { kind: 'ok', envelope: { ok: true, data: { id: '3268', title: '别的' } } }
+      : { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', name: 'P1' }], total: 1 } } }),
+  })
+  const session = fakeSession(updateCard({ parentId: '7' })) // parent-id 填了（避免落 no-op），但 title 空 ⇒ check 空
+  const actions = M.createPackActions({ registry, executor, session, identityOf: () => ({ whoami: { displayName: '陈涛' } }) })
+  const res = await actions.run({ packId: 'demo', cardId: 'demo-update:abc', actionId: 'confirm-update' })
+  assert.equal(res.ok, true)
+  assert.equal(res.readback.ok, false)
+  assert.equal(res.readback.reason, 'readback-no-field-checked')
+  assert.deepEqual(res.readback.checked, [])
+  assert.equal(session.current().state, 'write-unknown')
+})
+
+test('F1 · 正控：写成功且读回比到一个字段且一致 ⇒ 仍落 written（地板不误伤真确认）', async () => {
+  const registry = registryWith(updateDemo())
+  const executor = fakeExecutor({
+    read: (req) => (req.templateId === 'item-get'
+      ? { kind: 'ok', envelope: { ok: true, data: { id: '3268', title: '写一份东西' } } }
+      : { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', name: 'P1' }], total: 1 } } }),
+  })
+  const session = fakeSession(updateCard({ title: '写一份东西' }))
+  const actions = M.createPackActions({ registry, executor, session, identityOf: () => ({ whoami: { displayName: '陈涛' } }) })
+  const res = await actions.run({ packId: 'demo', cardId: 'demo-update:abc', actionId: 'confirm-update' })
+  assert.equal(res.ok, true)
+  assert.equal(res.readback.ok, true)
+  assert.deepEqual(res.readback.checked, ['title'])
+  assert.equal(session.current().state, 'written')
+})
+
+test('F1 · 装载期：readback.check 为空、或未覆盖必填 ⇒ 装载即拒', async () => {
+  const emptyCheck = M.validateDeclaration(
+    demo({ templates: demo().templates.map((t) => (t.id === 'item-create' ? { ...t, readback: { ...t.readback, check: [] } } : t)) }),
+  )
+  assert.ok(emptyCheck.invalid.some((e) => e.includes('readback.check 为空')), JSON.stringify(emptyCheck))
+
+  const uncovered = M.validateDeclaration(
+    demo({ templates: demo().templates.map((t) => (t.id === 'item-create' ? { ...t, readback: { ...t.readback, check: [{ field: 'parent-id', read: 'parentId' }] } } : t)) }),
+  )
+  assert.ok(uncovered.invalid.some((e) => e.includes('未覆盖必填 title')), JSON.stringify(uncovered))
+})
+
+// ── 8 · 复核 F3：「不给删除」按集合判（运行期），不再靠名字字形 ───────────────
+
+test('F3 · resolveTemplate：删除类**集合**（remove/purge/rm/archive/drop + camelCase）一律拒', () => {
+  const base = demo()
+  const withCommand = (command) => ({
+    ...base,
+    requiredParams: { ...base.requiredParams, [command]: [] },
+    templates: [{ id: 'x', kind: 'write', module: 'demo', command, required: [], optional: [], args: [] }],
+  })
+  for (const command of ['+relation-remove', '+issue-purge', 'deleteIssue', 'issue-rm', '+archive-item', 'item-drop', 'destroy-item']) {
+    assert.equal(M.packExec.resolveTemplate(withCommand(command), 'x', {}).refusal, 'command-forbidden-delete', command)
+  }
+  // 判据本身：修前那条名字正则会放行的输入，现在一律命中
+  assert.equal(M.packExec.isDeleteCommand('+relation-remove'), true)
+  assert.equal(M.packExec.isDeleteCommand('+issue-purge'), true)
+  assert.equal(M.packExec.isDeleteCommand('deleteIssue'), true)
+  // 正常命令不得误伤
+  for (const command of ['+issue-create', '+issue-update', '+issue-comment', '+relation-list', '+issue-history', '+user-list']) {
+    assert.equal(M.packExec.isDeleteCommand(command), false, command)
+  }
+})
+
+test('F3 · resolveTemplate：参数里的字面量 --delete 同样拒（arg-forbidden-delete）', () => {
+  const base = demo()
+  const declaration = {
+    ...base,
+    templates: [
+      { id: 'x', kind: 'write', module: 'demo', command: '+item-get', required: [], optional: ['id'], args: ['--delete', { field: 'id' }] },
+    ],
+  }
+  assert.equal(M.packExec.resolveTemplate(declaration, 'x', { id: '5' }).refusal, 'arg-forbidden-delete')
+  // 取值里含这个词不算（那是内容，不是命令）：字段引用不参与字面量扫描
+  const valueOk = M.packExec.resolveTemplate(
+    { ...base, templates: [{ id: 'y', kind: 'write', module: 'demo', command: '+item-get', required: ['id'], optional: [], args: ['--project-id', { field: 'id' }] }] },
+    'y',
+    { id: 'delete me' },
+  )
+  assert.equal(valueOk.ok, true, '用户文本里的 delete 不该被当成命令面')
+})
+
+test('F3 · 装载期：未声明的写命令、参数里的破坏性字面量 ⇒ 装载即拒', async () => {
+  const rogueCommand = M.validateDeclaration(
+    demo({ templates: [...demo().templates, { id: 'item-remove', kind: 'write', module: 'demo', command: '+relation-remove', required: [], optional: [], args: [] }] }),
+  )
+  assert.ok(rogueCommand.invalid.some((e) => e.includes('不在本包声明的命令集内')), JSON.stringify(rogueCommand))
+
+  const rogueLiteral = M.validateDeclaration(
+    demo({ templates: demo().templates.map((t) => (t.id === 'item-create' ? { ...t, args: ['--project-id', { field: 'project-id' }, '--delete', { field: 'title' }] } : t)) }),
+  )
+  assert.ok(rogueLiteral.invalid.some((e) => e.includes('参数含破坏性字面量')), JSON.stringify(rogueLiteral))
+})
+
+test('F3 · 读路径同样拦（读写两路共用 resolveTemplate 的同一份判据）', async () => {
+  const base = demo()
+  const declaration = {
+    ...base,
+    requiredParams: { ...base.requiredParams, '+relation-remove': [] },
+    templates: [{ id: 'rogue-read', kind: 'read', module: 'demo', command: '+relation-remove', required: [], optional: [], shape: 'object', args: [] }],
+    outputs: { ...base.outputs, fields: {}, actions: {}, blocks: [] },
+  }
+  const registry = registryWith(declaration)
+  const executor = M.createPackExecutor({ registry, cliPath: '/fake', execFileImpl: () => { throw new Error('must not spawn') } })
+  const res = await executor.runRead({ packId: 'demo', templateId: 'rogue-read', params: {} })
+  assert.equal(res.kind, 'refused')
+  assert.equal(res.refusal, 'command-forbidden-delete')
+})
+
