@@ -70,6 +70,11 @@ silently collapsed into "no skills"):
   ``hash-unavailable`` / ``no-record`` / ``remove-failed`` / ``write-failed``
   / ``essential-skill`` / ``not-effective`` / ``unreadable-config`` /
   ``local-edits``.
+  ``local-edits`` is the ONE gate that also covers "cannot decide": the update
+  guard treats an engine record it cannot settle (unreadable/corrupt lock, or a
+  record with no comparable hash) as a refusal when the planned landing already
+  holds content, and carries ``detail.undecidable`` + ``detail.lockNote``. The
+  read routes expose the same fact per entry as ``localEditsUnknown``.
 An EMPTY catalog is a SUCCESS (``{ok: true, catalog: {ok: true, count: 0}}``).
 A catalog capped at the page limit is a SUCCESS that carries ``truncated: true``
 — never silently read as the whole catalog.
