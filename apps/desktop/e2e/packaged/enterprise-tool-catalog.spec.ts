@@ -447,11 +447,22 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     // Uninstall must be ENABLED for every recorded, on-disk entry. Before F-1 it
     // was permanently disabled (the version state was always version-unknown),
     // and nothing asserted it.
+    // Manage actions are rendered for every "installed-looking" row but only the
+    // engine-RECORDED ones are actionable: the catalog has 3 recorded rows plus
+    // one slot holding content no record claims, so 4 卸载 buttons render and
+    // exactly the 3 recorded ones are ENABLED (before F-1 all of them were dead,
+    // and the slot with no record must stay disabled — uninstall would be a
+    // `no-record` failure).
     const uninstall = page.getByRole('button', { name: '卸载', exact: true })
-    await expect(uninstall, 'one 卸载 per recorded, on-disk catalog entry').toHaveCount(3)
-    for (let index = 0; index < 3; index++) {
-      expect(await uninstall.nth(index).isEnabled(), `卸载 #${index} must not be permanently disabled`).toBe(true)
-    }
+    await expect(uninstall, 'one 卸载 per installed-looking catalog entry').toHaveCount(4)
+    const uninstallEnabled = await uninstall.evaluateAll(buttons =>
+      buttons.map(button => !(button as HTMLButtonElement).disabled)
+    )
+    expect(
+      uninstallEnabled,
+      'the engine-recorded rows must be actionable; the record-less slot must not'
+    ).toEqual([true, true, true, false])
+    expect(uninstallEnabled.filter(Boolean).length, 'F-1: 卸载 must not be permanently disabled').toBe(3)
 
     // The batch entry renders for the ONE confirmed-clean `version-differs` entry
     // (the other two are `version-unknown` / `consistent`, and the drifted one is
