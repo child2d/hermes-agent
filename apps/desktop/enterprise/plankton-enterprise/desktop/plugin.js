@@ -1586,9 +1586,16 @@ function validateDeclaration(declaration) {
       if (!target) invalid.push(`templates: ${String(template.id ?? '?')} 的 readback 指向未声明模板 ${rbTemplate || '?'}`)
       else if (String(target.kind ?? '') !== 'read') invalid.push(`templates: ${String(template.id ?? '?')} 的 readback 指向非读模板 ${rbTemplate}`)
     }
-    // W3 加严（复核 F1）①：读回比对不能是**空集** —— `check` 为空＝没有任何字段会比，
-    // 那张写卡的「成功判据」就退回信封 `ok`（＝假的读回确认）⇒ 装载即拒。
-    // ② 且 `check` 必须覆盖写模板的必填集（**定位字段**除外：它们回答「改谁」，不是「改什么」）。
+    // W3 加严（复核 F1／G／B）：读回比对既不能是**空集**，也不能只比对**未变的定位字段**，
+    // 还必须覆盖**本模板能写的每一个字段**（否则单项改一个不在清单里的字段＝「写了却读不回」）。
+    //   ① `check` 为空 ＝ 没有任何字段会比 ⇒ 成功判据退回信封 `ok`（假读回确认）。
+    //   ② `check` **不得含定位字段**（`readback.scope` ∪ 读模板 id 参数，复核 G）：它们回答
+    //      「改谁」；一条只改 `title` 的写靠比对**未变的** `project-id` 就落 `written`＝假确认。
+    //   ③ `check` 必须覆盖**全部可写字段**（required ∪ optional，定位字段除外，复核 B）：只改
+    //      一个不在 `check` 里的字段时，写入真实发生却「一个字段都比不到」⇒ 恒落 `write-unknown`
+    //      （用户看到「结果未知」而实际已写成）。确属**读不回来**（或读回口径不适用）的字段，
+    //      须逐条登记 `readback.unreadable: [{ field, reason }]` 并写明理由 —— 这类字段**仍
+    //      fail-closed**：只改它时零命中 ⇒ 零命中地板照样把它拦在 `write-unknown`（绝不假 `written`）。
     for (const template of templates) {
       if (!isPlainObject(template) || !isPlainObject(template.readback)) continue
       const id = String(template.id ?? '?')
@@ -1597,10 +1604,30 @@ function validateDeclaration(declaration) {
         .filter(Boolean)
       if (check.length === 0) invalid.push(`templates: ${id} 的 readback.check 为空——没有要比对的字段，读回等于没确认`)
       const locators = readbackLocatorFields(templates, template)
-      const uncovered = (Array.isArray(template.required) ? template.required : [])
+      const locatorsInCheck = check.filter((field) => locators.has(field))
+      if (locatorsInCheck.length) invalid.push(`templates: ${id} 的 readback.check 含定位字段 ${locatorsInCheck.join(',')}——比对未变的定位字段不等于确认写入`)
+      const unreadableRows = Array.isArray(template.readback.unreadable) ? template.readback.unreadable : []
+      const unreadable = []
+      for (const row of unreadableRows) {
+        const field = isPlainObject(row) ? String(row.field ?? '') : ''
+        if (!field) {
+          invalid.push(`templates: ${id} 的 readback.unreadable 有缺 field 的条目`)
+          continue
+        }
+        unreadable.push(field)
+        if (!(isPlainObject(row) && String(row.reason ?? '').trim())) invalid.push(`templates: ${id} 的 readback.unreadable 字段 ${field} 未写明理由`)
+        if (locators.has(field)) invalid.push(`templates: ${id} 的 readback.unreadable 字段 ${field} 是定位字段（定位字段本就不参与比对）`)
+      }
+      const writable = [...new Set([...(Array.isArray(template.required) ? template.required : []), ...(Array.isArray(template.optional) ? template.optional : [])].map(String))]
+      for (const field of unreadable) {
+        if (!writable.includes(field)) invalid.push(`templates: ${id} 的 readback.unreadable 字段 ${field} 不是本模板的可写字段`)
+      }
+      const uncovered = writable.filter((field) => !locators.has(field) && !check.includes(field) && !unreadable.includes(field))
+      if (uncovered.length) invalid.push(`templates: ${id} 的 readback.check 未覆盖可写字段 ${uncovered.join(',')}（确属读不回须登记 readback.unreadable 并写明理由）`)
+      const uncoveredRequired = (Array.isArray(template.required) ? template.required : [])
         .map(String)
-        .filter((field) => !locators.has(field) && !check.includes(field))
-      if (uncovered.length) invalid.push(`templates: ${id} 的 readback.check 未覆盖必填 ${uncovered.join(',')}`)
+        .filter((field) => !locators.has(field) && !check.includes(field) && !unreadable.includes(field))
+      if (uncoveredRequired.length) invalid.push(`templates: ${id} 的 readback.check 未覆盖必填 ${uncoveredRequired.join(',')}`)
     }
     // W3 加严（复核 F3）：「不给删除」按**集合**判，不靠名字。装载期两条正向规则：
     //   ① 写模板的命令必须属**本包声明的命令集**（未声明的写命令＝包面之外的命令，含各类删除／移除命令）；
@@ -2692,13 +2719,18 @@ async function verifyLookups({ pack, card, template, executor }) {
  *
  * 写模板用 `readback` 声明「怎么写回按什么读」：
  *   `{ template: 'item-get', idFrom: 'data.id', scope: ['project-id'],
- *      check: [{ field: 'title', read: 'title' }, { field: 'status', read: 'status' }] }`
+ *      check: [{ field: 'title', read: 'title' }, { field: 'status', read: 'status' }],
+ *      unreadable: [{ field: 'label-ids', reason: '读回是对象数组，逐字口径不适用' }] }`
  * 规则：
  *   - 未声明 `readback` ⇒ `{ ok:false, reason:'readback-not-declared' }`（fail-closed：ok 单独不算数）；
  *   - 读模板必须是**声明里那份**、`kind:'read'`（防「写被伪装成读」）；
  *   - 作用域字段（`scope`）必须**卡片里有值**，id 取 `idFrom` 指的回执路径（缺则回退卡片 `id`）；
  *   - 读回**不是 ok** ⇒ `readback-read-failed`；
- *   - 每条 `check`：卡片里**有值**的预期字段，读回值必须逐字相等（文本口径），否则 `readback-mismatch:<字段>`。
+ *   - 每条 `check`：卡片里**有值**的预期字段，读回值必须逐字相等（文本口径），否则
+ *     `readback-mismatch:<字段>`。**定位字段**（`readback.scope` ∪ 读模板 id 参数）不计入
+ *     命中数——比对未变的定位字段≠确认写入（复核 G；装载期另有「check 不得含定位字段」）。
+ *   - `unreadable` 登记的字段本就不在 `check` 里（装载期强制）：只改它时命中数为零 ⇒ 零命中
+ *     地板把它拦在 `write-unknown`（fail-closed，绝不假 `written`）。
  * 返回 `{ ok, reason?, checked? }`；任何不确定都回 ok:false（上层落 write-unknown）。
  */
 async function verifyReadback({ pack, card, template, envelope, executor }) {
@@ -2729,6 +2761,7 @@ async function verifyReadback({ pack, card, template, envelope, executor }) {
   if (read?.kind !== 'ok') return { ok: false, reason: 'readback-read-failed', detail: String(read?.note ?? read?.kind ?? '') }
 
   const checks = Array.isArray(spec.check) ? spec.check : []
+  const locators = readbackLocatorFields(declaration.templates, template)
   const mismatched = []
   const checked = []
   for (const entry of checks) {
@@ -2737,11 +2770,14 @@ async function verifyReadback({ pack, card, template, envelope, executor }) {
     if (!filled(intent)) continue // 本次没写的字段不参与比对（空值＝没有这个事实）
     const actual = packExec.pickRef(read.envelope, `data.${String(entry?.read ?? '')}`)
     if (String(actual ?? '') !== String(intent)) mismatched.push(key)
-    checked.push(key)
+    // **地板只统计非定位字段的命中**（复核 G）：比对一个**没变**的定位字段（如 `project-id`）
+    // 不等于确认了这次写入 ⇒ 它不计入「确认到的字段数」，否则空更新也能靠它落 `written`。
+    if (!locators.has(key)) checked.push(key)
   }
   if (mismatched.length) return { ok: false, reason: `readback-mismatch:${mismatched.join(',')}` }
-  // **地板**（复核 F1）：本次一个字段都没比对到 ⇒ 读回**没有确认任何东西**，绝不落 `written`。
-  // `check` 非空由装载期保证；这里覆盖「check 全是本次没写的可选字段」（如只改 project-id/id 的空更新）。
+  // **地板**（复核 F1）：本次一个**非定位字段**都没比对到 ⇒ 读回**没有确认任何东西**，绝不落 `written`。
+  // `check` 非空、且不含定位字段，由装载期保证；这里覆盖「check 里的字段本次都没写」与
+  // 「只写了 `unreadable` 登记的字段」两种情况。
   if (checked.length === 0) return { ok: false, reason: 'readback-no-field-checked', checked: [] }
   return { ok: true, checked }
 }
@@ -3116,14 +3152,29 @@ const BAYMAX_WRITE_TEMPLATES = [
     // W3 · 读回交叉验证（N7 §9.0 #6：`ok:true` 不可单独作成功依据）。建后按回执的 `data.id`
     // 读 `+issue-get --project-id <项目> --id <id>`，逐条比对卡片里**有值**的预期字段；
     // 未声明 readback ⇒ 恒落 write-unknown（fail-closed）。
+    // W4 · check 覆盖本模板**全部可写字段**（复核 B）：只改其中一个也应能读回比中并落 `written`。
+    // 读键取自 `+issue-get` 实测字段（命令面复核 legal fields：title/description/statusId/priorityId/
+    // typeId/assigneeId/estimateStartDate/estimateEndDate/estimateWorkload/parentId）。唯一留白：
+    // `label-ids` —— 读回是对象数组 `labels[{id,name,color}]`，当前**逐字相等**口径不适用，且
+    // 标签写-读未测（N7 §9.1 #4）⇒ 登记 `unreadable`（只改标签仍 fail-closed 落 write-unknown）。
     readback: {
       template: 'get-issue',
       idFrom: 'data.id',
       scope: ['project-id'],
       check: [
         { field: 'title', read: 'title' },
+        { field: 'description', read: 'description' },
         { field: 'status-id', read: 'statusId' },
-        { field: 'type-id', read: 'typeId' }
+        { field: 'type-id', read: 'typeId' },
+        { field: 'priority-id', read: 'priorityId' },
+        { field: 'assignee-id', read: 'assigneeId' },
+        { field: 'estimate-start', read: 'estimateStartDate' },
+        { field: 'estimate-end', read: 'estimateEndDate' },
+        { field: 'estimate-workload', read: 'estimateWorkload' },
+        { field: 'parent-id', read: 'parentId' }
+      ],
+      unreadable: [
+        { field: 'label-ids', reason: '读回是对象数组 labels[{id,name,color}]，逐字相等口径不适用；标签写-读未测（N7 §9.1 #4）' }
       ]
     }
   },
@@ -3169,15 +3220,30 @@ const BAYMAX_WRITE_TEMPLATES = [
     refPath: 'data.issueKey',
     refPathFallbacks: ['data.id', 'data.updateIssue.issueKey'],
     // W3 · 读回交叉验证：改后按回执的 `data.id` 读 `+issue-get`，逐条比对**有值**的预期字段；
-    // `--parent-id` 落到 parentId 已由读回可见（实测），标签写-读仍未测（见 §9.1 #4）。
+    // `--parent-id` 落到 parentId 已由读回可见（实测）。
+    // W4 · check 覆盖本模板**全部可写字段**（复核 B）：单项改 `description`／`priority-id`／
+    // `assignee-id`／`estimate-end` 等均应能读回比中并落 `written`，不再恒落 `write-unknown`。
+    // 读键取自 `+issue-get` 实测字段。唯一留白：`label-ids`（读回是对象数组，逐字口径不适用；
+    // 标签写-读未测，N7 §9.1 #4）⇒ `unreadable`，只改标签仍 fail-closed。
     readback: {
       template: 'get-issue',
       idFrom: 'data.id',
       scope: ['project-id'],
       check: [
         { field: 'title', read: 'title' },
+        { field: 'description', read: 'description' },
         { field: 'status-id', read: 'statusId' },
+        { field: 'type-id', read: 'typeId' },
+        { field: 'priority-id', read: 'priorityId' },
+        { field: 'assignee-id', read: 'assigneeId' },
+        { field: 'estimate-start', read: 'estimateStartDate' },
+        { field: 'estimate-end', read: 'estimateEndDate' },
+        { field: 'estimate-workload', read: 'estimateWorkload' },
+        { field: 'actual-workload', read: 'actualWorkload' },
         { field: 'parent-id', read: 'parentId' }
+      ],
+      unreadable: [
+        { field: 'label-ids', reason: '读回是对象数组 labels[{id,name,color}]，逐字相等口径不适用；标签写-读未测（N7 §9.1 #4）' }
       ]
     }
   },

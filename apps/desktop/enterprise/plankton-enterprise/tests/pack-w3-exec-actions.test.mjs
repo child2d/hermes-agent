@@ -416,7 +416,8 @@ test('actions: the write path is only entered through a card; discard needs a pe
 
 // ── 7 · 复核 F1：空更新（根因层）与「零字段比对」地板 ────────────────────────
 
-/** 一条「更新」写模板：必填只有定位字段（project-id/id），内容字段全在 optional；读回只认 title。 */
+/** 一条「更新」写模板：必填只有定位字段（project-id/id），内容字段全在 optional；读回只认 title。
+ *  `parent-id` 是**可写但读不回**的合成字段（登记 unreadable）⇒ 只改它时零命中地板仍可达。 */
 function updateDemo(overrides = {}) {
   const base = demo()
   return demo({
@@ -433,6 +434,7 @@ function updateDemo(overrides = {}) {
         readback: {
           template: 'item-get', idFrom: 'data.id', scope: ['project-id'],
           check: [{ field: 'title', read: 'title' }],
+          unreadable: [{ field: 'parent-id', reason: '（合成夹具）演示「可写但读不回」⇒ 零命中地板可达' }],
         },
       },
     ],
@@ -610,5 +612,121 @@ test('F3 · 读路径同样拦（读写两路共用 resolveTemplate 的同一份
   const res = await executor.runRead({ packId: 'demo', templateId: 'rogue-read', params: {} })
   assert.equal(res.kind, 'refused')
   assert.equal(res.refusal, 'command-forbidden-delete')
+})
+
+// ── 9 · W4 复核 B/A：读回清单覆盖全部可写字段；定位字段不得进 check ───────────
+
+/** 真实 BAYMAX 更新卡：定位字段（project-id/id，各带本包的佐证）+ 本次要改的内容字段。 */
+function baymaxCard(contentFields) {
+  return {
+    id: 'baymax-update:x', title: 'x', state: 'confirmed', confirmedBy: '陈涛',
+    fields: [
+      { key: 'project-id', label: '项目', value: '1', tier: 'user-designated', source: 'human', attestation: { kind: 'lookup', field: 'project-id' } },
+      { key: 'id', label: 'id', value: '3268', tier: 'user-designated', source: 'human', attestation: { kind: 'derived', from: 'get-issue', source: 'by key' } },
+      ...contentFields,
+    ],
+  }
+}
+
+/** 用真实 BAYMAX 声明 + 真会话 + 夹具执行器（无 spawn）跑一次 update-item。 */
+async function runBaymaxUpdate(contentFields, readData) {
+  const registry = M.createPackRegistry()
+  const loaded = registry.register(M.BAYMAX_DECLARATION)
+  assert.equal(loaded.ok, true, JSON.stringify(loaded))
+  const executor = fakeExecutor({
+    read: (req) => (req.templateId === 'project-list'
+      ? { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', projectName: 'P1' }], total: 1 } } }
+      : { kind: 'ok', envelope: { ok: true, data: { id: '3268', ...readData } } }),
+    write: () => ({ kind: 'ok', ref: 'PM-3268', envelope: { ok: true, data: { id: '3268', issueKey: 'PM-3268' } } }),
+  })
+  const session = fakeSession(baymaxCard(contentFields))
+  const actions = M.createPackActions({ registry, executor, session, identityOf: () => ({ whoami: { displayName: '陈涛' } }) })
+  const res = await actions.run({ packId: 'baymax', cardId: 'baymax-update:x', actionId: 'confirm-update' })
+  return { res, session, executor }
+}
+
+test('W4-B 声明面：create-item/update-item 的 check 覆盖全部可写字段（定位字段除外），label-ids 登记 unreadable 且写明理由', () => {
+  const D = M.BAYMAX_DECLARATION
+  for (const id of ['create-item', 'update-item']) {
+    const t = D.templates.find((x) => x.id === id)
+    const locators = new Set(['project-id', 'id'])
+    const check = t.readback.check.map((c) => c.field)
+    const unreadable = (t.readback.unreadable ?? []).map((u) => u.field)
+    const writable = [...new Set([...t.required, ...t.optional])].filter((f) => !locators.has(f))
+    const uncovered = writable.filter((f) => !check.includes(f) && !unreadable.includes(f))
+    assert.deepEqual(uncovered, [], `${id} 仍有未覆盖的可写字段：${uncovered.join(',')}`)
+    for (const u of t.readback.unreadable ?? []) assert.ok(u.reason && String(u.reason).trim(), `${id}.${u.field} 须写明读不回的理由`)
+  }
+  // 唯一留白就是「读回是对象数组、逐字口径不适用」的 label-ids
+  assert.deepEqual(D.templates.find((t) => t.id === 'update-item').readback.unreadable.map((u) => u.field), ['label-ids'])
+})
+
+test('W4-B 正控（读回层）：真实 update-item 声明，单项改任一可读字段 ⇒ 读回比中（ok:true 且 checked 含该字段）', async () => {
+  const D = M.BAYMAX_DECLARATION
+  const pack = { id: 'baymax', declaration: D }
+  const template = D.templates.find((t) => t.id === 'update-item')
+  const readKeyOf = (field) => template.readback.check.find((c) => c.field === field).read
+  const checkedFields = template.readback.check.map((c) => c.field)
+  assert.ok(checkedFields.length >= 11, `期望覆盖 11 个可读字段，实得 ${checkedFields.length}`)
+  for (const field of checkedFields) {
+    const value = `值-${field}`
+    const card = baymaxCard([{ key: field, label: field, value, tier: 'agent-drafted', source: 'agent' }])
+    const executor = fakeExecutor({ read: (req) => (req.templateId === 'get-issue'
+      ? { kind: 'ok', envelope: { ok: true, data: { id: '3268', [readKeyOf(field)]: value } } }
+      : { kind: 'ok', envelope: { ok: true, data: { data: [{ id: '1', name: 'P1' }], total: 1 } } }) })
+    const res = await M.verifyReadback({ pack, card, template, envelope: { ok: true, data: { id: '3268' } }, executor })
+    assert.equal(res.ok, true, `${field}: ${JSON.stringify(res)}`)
+    assert.ok(res.checked.includes(field), `${field} 应计入命中，checked=${JSON.stringify(res.checked)}`)
+  }
+})
+
+test('W4-B 正控（端到端）：真实声明 + 真会话 + 夹具读回，单项改 description／priority-id／assignee-id／estimate-end 均落 written', async () => {
+  const cases = [
+    ['description', { key: 'description', label: '描述', value: '新背景', tier: 'agent-drafted', source: 'agent' }, { description: '新背景' }],
+    ['priority-id', { key: 'priority-id', label: '优先级', value: '3', tier: 'user-designated', source: 'human', attestation: { kind: 'quote', quote: '3' } }, { priorityId: '3' }],
+    ['assignee-id', { key: 'assignee-id', label: '负责人', value: '88', tier: 'user-fact', source: 'human' }, { assigneeId: '88' }],
+    ['estimate-end', { key: 'estimate-end', label: '计划结束', value: '2026-11-01', tier: 'user-fact', source: 'human' }, { estimateEndDate: '2026-11-01' }],
+  ]
+  for (const [label, field, readData] of cases) {
+    const { res, session } = await runBaymaxUpdate([field], readData)
+    assert.equal(res.ok, true, `${label}: ${JSON.stringify(res)}`)
+    assert.equal(res.readback?.ok, true, `${label}: ${JSON.stringify(res.readback)}`)
+    assert.ok(res.readback.checked.includes(label), `${label} 应计入命中，checked=${JSON.stringify(res.readback.checked)}`)
+    assert.equal(session.current().state, 'written', `${label} 应落 written`)
+  }
+})
+
+test('W4-B 边界：只改登记为 unreadable 的 label-ids ⇒ 零命中读回 ⇒ fail-closed（绝不假 written）', async () => {
+  const D = M.BAYMAX_DECLARATION
+  const pack = { id: 'baymax', declaration: D }
+  const template = D.templates.find((t) => t.id === 'update-item')
+  const card = baymaxCard([{ key: 'label-ids', label: '标签', value: '12', tier: 'user-designated', source: 'human' }])
+  const executor = fakeExecutor({ read: () => ({ kind: 'ok', envelope: { ok: true, data: { id: '3268', labels: [{ id: '12', name: 'x', color: '#fff' }] } } }) })
+  const res = await M.verifyReadback({ pack, card, template, envelope: { ok: true, data: { id: '3268' } }, executor })
+  assert.equal(res.ok, false)
+  assert.equal(res.reason, 'readback-no-field-checked')
+  assert.deepEqual(res.checked, [])
+})
+
+test('W4-A 反证（装载期）：readback.check 含定位字段 ⇒ 装载即拒', () => {
+  const withLocator = M.validateDeclaration(
+    demo({ templates: demo().templates.map((t) => (t.id === 'item-create' ? { ...t, readback: { ...t.readback, check: [{ field: 'project-id', read: 'projectId' }, { field: 'title', read: 'title' }] } } : t)) }),
+  )
+  assert.equal(withLocator.ok, false)
+  assert.ok(withLocator.invalid.some((e) => e.includes('含定位字段 project-id')), JSON.stringify(withLocator))
+})
+
+test('W4-A 反证（地板口径）：check 只比未变的定位字段 ⇒ 命中数为零 ⇒ 不落 written', async () => {
+  const D = M.BAYMAX_DECLARATION
+  const base = D.templates.find((t) => t.id === 'update-item')
+  const template = { ...base, readback: { template: 'get-issue', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'project-id', read: 'projectId' }] } }
+  const pack = { id: 'baymax', declaration: { ...D, templates: D.templates.map((t) => (t.id === 'update-item' ? template : t)) } }
+  // 卡片真改了 title，但 check 里只有**未变的** project-id ⇒ 地板必须拦住
+  const card = baymaxCard([{ key: 'title', label: '标题', value: '改了标题', tier: 'agent-drafted', source: 'agent' }])
+  const executor = fakeExecutor({ read: () => ({ kind: 'ok', envelope: { ok: true, data: { projectId: '1', title: '改了标题' } } }) })
+  const res = await M.verifyReadback({ pack, card, template, envelope: { ok: true, data: { id: '3268' } }, executor })
+  assert.equal(res.ok, false)
+  assert.equal(res.reason, 'readback-no-field-checked')
+  assert.deepEqual(res.checked, [])
 })
 

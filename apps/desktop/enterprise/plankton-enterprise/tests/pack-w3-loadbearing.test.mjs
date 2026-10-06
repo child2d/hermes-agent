@@ -83,7 +83,7 @@ function demo() {
     landing: { module: 'demo', assemblyPoint: 'demo', note: 'synthetic' },
     skill: ['demo'], broadcastPredicate: () => ({ hasContent: false }),
     templates: [
-      { id: 'item-create', kind: 'write', module: 'demo', command: '+item-create', required: ['project-id', 'title'], optional: ['parent-id'], args: ['--project-id', { field: 'project-id' }, '--title', { field: 'title' }], refPath: 'data.issueKey', readback: { template: 'item-get', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'title', read: 'title' }] } },
+      { id: 'item-create', kind: 'write', module: 'demo', command: '+item-create', required: ['project-id', 'title'], optional: ['parent-id'], args: ['--project-id', { field: 'project-id' }, '--title', { field: 'title' }], refPath: 'data.issueKey', readback: { template: 'item-get', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'title', read: 'title' }, { field: 'parent-id', read: 'parentId' }] } },
       { id: 'item-delete', kind: 'write', module: 'demo', command: '+item-delete', required: ['id'], optional: [], args: ['--id', { field: 'id' }], refPath: 'data.id' },
       { id: 'item-get', kind: 'read', module: 'demo', command: '+item-get', required: ['project-id', 'id'], optional: [], shape: 'object', args: [] },
       { id: 'project-list', kind: 'read', module: 'demo', command: '+project-list', required: [], optional: [], shape: 'paged', itemsPath: 'data.data', totalPath: 'data.total', args: [] },
@@ -192,7 +192,8 @@ test('(d) short-circuit the spawner guard ⇒ a write with no spawner is no long
 
 // ── (e)(f) 复核 F1：空更新（根因）与「零字段比对」地板（拿掉即又落 written）────
 
-/** 一条纯更新写模板：必填＝定位字段（project-id/id）；readback.check 只认 title（本次为空）。 */
+/** 一条纯更新写模板：必填＝定位字段（project-id/id）；readback.check 只认 title（本次为空）；
+ *  `parent-id` 是**可写但读不回**的合成字段（登记 unreadable）⇒ 只改它时零命中地板仍可达。 */
 function updateDecl() {
   const base = demo()
   return {
@@ -205,7 +206,7 @@ function updateDecl() {
         { when: 'title', args: ['--title', { field: 'title' }] },
         { when: 'parent-id', args: ['--parent-id', { field: 'parent-id' }] }],
       refPath: 'data.id',
-      readback: { template: 'item-get', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'title', read: 'title' }] },
+      readback: { template: 'item-get', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'title', read: 'title' }], unreadable: [{ field: 'parent-id', reason: '（合成夹具）演示「可写但读不回」⇒ 零命中地板可达' }] },
     }],
     outputs: { ...base.outputs, actions: { ...base.outputs.actions, 'confirm-update': { label: '确认更新', human: 'confirm', writes: 'item-update' } } },
   }
@@ -271,4 +272,55 @@ test('(h) short-circuit the load-time destructive-command rule ⇒ an undeclared
   assert.equal(loads(INTACT), false, '修后：未声明的写命令装载即拒')
   const M = await mutated('if (declaredCommandSet.size > 0 && String(template.kind ', 'if (false && String(template.kind ')
   assert.equal(loads(M), true, '拿掉装载期正向规则 ⇒ 该声明又通过 ⇒ 该规则承重')
+})
+
+// ── (i) 复核 A 的反证：定位字段不得进 check ─────────────────────────────────
+//   A①（装载期）：`check` 含定位字段 ⇒ 装载即拒；
+//   A②（地板）：verifyReadback 只统计**非定位字段**的命中数（未变的定位字段不算确认）。
+//   两者互为冗余 —— 这里分别拿掉，看各自的判据承重。
+
+/** 自造声明：update 写模板的 check 里塞一个**定位字段** project-id（另含真改的 title 那一条）。 */
+function locatorInCheckDecl() {
+  const base = demo()
+  return {
+    ...base,
+    requiredParams: { ...base.requiredParams, '+item-update': ['--project-id', '--id'] },
+    templates: [...base.templates, {
+      id: 'item-update', kind: 'write', module: 'demo', command: '+item-update',
+      required: ['project-id', 'id'], optional: ['title'],
+      args: ['--project-id', { field: 'project-id' }, '--id', { field: 'id' }, { when: 'title', args: ['--title', { field: 'title' }] }],
+      refPath: 'data.id',
+      readback: { template: 'item-get', idFrom: 'data.id', scope: ['project-id'], check: [{ field: 'project-id', read: 'projectId' }, { field: 'title', read: 'title' }] },
+    }],
+    outputs: { ...base.outputs, actions: { ...base.outputs.actions, 'confirm-update': { label: '确认更新', human: 'confirm', writes: 'item-update' } } },
+  }
+}
+
+test('(i) A① 承重：check 含定位字段 ⇒ 加固在时装载即拒；拿掉 A① 即又放行', async () => {
+  assert.equal(INTACT.validateDeclaration(locatorInCheckDecl()).ok, false, '加固在：自造声明（check 含 project-id）应装载即拒')
+  const M = await mutated('if (locatorsInCheck.length) invalid.push(', 'if (false) invalid.push(')
+  assert.equal(M.validateDeclaration(locatorInCheckDecl()).ok, true, '拿掉 A① ⇒ 同一声明又通过装载 ⇒ A① 承重')
+})
+
+test('(i) A② 承重：check 只比未变的定位字段 ⇒ 命中数为零 ⇒ 地板拦住；拿掉地板口径即又 ok', async () => {
+  const D = locatorInCheckDecl()
+  const base = D.templates.find((t) => t.id === 'item-update')
+  const locatorOnly = { ...base, readback: { ...base.readback, check: [{ field: 'project-id', read: 'projectId' }] } }
+  const pack = { id: 'demo', declaration: { ...D, templates: D.templates.map((t) => (t.id === 'item-update' ? locatorOnly : t)) } }
+  const card = {
+    id: 'demo-update:x', title: 'x', state: 'confirmed', confirmedBy: '陈涛',
+    fields: [
+      { key: 'project-id', label: '项目', value: '1', tier: 'user-designated', source: 'human', attestation: { kind: 'lookup', field: 'project-id' } },
+      { key: 'id', label: 'id', value: '3268', tier: 'user-designated', source: 'human', attestation: { kind: 'derived', from: 'item-get', source: 'by key' } },
+      { key: 'title', label: '标题', value: '改了标题', tier: 'agent-drafted', source: 'agent' },
+    ],
+  }
+  const executor = { runRead: async () => ({ kind: 'ok', envelope: { ok: true, data: { projectId: '1', title: '改了标题' } } }) }
+  const verify = (M) => M.verifyReadback({ pack, card, template: locatorOnly, envelope: { ok: true, data: { id: '3268' } }, executor })
+  const intact = await verify(INTACT)
+  assert.equal(intact.ok, false)
+  assert.equal(intact.reason, 'readback-no-field-checked')
+  const M = await mutated('if (!locators.has(key)) checked.push(key)', 'checked.push(key)')
+  const flipped = await verify(M)
+  assert.equal(flipped.ok, true, '拿掉「地板只算非定位字段」⇒ 未变的 project-id 也当确认 ⇒ 假 written')
 })
