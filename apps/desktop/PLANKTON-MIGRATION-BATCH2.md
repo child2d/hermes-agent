@@ -135,7 +135,7 @@
 - **哈希口径（关键改进）**：后端**直接** `from tools.skills_guard import content_hash`（`tools/skills_guard.py:687`）——与引擎同一份代码、同一进程，**口径分叉在结构上不可能**。旧实现的 JS `hashTree` 第二实现及其金标准向量测试不再需要（只在跨进程/跨语言时才需要）。
 - **落点**：`<HERMES_HOME>/skills/`，命名逐字照引擎规则（`分类/技能名`；空分类退化为单层；`\`→`/`；丢空段与 `.`；绝对路径/`..`/段内含 `:`/名字非单段一律拒绝）。**不静默改名、不折叠**（KI-0050 ④ 的教训）。
 - **台账**：`<HERMES_HOME>/plankton/skill-ledger.json`（企业 home 内），字段 `slug/namespace/name/category/version/contentHash/installPath/installedAt/files`。台账是版本事实的**唯一**来源（引擎安装流水无版本字段）；落点未被台账认领时的覆盖冲突按 PLK-REQ-0019：**不静默覆盖，先呈现后确认**（同 name+category 是平台既有事实，KI-0048 ①）。
-- **启停/更新/卸载**：由我方实现（引擎锁不在，`uninstall_skill` 对无锁条目直接拒，KI-0051 未解）——**如实呈现「引擎不认这条为 hub 技能」**，绝不删目录冒充引擎卸载（KI-0051 的既定口径）。
+- **启停/更新/卸载**：**全部改由引擎自己的技能管理入口执行**（见 §8.3；本节此前的「由我方实现、引擎不认」口径已被该决策取代）。
 - **隔离**：落点必须 `assertOutsidePersonalTrees()`（`~/.hermes*` 一律拒），`<HERMES_HOME>` 不可用时**拒绝取用并给处置**，**不回落**个人目录（PLK-REQ-0023）。
 
 ---
@@ -202,7 +202,7 @@
 **代价（如实）**：
 - 启停写的是**引擎配置文件**（`config.yaml`），会影响引擎全局（对所有会话生效），且**下一个会话**才生效——界面必须如实说明，不得说成「本对话已生效」。
 - 引擎若把配置文件写成我们不认识的形态，写入必须 **fail-closed**（报告 `unreadable-config`/`write-failed` 并禁用开关），不得猜着改。
-- 引擎对「我方装入的技能」不认其为 hub 条目（KI-0051），故卸载/更新由我方实现；启停因为是引擎的通用技能开关，**不受此限**。
+- 引擎对「我方装入的技能」**已认**（落盘走引擎 `install_from_quarantine`，锁里有条，KI-0051 的两条副作用已解）；启停是引擎的通用技能开关，**当时就不受此限**，现在安装/卸载/更新同样走引擎入口——见 §9。
 - 该键是**按技能名**（非 `分类/技能名`）判定的，与本批落点命名一致（引擎用它目录下的技能名）。
 
 ---
@@ -248,7 +248,7 @@
 | R4 | **user 源插件后端需 `plugins.enabled` 白名单**：漏种 → `/api/plugins/…` 404、页面空 | 企业 config 种子必须写入白名单；干净机器用例里显式验证 REST 可达（不能只看页面开得出来） |
 | R5 | **平台无内容标识**（KI-0048 ②）：两个版本内容是否相同客户端判不出 | 版本对照只用 `version`；**不产出**内容维度界面态；「本地被改动过」只用本地哈希自查 |
 | R6 | **同名同分类两条已审技能落同一路径**（KI-0048 ①）：取用其一即两条同显已装 | 不判身份、不去重；不静默覆盖，先呈现后确认；界面对两条同路径如实呈现 |
-| R7 | **引擎不认我方安装为 hub 技能**（KI-0051）：引擎卸载/更新会拒 | 启停/更新/卸载由我方实现并**如实标注**；不删目录冒充引擎卸载；该条作为对上游的诉求保留 |
+| R7 | **引擎不认我方安装为 hub 技能**（KI-0051）：引擎卸载/更新会拒 | **已解（批 2 架构修正）**：落盘走引擎自己的 `install_from_quarantine`，引擎的 `skills/.hub/lock.json` 因此认这条技能 —— `uninstall_skill` 直接可用；遗留的只有「引擎的 update **CHECK** 认不出 `shaoke-skillhub` 这个来源，会报 `unavailable`」，故更新 = 交新包给引擎的安装入口（§8.3） |
 | R8 | **CLI 授权 UX 边界**（D3 红线）：app 不得代输口令/验证码/令牌 | 只读状态 + 给入口；交互式登录在 CLI 自己的终端里；不得把秘密放进 IPC/日志 |
 | R9 | **`~/.local/bin` 个人 CLI 抢先**（KI-0013 残余面） | PATH 前置企业副本 + 用例断言「企业副本优先」；未命中即回归 |
 | R10 | **payload 是 `git archive HEAD` 快照**：任何进 payload 的企业文件都必须先提交 | 企业插件走 `Resources`（不进 git），payload 语义不变 |
@@ -344,3 +344,86 @@
   `confirm:true`），文档声称与代码一致（见 §8 与 §8.2）。
 - **N5 测试注释运行命令写错**：`node --test <目录>` 在 Node 26 下按模块解析而报 `MODULE_NOT_FOUND`，改为**指向文件**的可跑命令
   `node --test apps/desktop/enterprise/plankton-enterprise/tests/batch-update.test.mjs`。
+
+---
+
+## 9. 架构修正（Perry 拍板）：存储交回引擎，我方只剩适配
+
+**决定**：技能市场的**安装 / 卸载 / 启用 / 停用 / 更新**全部改为**调用引擎自己的技能管理入口**
+（进程内函数；以本仓实测存在者为准）。我方只保留：**参数校验、人工确认、失败翻译与如实呈现**。
+
+**理由（原话口径）**：连续两轮复核都在同一类「文件系统语义」上找碴（硬链接 / 符号链接根 / 大小写归一化 / 竞态）。
+只要落点由我们自己拼、目录由我们自己 `rmtree`，这类边界就能被无限攻下去；交回引擎后，**这一整类问题结构上
+不再由我方代码承担**——它要么是引擎的行为，要么根本不存在。
+
+### 9.1 引擎入口实测结论（本仓 HEAD，`.venv` 真跑，非推断）
+
+| 我方动作 | 引擎入口（进程内） | 参数 / 返回 | 我方翻译 |
+|---|---|---|---|
+| 安装 / 更新 | `tools.skills_hub_install.quarantine_bundle(bundle)` → `tools.skills_guard.scan_skill(q, source=)` → `tools.skills_guard.should_allow_install(result, force=False)` → `tools.skills_hub_install.install_from_quarantine(q, name, category, bundle, result)` | `SkillBundle(name, files, source, identifier, trust_level, metadata)`；返回落点 `Path` 或抛 `ValueError` | `ValueError` → `engine-refused`（带引擎原文）；扫描未放行 → `blocked-by-scan`（verdict + findings） |
+| 卸载 | `tools.skills_hub_install.uninstall_skill(name)` | `(bool, str)`；无锁条目直接拒 | `(False, …)` → `remove-failed`（带引擎原文）；锁里查无此条 → `no-record` |
+| 启用 / 停用 | `hermes_cli.skills_config.get_disabled_skills` / `save_disabled_skills`（引擎 `PUT /api/skills/toggle` 的同一对函数） | 读 / 写 `config.yaml` → `skills.disabled` | 写后**重读持久化结果**，未达成 → `essential-skill` / `not-effective` |
+| 落点规则（仅用于呈现） | `tools.skills_hub_models._validate_skill_name` / `_validate_install_parent_path`（`install_from_quarantine` 自己拼 `install_rel_path` 用的就是这一对） | 抛 `ValueError` 即非法 | 非法 → `bad-input` |
+| 技能存储根 | `hermes_constants.get_skills_dir()` | `Path` | 取不到 → `engine-unavailable`（**不再回落** `<home>/skills` 猜测值） |
+| 取用记录 | `tools.skills_hub.HubLockFile`（`skills/.hub/lock.json`） | `list_installed()` / `get_installed(name)` | 读失败 → 空列表 + `lockNote`（显式，不静默） |
+| 本地内容哈希 | `tools.skills_guard.content_hash` | `sha256:<前 16 位>` | 同前（口径不分叉） |
+
+引擎侧的落点安全（**实测**，`_resolve_lock_install_path` / `_check_install_target`）：
+非符号链接链、不越出 `SKILLS_DIR`、不落在 `SKILLS_DIR` 本身；**落点是符号链接 → 拒**（`Unsafe install path`，实测仓外零写入）；
+嵌套进既有技能目录 → 拒；会覆盖含其它技能的分类目录 → 拒（引擎 #75983 那条规则）；包内含符号链接 → 拒。
+
+### 9.2 职责边界（本轮起生效）
+
+| 边界 | 归属 | 说明 |
+|---|---|---|
+| 落点计算（`分类/技能名` 的合法性、最终绝对路径） | **引擎** | 我方只调 `_validate_*` 做**展示用**的预测值；从不把任何拼出的路径交给写 |
+| 路径安全（符号链接链、越界、嵌套、分类目录覆盖） | **引擎** | 我方无一处 `resolve` 用于写、无一处逐段 `lstat` |
+| 文件语义（落盘方式、替换整目录、半成品） | **引擎** | 我方无 `os.replace`、无 `_atomic_write_bytes`；凭据路径由引擎实现 |
+| 硬链接 | **引擎（结构性消失）** | 引擎先 `rmtree` 落点再 `shutil.move` 整棵树 → 不写穿既有文件（实测：硬链另一端内容不变） |
+| 大小写 / Unicode 归一化兄弟 | **引擎（结构性消失）** | 引擎的判据是**实际路径**（`exists()`/`iterdir()`/`rglob`），不是字符串前缀；macOS 上 `CAT/x` 与 `cat/x` 是同一目录，判据自动一致 |
+| 取用台账 | **引擎** | `skills/.hub/lock.json`，是引擎自己的文件；我方**删掉了**自己的 `skill-ledger.json` |
+| 参数校验（slug/name/category/confirm） | 我方 | 缺失即 `bad-input` / `needs-confirm`，不猜 |
+| 人工确认闩 | 我方 | 五个写路由**一律**要求 `confirm:true` |
+| 失败翻译 | 我方 | 引擎原文/异常 → 封闭失败类；四类主失败仍各自可辨；不得静默降级 |
+| 呈现 | 我方 | 版本对照（只用 `version`）、本地哈希、落点、覆盖提示、引擎错误原文 |
+
+**已彻底删除的自写实现**（同批删掉对应测试）：落点拼装与包含性校验（`assert_safe_landing` /
+`assert_no_symlink_chain` / `_store_boundary` / `_rel_segments` / `_resolve_inside` / `is_unsafe_rel_path` /
+`_normalize_bundle_path`）、原子写与暂存换入（`_atomic_write_bytes` / `_swap_into_place` /
+`_assert_landing_writable` / `_safe_mkdir_chain`）、硬链接判定（`st_nlink`）、大小写/归一化落点键
+（`_landing_key` / `_key_is_under` / `unicodedata`）、台账与嵌套/重叠判定（`read_ledger` / `write_ledger` /
+`_ledger_path` / `_landing_overlap` / `_nested_landings`）、自己实现的卸载（`shutil.rmtree(落点)`）。
+唯一保留的 `rmtree` 是**清我方交给引擎的暂存输入**（引擎 quarantine 目录里、引擎自己返回的那个路径）。
+
+### 9.3 事实基线变化（如实登记）
+
+1. **台账没了**：取用记录改由引擎的 `skills/.hub/lock.json` 承载；我方平台事实（version / slug / category /
+   pickedBy）存进引擎锁条目的 `metadata.shaoke`。`<HERMES_HOME>/plankton/skill-ledger.json` **不再创建、不再读**。
+   历史用旧实现装过、只在我们台账里的技能，在新实现下会显示为「未装」——企业首启场景无此包袱，但**如实记录在这里**。
+2. **卸载不再「保留台账记录」**：引擎的 `uninstall_skill` 会一并 `record_uninstall`（从锁里移除）。界面文案已随之改。
+3. **安装会覆盖「引擎不认得的同名落点」**：引擎把「直接含 `SKILL.md` 的目录」视为既有安装并整体替换。我方**不拦**
+   （拦就是自造第二套落点语义），而是在列表里给出 `onDisk` / `ownedByEngine` 两个事实，并在确认对话框里显式提示。
+
+### 9.4 引擎侧仍存在的缺口（**如实上报，本轮不自造补丁**）
+
+`install_from_quarantine` / `uninstall_skill` **不检查 `SKILLS_DIR` 这个根自身是不是符号链接**：
+`_resolve_lock_install_path` 逐段查的是**子路径**，根由 `Path.resolve()` 抹平。实测把 `<HERMES_HOME>/skills`
+做成指向仓外目录的符号链接后，引擎**照常落盘到仓外**（`symlink_root_install: LANDED`），卸载同理。
+同类：手改引擎锁里 `name`+`install_path` 自洽但指向 `skills/` 下任意目录的条目，引擎会 `rmtree` 那个目录
+（`_normalize_lock_install_path` 只校验形状与尾段名）。
+
+- 这两条**已不是我方代码面**：我方不含任何落点/根路径判定（§9.2 的删除清单即为证据）。
+- 处置：按 Perry 口径**不自造第二套实现**；作为**对上游的诉求**（候选 KI）登记，待引擎收口。
+- 影响面：都需要**对本机企业 home 有写权限**才能先种下那个符号链接 / 改那个锁文件；该信任级别本身已可直写技能目录。
+
+### 9.5 本轮验收证据
+
+- 自写文件系统代码删净：`tests/test_plugin_api_skills.py::test_plugin_source_has_no_filesystem_write_path`
+  （源码级断言：禁用符号清单 + 唯一 `rmtree` 必须是 quarantine 清理 + 落点规则确实在引用引擎校验器）。
+- 边界反例：`test_install_refuses_a_landing_that_is_a_symlink_out_of_the_store`（引擎拒、仓外零写入）、
+  `test_install_never_clobbers_a_hardlink_at_the_landing`（硬链另一端内容不变）、
+  `test_install_does_not_wipe_a_category_bucket_the_engine_refuses`、`test_a_dangerous_bundle_is_blocked_by_the_engine_scan`、
+  `test_uninstall_of_an_unsafe_lock_entry_is_the_engine_refusing`。
+- 委托本身：`test_install_actually_calls_the_engine_entry_point` / `test_uninstall_actually_calls_the_engine_entry_point`
+  （打断引擎入口 → 路由必须失败）、`test_engine_unavailable_is_reported_never_faked`。
+- 打包产物 lane：`e2e/packaged/enterprise-tool-catalog.spec.ts`（仓外产物；页面哈希 == 独立进程的引擎 `content_hash`）。

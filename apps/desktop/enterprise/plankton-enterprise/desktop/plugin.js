@@ -27,6 +27,10 @@
  *     is never silent.
  *   * "停用" is the ENGINE's own enable state (``config.yaml`` →
  *     ``skills.disabled``) — this app keeps no second copy.
+ *   * Storage belongs to the ENGINE: install / update / uninstall are handed to
+ *     the engine's own skill-management entry points in-process. This app
+ *     computes no landing, removes no directory and keeps no ledger; the
+ *     install records the page shows are the engine's own ``skills/.hub/lock.json``.
  *   * No credential is read: the backend runs credential-free CLI commands and
  *     never touches ``~/.shaoke/tokens.json``.
  *
@@ -65,12 +69,12 @@ const SKILL_FAILURE_COPY = {
   'enterprise-home-unavailable': '企业侧引擎目录不可用，已拒绝取用',
   'hash-unavailable': '内容哈希取不到，判等无法成立',
   'remove-failed': '删除落点失败',
-  'unsafe-path': '落点不安全（越出技能目录、链上有符号链接，或不符合安装规则），已拒绝',
-  'install-overlap': '落点与已有技能记录重叠，为免卸载连坐已拒绝',
+  'engine-refused': '引擎拒绝了这次写入（落点不符合引擎规则：链上有符号链接、与既有技能目录嵌套，或会覆盖分类目录）',
+  'blocked-by-scan': '引擎的安装前安全扫描未放行这条技能，已拒绝安装',
   'essential-skill': '这是引擎的必备技能（essential），无法停用',
   'not-effective': '写入未生效：引擎持久化的状态未变成请求的状态',
   'request-failed': '请求失败（网络或后端异常）',
-  'no-record': '台账里没有这条取用记录，本模块只管理自己取用过的技能',
+  'no-record': '引擎的取用记录里没有这条技能，本页只卸载引擎记录在案的技能',
   'unreadable-config': '引擎配置读取失败，启停开关已禁用',
   'engine-unavailable': '引擎技能配置模块不可用，无法改启停'
 }
@@ -333,7 +337,7 @@ function SkillMarketPage({ ctx }) {
     if (endpoint) {
       return call(endpoint, payload).then(result => {
         setBanner(result && result.ok
-          ? { tone: 'ok', text: `${action === 'update' ? '已更新' : '已取用'}到企业侧技能目录：${result.target}（${result.files} 个文件）；内容哈希 ${result.localHash}。默认在下一个会话生效。` }
+          ? { tone: 'ok', text: `${action === 'update' ? '已更新' : '已取用'}到企业侧技能目录：${result.target}（${result.files} 个文件）；内容哈希 ${result.localHash}。由引擎完成落盘（${result.engine}）。${result.replaced ? '已覆盖既有落点。' : ''}默认在下一个会话生效。` }
           : { tone: 'error', text: describeResult(action, result) })
         load()
       }, error => { setBanner({ tone: 'error', text: String((error && error.message) || error) }); load() })
@@ -341,7 +345,7 @@ function SkillMarketPage({ ctx }) {
     if (action === 'uninstall') {
       return call('/skills/uninstall', { reference: skill.reference || '', installPath: skill.installPath || '', confirm: true }).then(result => {
         setBanner(result && result.ok
-          ? { tone: 'ok', text: result.removed ? `已删掉落点：${result.target}。台账记录保留。` : '落点本来就不在了，记录已更新。' }
+          ? { tone: 'ok', text: result.removed ? `已由引擎删除落点 ${result.installPath}（引擎取用记录一并移除）。` : '引擎里这条技能已不在落点上，取用记录已移除。' }
           : { tone: 'error', text: describeResult(action, result) })
         load()
       }, error => { setBanner({ tone: 'error', text: String((error && error.message) || error) }); load() })
@@ -372,7 +376,7 @@ function SkillMarketPage({ ctx }) {
     if (action === 'uninstall') {
       setConfirm({
         title: `卸载技能「${skill.name}」？`,
-        description: `将删除落点目录 ${skill.installPath}。台账记录保留（仍能看到谁在什么时候取用过）。此操作不可撤销。`,
+        description: `将调用引擎自己的卸载入口删除落点目录 ${skill.installPath}，引擎的取用记录一并移除。此操作不可撤销。`,
         destructive: true,
         run: () => perform('uninstall', skill)
       })
@@ -380,7 +384,12 @@ function SkillMarketPage({ ctx }) {
     }
     setConfirm({
       title: action === 'update' ? `更新技能「${skill.name}」？` : `取用技能「${skill.name}」？`,
-      description: `将从平台重新下载并覆盖落点 ${skill.installPath}。企业侧技能目录之外的任何内容都不会被改动。`,
+      description:
+        `将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：${skill.installPath}。` +
+        (skill.onDisk && !skill.ownedByEngine
+          ? `注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。`
+          : '') +
+        `企业侧技能目录之外的任何内容都不会被改动。`,
       destructive: false,
       run: () => perform(action, skill)
     })
@@ -455,7 +464,7 @@ function SkillMarketPage({ ctx }) {
   return jsxs('div', { style: S.page, children: [
     jsx('h1', { style: S.title, children: '企业技能市场' }),
     jsxs('div', { style: S.meta, children: [
-      `来源：企业 SkillHub（经 shaoke-cli skillhub）· 已审技能 ${catalog.ok ? catalog.count : '—'} 条 · 本机台账 ${installedLedger.length} 条`,
+      `来源：企业 SkillHub（经 shaoke-cli skillhub）· 已审技能 ${catalog.ok ? catalog.count : '—'} 条 · 引擎取用记录 ${installedLedger.length} 条`,
       jsx('br', {}),
       `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 技能落点 ${data.skillsPath || '未知'}${when ? ` · ${when}` : ''}`
     ] }),
@@ -503,7 +512,7 @@ function SkillMarketPage({ ctx }) {
 
     installedLedger.length > 0
       ? jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: [
-          jsx('h2', { style: { ...S.title, fontSize: '13px' }, children: '本机已取用（台账）' }),
+          jsx('h2', { style: { ...S.title, fontSize: '13px' }, children: '本机已取用（引擎台账）' }),
           installedLedger.map((item, i) => jsx(InstalledRow, { item }, `ledger:${i}:${item.reference || item.installPath}`))
         ] })
       : null,
@@ -525,7 +534,7 @@ function SkillMarketPage({ ctx }) {
 
     jsxs('div', { style: S.meta, children: [
       jsx(icons.Info, { size: 11, style: { verticalAlign: '-1px' } }),
-      ' 技能哈希与引擎同源（引擎 tools.skills_guard.content_hash）。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。'
+      ' 安装/卸载/更新全部交由引擎自己的技能管理入口执行，落点、扫描与文件语义由引擎负责；本页只做参数校验、人工确认与如实回显。技能哈希与引擎同源（引擎 tools.skills_guard.content_hash），取用记录就是引擎的 skills/.hub/lock.json。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。'
     ] })
   ] })
 }

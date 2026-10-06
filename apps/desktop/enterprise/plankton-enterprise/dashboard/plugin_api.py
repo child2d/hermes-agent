@@ -1,68 +1,92 @@
 """plankton-enterprise dashboard backend — mounted at ``/api/plugins/plankton-enterprise/``.
 
-Two read/write surfaces ship in this batch:
+Two surfaces ship in this batch:
 
   * ``GET /tools``  — the local ``shaoke-cli`` tool catalog (read-only listing).
   * ``GET/POST /skills*`` — the enterprise skill market: the approved-skill
     catalog (via ``shaoke-cli skillhub``), install / uninstall / enable /
     disable / update, version comparison and the local content hash.
 
-DECISION (batch 2 step 2, PLANKTON-MIGRATION-BATCH2.md §D4)
------------------------------------------------------------
-"停用" maps to the ENGINE's OWN skill enable state, not a second store kept by
-this app. The engine is the single source of truth for "is this skill active":
-``config.yaml`` → ``skills.disabled``, read by ``agent.skill_utils`` and written
-through ``hermes_cli.skills_config.get_disabled_skills`` /
-``save_disabled_skills`` — the exact functions the engine's own
-``PUT /api/skills/toggle`` route calls. We call the SAME functions in the SAME
-process, so there is structurally no second state to drift. The engine HAS this
-state and entry point (verified: ``hermes_cli/skills_config.py``,
-``hermes_cli/web_routers/skills.py:379``), so the decision is implementable and
-is implemented — no bespoke status file.
+DECISION (architecture, Perry 2026-10) — THE ENGINE OWNS SKILL STORAGE
+---------------------------------------------------------------------
+This backend does **not** implement skill storage. Every write (install /
+update / uninstall) is delegated to the engine's OWN skill-management entry
+points, called IN-PROCESS:
 
-Red lines this file obeys (PLANKTON-MIGRATION-BATCH2.md §D3):
+  install / update  ``tools.skills_hub_install.quarantine_bundle`` →
+                    ``tools.skills_guard.scan_skill`` →
+                    ``tools.skills_guard.should_allow_install`` →
+                    ``tools.skills_hub_install.install_from_quarantine``
+                    (the exact pipeline ``hermes_cli.skills_hub.do_install``
+                    runs; we supply the bundle the enterprise registry gave us
+                    instead of resolving it through an engine hub source)
+  uninstall         ``tools.skills_hub_install.uninstall_skill``
+  enable / disable  ``hermes_cli.skills_config.get_disabled_skills`` /
+                    ``save_disabled_skills`` (the pair behind the engine's own
+                    ``PUT /api/skills/toggle``)
+  local hash        ``tools.skills_guard.content_hash``
+  landing rule      ``tools.skills_hub_models._validate_skill_name`` /
+                    ``_validate_install_parent_path`` (the pair
+                    ``install_from_quarantine`` itself calls)
+  store root        ``hermes_constants.get_skills_dir``
+  install records   ``tools.skills_hub.HubLockFile`` (``skills/.hub/lock.json``)
+
+Consequence, by construction: **this module contains no landing computation,
+no containment check, no ``rmtree``, no atomic write, no hard-link check, no
+case/Unicode landing key and no ledger of its own.** Those boundaries are the
+engine's; a defect in them is a defect in the engine, not a second
+implementation we can drift from. The deduplication is deliberate — see
+``apps/desktop/PLANKTON-MIGRATION-BATCH2.md`` §8.3 for the responsibility split
+and for the one engine gap this delegation leaves open (a symlinked skills
+ROOT is not refused by ``_resolve_lock_install_path``).
+
+Where the plugin no longer keeps state: the engine's ``lock.json`` carries
+name / source / identifier / trust_level / scan_verdict / content_hash /
+install_path / files / installed_at, and our platform facts ride in its
+``metadata.shaoke`` block (version / slug / category / pickedBy). There is no
+private ledger file under ``<HERMES_HOME>/plankton/`` any more — that file WAS
+the second source of truth this batch removes.
+
+Red lines this file still obeys (PLANKTON-MIGRATION-BATCH2.md §D3):
   * It NEVER reads, writes, caches or proxies ``~/.shaoke/tokens.json``. The
     ``tools list`` command is unauthenticated; ``skillhub +list`` likewise runs
     unauthenticated (verified). No token is ever read.
-  * The skill store is ``<HERMES_HOME>/skills`` — never a personal tree. Writes
-    are refused when the target resolves under ``~/.hermes*`` and there is NO
-    fallback to a personal directory (PLK-REQ-0023).
+  * The skill store is the ENGINE's own ``get_skills_dir()``. A store that
+    resolves inside a personal tree (``~/.hermes*``) is refused and there is NO
+    fallback to a personal directory (PLK-REQ-0023). That refusal is a POLICY
+    gate (compare only, never a write target); it is not path safety.
 
 Failure taxonomy (each kind is INDEPENDENTLY visible in the UI — never
 silently collapsed into "no skills"):
-  ``cli-missing`` / ``unauthorized`` / ``network-failed`` / ``not-json`` /
-  ``shape-mismatch`` / ``no-bundle`` / ``download-failed`` / ``extract-failed``
-  / ``write-failed`` / ``needs-confirm`` / ``unsafe-path`` / ``install-overlap``
-  / ``blocked-personal-dir`` / ``enterprise-home-unavailable`` /
-  ``hash-unavailable`` / ``no-record`` / ``remove-failed`` / ``essential-skill``
-  / ``not-effective`` / ``engine-unavailable`` / ``unreadable-config``.
+  ``cli-missing`` / ``cli-failed`` / ``unauthorized`` / ``network-failed`` /
+  ``not-json`` / ``shape-mismatch`` / ``no-bundle`` / ``download-failed`` /
+  ``extract-failed`` / ``needs-confirm`` / ``bad-input`` /
+  ``blocked-personal-dir`` / ``enterprise-home-unavailable`` /
+  ``engine-unavailable`` / ``engine-refused`` / ``blocked-by-scan`` /
+  ``hash-unavailable`` / ``no-record`` / ``remove-failed`` / ``write-failed``
+  / ``essential-skill`` / ``not-effective`` / ``unreadable-config``.
 An EMPTY catalog is a SUCCESS (``{ok: true, catalog: {ok: true, count: 0}}``).
 A catalog capped at the page limit is a SUCCESS that carries ``truncated: true``
 — never silently read as the whole catalog.
 
 Hash parity: the local content hash is computed by importing the engine's own
 ``tools.skills_guard.content_hash`` — the exact function the engine uses. There
-is NO second (JS/Python) re-implementation of the digest in this batch, so the
-"口径分叉" the old JS ``hashTree`` risked is impossible by construction.
+is NO second (JS/Python) re-implementation of the digest, so the "口径分叉" the
+old JS ``hashTree`` risked is impossible by construction.
 """
 
 from __future__ import annotations
 
-import contextlib
 import io
 import json
 import os
 import shutil
-import stat
 import subprocess
-import threading
 import time
-import unicodedata
 import urllib.request
-import uuid
 import zipfile
 from pathlib import Path
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -76,7 +100,14 @@ SKILL_CLI_TIMEOUT_S = 60
 RAW_EXCERPT_MAX = 2000
 PAGE_SIZE = 50
 MAX_PAGES = 20
-LEDGER_SCHEMA = 1
+
+# The engine source id our bundles are recorded under in the engine's own hub
+# lock file. It is NOT an engine hub adapter: the enterprise registry is
+# reached through ``shaoke-cli``, and the lock entry exists so the engine can
+# uninstall/audit what we handed it. ``check_for_skill_updates`` reports such an
+# entry as ``unavailable`` (no matching adapter) — the engine's update CHECK is
+# therefore not ours to use; an update is an engine install of a fresh bundle.
+ENGINE_SOURCE = "shaoke-skillhub"
 
 # Personal trees the skill store must NEVER touch (PLK-REQ-0023). ``.hermes``
 # covers ``~/.hermes`` and ``~/.hermes/profiles/*`` by prefix.
@@ -97,16 +128,16 @@ FAILURE_KINDS = (
     "write-failed",
     "needs-confirm",
     "bad-input",
-    "unsafe-path",
-    "install-overlap",
     "blocked-personal-dir",
     "enterprise-home-unavailable",
+    "engine-unavailable",
+    "engine-refused",
+    "blocked-by-scan",
     "hash-unavailable",
     "no-record",
     "remove-failed",
     "essential-skill",
     "not-effective",
-    "engine-unavailable",
     "unreadable-config",
 )
 
@@ -169,6 +200,20 @@ def _hermes_home() -> Optional[Path]:
         return None
 
 
+def engine_skills_dir() -> Optional[Path]:
+    """The ENGINE's own skills store — ``hermes_constants.get_skills_dir()``.
+
+    Never a path this module invents: if the engine cannot name its store, the
+    caller reports ``engine-unavailable`` rather than guessing ``<home>/skills``.
+    """
+    try:
+        from hermes_constants import get_skills_dir  # type: ignore
+
+        return Path(get_skills_dir())
+    except Exception:
+        return None
+
+
 def resolve_cli() -> Tuple[Optional[str], str]:
     """Locate the ENTERPRISE ``shaoke-cli`` without ever reading credentials.
 
@@ -223,7 +268,7 @@ def _failure(kind: str, message: str, cli_path: Optional[str], cli_source: str, 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GET /tools — read-only local tool catalog (step 1)
+# GET /tools — read-only local tool catalog
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -301,7 +346,7 @@ def list_tools() -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Skill market — helpers
+# Skill market — request models / policy gates
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -311,11 +356,9 @@ class InstallRequest(BaseModel):
     name: str = ""
     category: str = ""
     version: str = ""
-    # ``confirm`` is the human-confirmation latch: a write that overwrites an
-    # occupied slot (or a batch write) is REFUSED unless the caller passes True.
+    # ``confirm`` is the human-confirmation latch: EVERY write route refuses
+    # without it (the UI always sends it after its confirmation dialog).
     confirm: bool = False
-    # Explicit "install to a different slug than expected" is not a feature —
-    # ``force`` only means "overwrite despite a slot conflict".
     pickedBy: str = ""
 
 
@@ -328,26 +371,17 @@ class UninstallRequest(BaseModel):
 class ToggleRequest(BaseModel):
     name: str = ""
     enabled: bool = True
-    # Enabling/disabling is a write to the engine's config, so the backend
-    # requires the same human-confirmation latch as the file-writing routes
-    # (N4: the doc claim "every write needs confirm" is enforced HERE).
+    # Enabling/disabling writes the engine's config, so the backend requires the
+    # same human-confirmation latch as the store-writing routes.
     confirm: bool = False
 
 
-def _skills_dir(home: Path) -> Path:
-    """The engine's own skills directory — ``<HERMES_HOME>/skills``."""
-    return home / "skills"
-
-
-def _ledger_path(home: Path) -> Path:
-    """Our ledger — under the enterprise home, never a personal tree."""
-    return home / "plankton" / "skill-ledger.json"
-
-
 def assert_outside_personal_trees(directory: Path, personal_home: Optional[Path] = None) -> None:
-    """Refuse a skill store that resolves inside a personal tree (PLK-REQ-0023).
+    """POLICY gate: refuse an engine store that resolves inside a personal tree.
 
-    Raises ``ValueError`` — never returns a "somewhere else" fallback.
+    PLK-REQ-0023's red line. This is a compare-and-refuse assertion only: it
+    never selects, builds or returns a write target (the engine does that), and
+    there is NO "somewhere else" fallback. Raises ``ValueError``.
     """
     base = (personal_home or Path(os.path.expanduser("~"))).resolve()
     target = Path(directory).resolve()
@@ -368,42 +402,6 @@ def _enterprise_home_usable(home: Path) -> Tuple[bool, str]:
     return True, ""
 
 
-def _normalize_bundle_path(value: str, *, allow_nested: bool) -> Optional[str]:
-    """Engine install-path rules (mirrors ``tools/skills_hub_models._normalize_bundle_path``).
-
-    Trim; ``\\`` → ``/``; drop empty and ``.`` segments; reject an absolute
-    path, a ``..`` segment, a segment containing ``:``, or (when nested is not
-    allowed) more than one segment. Returns ``None`` on any rejection — never
-    silently renames or folds.
-    """
-    raw = (value or "").strip()
-    if not raw:
-        return None
-    normalized = raw.replace("\\", "/")
-    parts = [p for p in normalized.split("/") if p not in ("", ".")]
-    if normalized.startswith("/") or not parts:
-        return None
-    if any(p == ".." for p in parts) or any(":" in p for p in parts):
-        return None
-    if not allow_nested and len(parts) != 1:
-        return None
-    return "/".join(parts)
-
-
-def plan_install_path(name: str, category: str) -> Optional[str]:
-    """``category/name`` (category empty → single-layer ``name``), engine rules."""
-    skill_name = _normalize_bundle_path(name, allow_nested=False)
-    if not skill_name:
-        return None
-    raw_category = (category or "").strip()
-    if not raw_category:
-        return skill_name
-    parent = _normalize_bundle_path(raw_category, allow_nested=True)
-    if not parent:
-        return None
-    return f"{parent}/{skill_name}"
-
-
 def _skill_reference(entry: dict) -> str:
     """Stable identity: ``install.reference`` when present, else ``slug``."""
     install = entry.get("install") if isinstance(entry, dict) else None
@@ -413,7 +411,7 @@ def _skill_reference(entry: dict) -> str:
     return ref or str(entry.get("slug") or "")
 
 
-# ── engine content hash (SAME function, SAME process — no second impl) ────────
+# ── engine facts we reference (never re-implement) ───────────────────────────
 
 
 def engine_content_hash(target: Path) -> Optional[str]:
@@ -433,37 +431,66 @@ def engine_content_hash(target: Path) -> Optional[str]:
         return None
 
 
-# ── ledger ────────────────────────────────────────────────────────────────────
+def plan_install_path(name: str, category: str) -> Optional[str]:
+    """The landing the ENGINE will compute for ``(name, category)``.
 
+    Calls the engine's own ``_validate_skill_name`` / ``_validate_install_parent_path``
+    — the exact pair ``tools.skills_hub_install.install_from_quarantine`` uses to
+    build ``install_rel_path``. Returns ``None`` when the engine's rules reject
+    the pair, so a caller reports ``bad-input`` instead of guessing a landing.
 
-def read_ledger(home: Path) -> Tuple[list, Optional[str]]:
-    """Read the ledger; a missing/corrupt file is an empty ledger + a note."""
-    file = _ledger_path(home)
+    Display/comparison ONLY: nothing here is ever handed to a write. The write
+    target is decided by the engine inside ``install_from_quarantine``.
+    """
     try:
-        raw = file.read_text(encoding="utf-8")
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict) or not isinstance(parsed.get("records"), list):
-            return [], f"台账结构不符，按空处理：{file}"
-        return [r for r in parsed["records"] if isinstance(r, dict)], None
-    except FileNotFoundError:
-        return [], None
-    except Exception as exc:  # corrupt JSON, unreadable, …
-        return [], f"台账读取失败，按空处理：{exc}"
+        from tools.skills_hub_models import (  # type: ignore
+            _validate_install_parent_path, _validate_skill_name)
+
+        safe_name = _validate_skill_name(str(name or ""))
+        raw_category = str(category or "").strip()
+        safe_category = _validate_install_parent_path(raw_category) if raw_category else ""
+    except Exception:
+        return None
+    return f"{safe_category}/{safe_name}" if safe_category else safe_name
 
 
-def write_ledger(home: Path, records: list) -> None:
-    """Atomic temp-then-rename write of the ledger."""
-    file = _ledger_path(home)
-    file.parent.mkdir(parents=True, exist_ok=True)
-    tmp = file.with_name(file.name + ".tmp")
-    tmp.write_text(json.dumps({"schema": LEDGER_SCHEMA, "records": records}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, file)
+def read_engine_installations() -> Tuple[list, Optional[str]]:
+    """The engine's OWN install records — ``tools.skills_hub.HubLockFile``.
+
+    This replaces the plugin's former private ledger (see the module docstring):
+    the engine's lock file is the single source of truth for "what is installed,
+    where, and with what content hash". Returns ``(entries, note)``; a missing or
+    unreadable lock is reported as an empty list PLUS a note — never silently
+    treated as "nothing was ever installed without saying so".
+    """
+    try:
+        from tools.skills_hub import HubLockFile  # type: ignore
+
+        return list(HubLockFile().list_installed()), None
+    except Exception as exc:
+        return [], f"引擎技能锁文件读取失败，按空处理：{exc}"
+
+
+def _shaoke_meta(entry: dict) -> dict:
+    """Our platform facts, as stashed in the engine lock entry's metadata."""
+    meta = entry.get("metadata")
+    if not isinstance(meta, dict):
+        return {}
+    sub = meta.get("shaoke")
+    return sub if isinstance(sub, dict) else {}
+
+
+def _category_of(install_path: str) -> str:
+    """``cat/sub/x`` → ``cat/sub``; a single-segment landing → ``""``."""
+    parts = [p for p in str(install_path or "").split("/") if p]
+    return "/".join(parts[:-1])
 
 
 def _hash_state(recorded: Any, current: Optional[str]) -> str:
-    """Compare a ledger record's hash with the on-disk hash (逐字).
+    """Compare the engine's recorded hash with the on-disk hash (逐字).
 
     ``match`` / ``mismatch`` / ``missing`` (没落点) / ``unknown`` (算不出)。
+    Both sides come from engine facts; this only names the comparison.
     """
     rec = str(recorded or "").strip()
     if not current:
@@ -471,6 +498,37 @@ def _hash_state(recorded: Any, current: Optional[str]) -> str:
     if not rec:
         return "unknown"
     return "match" if rec == current else "mismatch"
+
+
+def _lock_entry_view(entry: dict, skills_path: Optional[Path], disabled_set: set) -> dict:
+    """One engine lock entry, rendered for the page (engine facts only)."""
+    install_path = str(entry.get("install_path") or "")
+    platform = _shaoke_meta(entry)
+    name = str(entry.get("name") or "")
+    target = (skills_path / install_path) if (skills_path and install_path) else None
+    on_disk = bool(target is not None and target.is_dir())
+    current = engine_content_hash(target) if (on_disk and target is not None) else None
+    return {
+        "reference": str(entry.get("identifier") or ""),
+        "slug": str(platform.get("slug") or ""),
+        "name": name,
+        "category": str(platform.get("category") or "") or _category_of(install_path),
+        "version": str(platform.get("version") or ""),
+        "contentHash": str(entry.get("content_hash") or ""),
+        "installPath": install_path,
+        "installedAt": str(entry.get("installed_at") or ""),
+        "files": entry.get("files"),
+        "source": str(entry.get("source") or ""),
+        "scanVerdict": str(entry.get("scan_verdict") or ""),
+        "trustLevel": str(entry.get("trust_level") or ""),
+        # True when the entry is one THIS app handed to the engine (vs an engine
+        # hub source the user installed through `hermes skills install`).
+        "managedByApp": str(entry.get("source") or "") == ENGINE_SOURCE,
+        "onDisk": on_disk,
+        "localHash": current,
+        "hashState": _hash_state(entry.get("content_hash"), current),
+        "disabled": (name in disabled_set) if disabled_set is not None else None,
+    }
 
 
 # ── CLI invocation (module-level for test injection) ─────────────────────────
@@ -572,7 +630,7 @@ def fetch_catalog(cli_path: str, page_size: int = PAGE_SIZE, max_pages: int = MA
 
     Returns ``{ok: True, skills, pages, truncated}`` or ``{ok: False, kind,
     detail}``. An empty catalog is ``ok: True, skills: []`` — a real, successful
-    answer. ``truncated`` is an EXPLICIT flag (F6): when the CLI still reports a
+    answer. ``truncated`` is an EXPLICIT flag: when the CLI still reports a
     next cursor after ``max_pages`` the caller must not read the capped list as
     the whole catalog.
     """
@@ -638,7 +696,7 @@ def _derive_install_state(skill: dict, record: Optional[dict], on_disk: bool, di
 
 @router.get("/skills")
 def list_skills() -> dict:
-    """The enterprise skill market: catalog + local install facts.
+    """The enterprise skill market: catalog + the ENGINE's own install facts.
 
     A catalog fetch failure is reported in a nested ``catalog`` block so the
     page can still render the local install facts and show the failure — a
@@ -648,7 +706,10 @@ def list_skills() -> dict:
     if home is None:
         return _failure("enterprise-home-unavailable", "无法确定企业侧引擎 home", None, "missing")
 
-    skills_path = _skills_dir(home)
+    skills_path = engine_skills_dir()
+    if skills_path is None:
+        return _failure("engine-unavailable", "引擎未提供技能目录（hermes_constants.get_skills_dir 不可用）", None, "missing")
+
     try:
         assert_outside_personal_trees(skills_path)
     except ValueError as exc:
@@ -674,39 +735,15 @@ def list_skills() -> dict:
     cli_path, cli_source = resolve_cli()
 
     # Local facts first — they do not depend on the network.
-    ledger_records, ledger_note = read_ledger(home)
-    by_ref: dict = {}
-    for record in ledger_records:
-        ref = str(record.get("reference") or record.get("slug") or "")
-        if ref:
-            by_ref[ref] = record
-
+    lock_entries, lock_note = read_engine_installations()
     disabled_info = fetch_disabled()
-    disabled_set = set(disabled_info.get("names") or []) if disabled_info.get("ok") else set()
+    disabled_names = set(disabled_info.get("names") or []) if disabled_info.get("ok") else set()
 
-    installed: list = []
-    for record in ledger_records:
-        install_path = str(record.get("installPath") or "")
-        target = skills_path / install_path if install_path else None
-        on_disk = bool(target and target.is_dir())
-        current = engine_content_hash(target) if (target and on_disk) else None
-        installed.append(
-            {
-                "reference": str(record.get("reference") or ""),
-                "slug": str(record.get("slug") or ""),
-                "name": str(record.get("name") or ""),
-                "category": str(record.get("category") or ""),
-                "version": str(record.get("version") or ""),
-                "installPath": install_path,
-                "installedAt": str(record.get("installedAt") or ""),
-                "uninstalledAt": str(record.get("uninstalledAt") or ""),
-                "files": record.get("files"),
-                "onDisk": on_disk,
-                "localHash": current,
-                "hashState": _hash_state(record.get("contentHash"), current),
-                "disabled": (str(record.get("name") or "") in disabled_set) if disabled_info.get("ok") else None,
-            }
-        )
+    installed: list = [
+        _lock_entry_view(entry, skills_path, disabled_names)
+        for entry in sorted(lock_entries, key=lambda e: str(e.get("name") or ""))
+        if entry.get("managedByApp", True) is not False
+    ]
 
     # Catalog — may fail; the failure is surfaced, never hidden.
     if cli_path is None:
@@ -732,32 +769,44 @@ def list_skills() -> dict:
             catalog = {"ok": False, "kind": fetched["kind"], "detail": fetched.get("detail")}
             catalog_skills = []
 
+    by_ref: dict = {}
+    by_landing: dict = {}
+    for entry in lock_entries:
+        ref = str(entry.get("identifier") or "")
+        if ref:
+            by_ref.setdefault(ref, entry)
+        landing = str(entry.get("install_path") or "")
+        if landing:
+            by_landing.setdefault(landing, entry)
+
     enriched: list = []
     for skill in catalog_skills:
-        record = by_ref.get(skill["reference"]) or None
         install_path = skill.get("installPath")
         target = (skills_path / install_path) if install_path else None
-        planned_on_disk = bool(target and target.is_dir())
-        ledger_on_disk = bool(record and record.get("installPath") and (skills_path / str(record.get("installPath"))).is_dir())
-        on_disk = planned_on_disk or ledger_on_disk
-        current = engine_content_hash(target) if (target is not None and planned_on_disk) else None
-        record_attested = bool(record) and _hash_state(record.get("contentHash"), current) == "match"
-        effective_record = record if record_attested else None
+        on_disk = bool(target is not None and target.is_dir())
+        current = engine_content_hash(target) if (on_disk and target is not None) else None
+        entry = by_ref.get(skill["reference"]) or (by_landing.get(install_path) if install_path else None)
+        entry_attested = bool(entry) and _hash_state(entry.get("content_hash"), current) == "match"
+        effective_entry = entry if entry_attested else None
         disabled_flag = None
         if disabled_info.get("ok"):
-            disabled_flag = str(skill.get("name") or "").strip() in disabled_set
+            disabled_flag = str(skill.get("name") or "").strip() in disabled_names
         enriched.append(
             {
                 **skill,
                 "onDisk": on_disk,
-                "installState": _derive_install_state(skill, effective_record if planned_on_disk else None, planned_on_disk, disabled_flag),
-                "recordedVersion": str(effective_record.get("version") or "") if effective_record else "",
+                "installState": _derive_install_state(skill, effective_entry if on_disk else None, on_disk, disabled_flag),
+                "recordedVersion": str(_shaoke_meta(effective_entry).get("version") or "") if effective_entry else "",
                 "localHash": current,
-                "hashState": _hash_state(record.get("contentHash"), current) if record else None,
+                "hashState": _hash_state(entry.get("content_hash"), current) if entry else None,
                 "disabled": disabled_flag,
+                # Engine facts the UI uses to warn before an overwrite: the slot
+                # exists on disk but no engine record of ours claims it.
+                "ownedByEngine": bool(entry),
             }
         )
 
+    lock_path = _engine_lock_path()
     return {
         "ok": True,
         "skills": enriched,
@@ -767,8 +816,8 @@ def list_skills() -> dict:
         "count": len(enriched),
         "home": str(home),
         "skillsPath": str(skills_path),
-        "ledgerPath": str(_ledger_path(home)),
-        "ledgerNote": ledger_note,
+        "lockPath": str(lock_path) if lock_path is not None else None,
+        "lockNote": lock_note,
         "cliPath": cli_path,
         "cliSource": cli_source,
         "personalCliPath": personal_cli_path() if cli_path is None else None,
@@ -776,8 +825,23 @@ def list_skills() -> dict:
     }
 
 
+def _engine_lock_path() -> Optional[Path]:
+    """The engine's hub lock file path (display only)."""
+    try:
+        from tools.skills_hub import _lock_file  # type: ignore
+
+        return Path(_lock_file())
+    except Exception:
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Write path — install / uninstall / enable / disable / update
+# Write path — install / update / uninstall / enable / disable
+#
+# Nothing below computes a landing, writes a file, or removes a directory.
+# Every mutation is a call into the engine's own skill-management entry points;
+# our job is parameter validation, the confirmation latch, failure translation
+# and truthful presentation of what the engine did.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -832,374 +896,14 @@ def strip_top_dir(entries: list) -> list:
     return [(p, d) for p, d in stripped if p]
 
 
-def is_unsafe_rel_path(rel: str) -> bool:
-    if not rel:
-        return True
-    if rel.startswith("/") or (len(rel) > 1 and rel[1] == ":"):
-        return True
-    return ".." in rel.split("/")
+def _download_bundle_entries(cli_path: str, slug: str) -> dict:
+    """Fetch the skill zip through the CLI's presigned URL and unpack it.
 
-
-def _resolve_inside(skills_path: Path, install_path: str) -> Optional[Path]:
-    """Resolve ``install_path`` strictly inside ``skills_path`` (no ``..`` escape)."""
-    rel = (install_path or "").strip()
-    if not rel or os.path.isabs(rel):
-        return None
-    root = skills_path.resolve()
-    absolute = (root / rel).resolve()
-    if absolute != root and not str(absolute).startswith(str(root) + os.sep):
-        return None
-    return absolute
-
-
-def _rel_segments(install_path: str) -> list:
-    """Normalize a relative install path into segments, or ``[]`` when illegal.
-
-    Mirrors the engine's landing rules (``_normalize_bundle_path``): non-empty,
-    relative, no ``..``, no ``:``; ``\\`` → ``/``; empty/``.`` segments dropped.
+    ``{ok: True, entries}`` or ``{ok: False, kind, detail}``. The zip's own shape
+    is normalized here (top-dir strip, UTF-8 name recovery); the RULES that
+    decide whether a member path or skill name is acceptable belong to the
+    engine and are enforced by ``quarantine_bundle``.
     """
-    normalized = _normalize_bundle_path(install_path, allow_nested=True)
-    return normalized.split("/") if normalized else []
-
-
-def _landing_key(install_path: str) -> tuple:
-    """Comparison key for a landing: NFC-normalized, case-folded segments (P3).
-
-    macOS volumes are case-INsensitive and Unicode-normalizing by default, so
-    ``cat/x``, ``CAT/x`` and an NFD spelling of either are ONE physical
-    directory. A raw-string prefix test therefore MISSES nesting (``CAT/x``
-    living inside ``cat``) and lets an uninstall ``rmtree`` a sibling and leave
-    the ledger dangling. Every overlap / nesting / same-landing comparison goes
-    through this key instead of ``str.startswith``.
-    """
-    segs = _rel_segments(install_path)
-    return tuple(unicodedata.normalize("NFC", p).casefold() for p in segs)
-
-
-def _key_is_under(child: tuple, parent: tuple) -> bool:
-    """True when ``child`` is STRICTLY inside ``parent`` (segment-wise)."""
-    return len(child) > len(parent) and child[: len(parent)] == parent
-
-
-def _lexical_absolute(path: Path) -> Path:
-    """Absolute path WITHOUT following symlinks (``.``/``..`` folded lexically)."""
-    return Path(os.path.abspath(str(path)))
-
-
-def assert_no_symlink_chain(path: Path, *, label: str, boundary: Optional[Path] = None) -> None:
-    """lstat every component of ``path`` AT OR BELOW ``boundary``, refusing symlinks (P2).
-
-    ``Path.resolve()`` erases a symlinked component, so a check that runs after
-    it can never see the link. This walks the literal chain — the final
-    component INCLUDED — because the store root itself (``…/skills``) or the
-    home above it being a symlink is exactly the escape ``resolve()`` hides.
-
-    ``boundary`` is a TRUSTED ancestor: it and everything above it are OUT of
-    scope. Without it a system-level symlink (macOS ``/tmp -> /private/tmp``,
-    ``/var -> private/var``) would produce a false refusal for a perfectly valid
-    ``HERMES_HOME`` under ``TMPDIR``. Components that do not exist yet are fine
-    (nothing to follow). Raises ``ValueError``.
-    """
-    absolute = _lexical_absolute(path)
-    parts = absolute.parts
-    if boundary is None:
-        lo = len(Path(absolute.anchor).parts)
-    else:
-        bound = _lexical_absolute(boundary)
-        bparts = bound.parts
-        if tuple(parts[: len(bparts)]) != tuple(bparts):
-            raise ValueError(f"{label}不在受信边界内：{absolute}（边界 {bound}）")
-        lo = len(bparts)
-    acc = Path(*parts[:lo]) if lo > 0 else Path(absolute.anchor)
-    for seg in parts[lo:]:
-        acc = acc / seg
-        try:
-            mode = os.lstat(acc).st_mode
-        except OSError:
-            # The rest of the chain does not exist (or a component is not a
-            # directory) — nothing further to resolve/follow.
-            return
-        if stat.S_ISLNK(mode):
-            raise ValueError(f"{label}链上存在符号链接，拒绝：{acc}")
-
-
-def _store_boundary(skills_path: Path) -> Path:
-    """The stable ancestor ABOVE the enterprise home (never itself checked).
-
-    ``skills_path`` is always ``<HERMES_HOME>/skills``, so this is
-    ``<HERMES_HOME>``'s parent — the boundary that keeps the symlink walk off
-    system ancestors while still covering HERMES_HOME and the ``skills`` root.
-    """
-    return Path(skills_path).parent.parent
-
-
-def assert_safe_landing(skills_path: Path, install_path: str) -> Path:
-    """Resolve a landing with NO symlink anywhere on its chain (F1 / F7 / P2).
-
-    Unlike a bare ``(skills_path / install_path).resolve()`` — which happily
-    follows a symlinked component and then reports a path that is "inside" the
-    store only because the escape was erased — this walks each component from
-    the RESOLVED skills root and refuses the whole write when any existing
-    component is a symlink. It then re-checks the RESOLVED landing for both
-    containment (strictly under ``<HERMES_HOME>/skills``) and the personal-tree
-    red line (PLK-REQ-0023). Raises ``ValueError``; there is no fallback.
-
-    P2: the ROOT chain (``<HERMES_HOME>`` → ``skills``) is checked on the
-    UNRESOLVED path FIRST. ``resolve()`` below would erase a symlinked root, so
-    a root that is itself a symlink escaped the old version entirely (installs
-    landed, and uninstalls deleted, OUTSIDE the store).
-    """
-    assert_no_symlink_chain(skills_path, label="技能目录", boundary=_store_boundary(skills_path))
-    root = Path(skills_path).resolve()
-    parts = _rel_segments(install_path)
-    if not parts:
-        raise ValueError(f"落点路径不合法（拒绝取用）：{install_path!r}")
-
-    acc = root
-    for part in parts:
-        acc = acc / part
-        if acc.is_symlink():
-            raise ValueError(f"落点链上存在符号链接，拒绝取用：{acc}")
-
-    resolved = acc.resolve()
-    if resolved != root and not str(resolved).startswith(str(root) + os.sep):
-        raise ValueError(f"落点解析后越出技能目录，拒绝取用：{resolved}")
-    assert_outside_personal_trees(resolved)
-    return resolved
-
-
-def _safe_mkdir_chain(root: Path, parts: list) -> Path:
-    """Create ``parts`` under ``root`` one level at a time, refusing symlinks.
-
-    The per-level ``lstat`` (via ``is_symlink``) is what keeps a bundle entry
-    like ``sub/SKILL.md`` from following a pre-existing ``sub -> …`` symlink out
-    of the landing. A non-directory occupant is refused too (never folded).
-    ``root`` itself is created when absent (it is the validated store/landing).
-    """
-    acc = Path(root)
-    if acc.is_symlink():
-        raise ValueError(f"落点根是符号链接，拒绝写入：{acc}")
-    if not acc.exists():
-        acc.mkdir(parents=True, exist_ok=True)
-    for part in parts:
-        acc = acc / part
-        if acc.is_symlink():
-            raise ValueError(f"落点链上存在符号链接，拒绝写入：{acc}")
-        if acc.exists():
-            if not acc.is_dir():
-                raise ValueError(f"落点被非目录占用，拒绝写入：{acc}")
-        else:
-            acc.mkdir()
-    return acc
-
-
-def _atomic_write_bytes(dest: Path, data: bytes) -> None:
-    """Write ``data`` to ``dest`` via a temp file + ``os.replace`` (P1).
-
-    ``Path.write_bytes`` writes THROUGH an existing file: if ``dest`` is a hard
-    link to e.g. ``<HERMES_HOME>/config.yaml`` the other name is silently
-    rewritten. A rename onto ``dest`` replaces the directory entry instead, so
-    the linked name keeps its content. The temp file is always cleaned up.
-    """
-    tmp = dest.with_name(f"{dest.name}.plankton-tmp-{os.getpid()}-{uuid.uuid4().hex}")
-    try:
-        with open(tmp, "wb") as handle:
-            handle.write(data)
-        os.replace(tmp, dest)
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            tmp.unlink()
-
-
-def _assert_landing_writable(target: Path, entries: list, *, owned: bool) -> None:
-    """Refuse a landing whose EXISTING content must not be trampled (P1).
-
-    Two independent refusals:
-
-    * an existing landing this module did not record is foreign — swapping it
-      would destroy someone else's files, so ANY pre-existing entry refuses;
-    * a destination that is a symlink, a non-file, or a HARD LINK
-      (``st_nlink > 1``) refuses: a hard link's other name would otherwise be
-      overwritten with the bundle's bytes.
-
-    Raises ``ValueError``; nothing is touched.
-    """
-    if not owned:
-        for existing in sorted(target.iterdir()):
-            raise ValueError(f"落点内已存在非本台账文件，拒绝覆写：{existing}")
-    for segs, _ in entries:
-        cur = target
-        for index, seg in enumerate(segs):
-            cur = cur / seg
-            if cur.is_symlink():
-                raise ValueError(f"落点内存在符号链接，拒绝写入：{cur}")
-            if index < len(segs) - 1:
-                if cur.exists() and not cur.is_dir():
-                    raise ValueError(f"落点内被非目录占用，拒绝写入：{cur}")
-            elif cur.exists():
-                if not cur.is_file():
-                    raise ValueError(f"落点内被非文件占用，拒绝写入：{cur}")
-                if cur.lstat().st_nlink > 1:
-                    raise ValueError(f"落点内已存在硬链接文件，拒绝覆写：{cur}")
-
-
-def _swap_into_place(staging: Path, target: Path) -> None:
-    """Move a fully-built ``staging`` tree onto ``target`` (P1 / N1).
-
-    The new tree is complete BEFORE anything already at ``target`` is moved, so
-    a failed write never leaves a half-populated landing: the staging dir is
-    removed by the caller. An existing ``target`` is moved aside first and
-    restored if the swap fails.
-    """
-    if not target.exists():
-        os.replace(staging, target)
-        return
-    backup = target.with_name(f"{target.name}.plankton-old-{uuid.uuid4().hex}")
-    os.replace(target, backup)
-    try:
-        os.replace(staging, target)
-    except Exception:
-        os.replace(backup, target)
-        raise
-    shutil.rmtree(backup, ignore_errors=True)
-
-
-def _landing_overlap(planned: str, records: list, ref_of: Callable[[dict], str]) -> Optional[dict]:
-    """Detect a parent/child overlap between ``planned`` and an existing record.
-
-    Both directions are refused (F2/P3): landing UNDER another skill's directory
-    would let a later uninstall of that parent rmtree this skill too; landing
-    ABOVE another skill's directory would let uninstall of this one swallow it.
-    Comparison uses the case-folded segment key, so ``CAT/x`` is correctly seen
-    as living under ``cat`` on a case-insensitive volume.
-    """
-    planned_key = _landing_key(planned)
-    for record in records:
-        other = str(record.get("installPath") or "").strip()
-        other_key = _landing_key(other)
-        if not other_key or other_key == planned_key:
-            continue
-        if _key_is_under(planned_key, other_key):
-            return {"plannedPath": planned, "conflictsWith": other, "direction": "under",
-                    "reference": ref_of(record), "name": str(record.get("name") or "")}
-        if _key_is_under(other_key, planned_key):
-            return {"plannedPath": planned, "conflictsWith": other, "direction": "above",
-                    "reference": ref_of(record), "name": str(record.get("name") or "")}
-    return None
-
-
-def _nested_landings(
-    skills_path: Path, landing: str, records: list, ref_of: Callable[[dict], str]
-) -> list:
-    """Records whose landing sits strictly INSIDE ``landing`` and still exists.
-
-    Deleting ``landing`` would take them with it (F2/P3), so uninstall refuses.
-    The nesting test is the case-folded segment key (a raw ``startswith`` misses
-    ``CAT/x`` inside ``cat``). A deeper path that is itself unsafe (or
-    unreadable) counts as present — the conservative branch, never a silent pass.
-    """
-    nested: list = []
-    landing_key = _landing_key(landing)
-    for record in records:
-        other = str(record.get("installPath") or "").strip()
-        other_key = _landing_key(other)
-        if not other_key or other_key == landing_key or not _key_is_under(other_key, landing_key):
-            continue
-        try:
-            deeper: Optional[Path] = assert_safe_landing(skills_path, other)
-        except ValueError:
-            deeper = None
-        if deeper is None or deeper.is_dir():
-            nested.append({"reference": ref_of(record), "installPath": other,
-                           "name": str(record.get("name") or "")})
-    return nested
-
-
-def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> dict:
-    slug = (data.slug or "").strip()
-    if not slug:
-        return {"ok": False, "kind": "bad-input", "detail": {"reason": "slug 为空"}}
-    ref = (data.reference or "").strip() or slug
-    planned = plan_install_path(data.name, data.category)
-    if not planned:
-        return {"ok": False, "kind": "bad-input", "detail": {"reason": "技能名缺失，无法确定落点"}}
-
-    # F4/N4: a write that touches the store REQUIRES ``confirm:true`` (the
-    # update route always, the install route too since it writes files).
-    if require_confirm and not data.confirm:
-        return {
-            "ok": False,
-            "kind": "needs-confirm",
-            "detail": {"reason": "取用/更新会写入企业侧技能目录，必须带 confirm:true", "plannedPath": planned},
-        }
-
-    home = _hermes_home()
-    if home is None:
-        return {"ok": False, "kind": "enterprise-home-unavailable", "detail": {"reason": "无法确定企业侧引擎 home"}}
-    skills_path = _skills_dir(home)
-    try:
-        assert_outside_personal_trees(skills_path)
-    except ValueError as exc:
-        return {"ok": False, "kind": "blocked-personal-dir", "detail": {"message": str(exc), "skillsPath": str(skills_path)}}
-    usable, reason = _enterprise_home_usable(home)
-    if not usable:
-        return {"ok": False, "kind": "enterprise-home-unavailable", "detail": {"reason": reason, "home": str(home)}}
-
-    # F1: validate the RESOLVED landing (per-component lstat + containment +
-    # personal-tree) BEFORE any download/write. A `skills/<x>` that is a symlink
-    # — to anywhere — refuses the whole install rather than writing through it.
-    try:
-        target = assert_safe_landing(skills_path, planned)
-    except ValueError as exc:
-        return {"ok": False, "kind": "unsafe-path", "detail": {"reason": str(exc), "installPath": planned}}
-
-    cli_path, cli_source = resolve_cli()
-    if cli_path is None:
-        return {"ok": False, "kind": "cli-missing", "detail": {"message": "找不到企业副本 shaoke-cli"}}
-
-    ledger_records, _ = read_ledger(home)
-
-    def ref_of(record: dict) -> str:
-        return str(record.get("reference") or record.get("slug") or "")
-
-    # F2: refuse to CREATE a parent/child overlap with any existing record. An
-    # install must never nest inside or swallow another skill's landing —
-    # otherwise a later uninstall of one rmtree's the other's files.
-    overlap = _landing_overlap(planned, ledger_records, ref_of)
-    if overlap:
-        return {
-            "ok": False,
-            "kind": "install-overlap",
-            "detail": {
-                "reason": f"落点 {planned} 与已有技能记录 {overlap['conflictsWith']} 重叠（{overlap['direction']}），拒绝取用以免卸载连坐",
-                **overlap,
-            },
-        }
-
-    owner = next((r for r in ledger_records if _landing_key(str(r.get("installPath") or "")) == _landing_key(planned) and ref_of(r) != ref), None)
-    mine = next((r for r in ledger_records if ref_of(r) == ref and _landing_key(str(r.get("installPath") or "")) == _landing_key(planned)), None)
-    occupied_on_disk = target.is_dir()
-    current_hash = engine_content_hash(target) if occupied_on_disk else None
-    mine_intact = bool(mine) and _hash_state(mine.get("contentHash"), current_hash) == "match"
-    occupied_by_other = (not mine_intact) and (bool(owner) or occupied_on_disk)
-
-    if occupied_by_other and not data.confirm:
-        return {
-            "ok": False,
-            "kind": "needs-confirm",
-            "detail": {
-                "reason": "落点已被同名同分类的另一个技能占用，未改动磁盘",
-                "plannedPath": planned,
-                "occupiedBy": (
-                    {"reference": ref_of(owner), "name": str(owner.get("name") or ""), "version": str(owner.get("version") or "")}
-                    if owner
-                    else None
-                ),
-                "onDiskWithoutLedger": occupied_on_disk and not owner,
-            },
-        }
-
-    # Download the bundle via the CLI's presigned URL, then fetch its bytes.
     dl = _run_cli_json(cli_path, ["skillhub", "+download", "--slug", slug], SKILL_CLI_TIMEOUT_S)
     if not dl["ok"]:
         blob = json.dumps(dl.get("detail") or {}, ensure_ascii=False)
@@ -1216,256 +920,262 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
 
     try:
         buffer = _http_get(url)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - transport shape is unknown
         return {"ok": False, "kind": "download-failed", "detail": {"message": str(exc)}}
 
     try:
         entries = strip_top_dir(_zip_entries(buffer))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a corrupt archive
         return {"ok": False, "kind": "extract-failed", "detail": {"message": str(exc)}}
     if not entries:
         return {"ok": False, "kind": "extract-failed", "detail": {"message": "包里没有文件"}}
-    unsafe = [p for p, _ in entries if is_unsafe_rel_path(p)]
-    if unsafe:
-        return {"ok": False, "kind": "extract-failed", "detail": {"message": "包内含不安全路径，已拒绝落盘", "paths": unsafe[:5]}}
+    return {"ok": True, "entries": entries}
 
-    # ── N1/P1: assemble into a staging dir, then swap atomically ─────────────
-    # A partial write must never leave residue inside the store, and a
-    # destination that already holds a hard link (or foreign files) must be
-    # refused rather than silently overwritten.
-    normalized_entries: list = []
-    for rel, data_bytes in entries:
-        parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
-        if parts:
-            normalized_entries.append((parts, data_bytes))
 
-    # `owned` = this landing is OUR recorded install (a record with a content
-    # hash proves this module wrote it); only then may existing files be
-    # replaced. A tampered record without a hash does not unlock a landing.
-    owned = bool(mine) and bool(str(mine.get("contentHash") or "").strip())
+def _scan_findings(scan_result: Any, limit: int = 10) -> list:
+    """A small, honest digest of the engine's scan findings."""
+    out: list = []
+    for finding in list(getattr(scan_result, "findings", None) or [])[:limit]:
+        out.append(
+            {
+                "severity": str(getattr(finding, "severity", "") or ""),
+                "category": str(getattr(finding, "category", "") or ""),
+                "file": str(getattr(finding, "file", "") or ""),
+                "line": getattr(finding, "line", None),
+                "description": str(getattr(finding, "description", "") or ""),
+            }
+        )
+    return out
 
-    written = 0
-    target = None
-    staging = None
-    try:
-        landing_parts = _rel_segments(planned)
-        if not landing_parts:
-            raise ValueError(f"落点路径不合法：{planned!r}")
-        parent = _safe_mkdir_chain(skills_path, landing_parts[:-1])
-        target = parent / landing_parts[-1]
-        # P2: refuse a symlinked root/chain on the literal path (resolve erases it).
-        assert_no_symlink_chain(target, label="落点", boundary=_store_boundary(skills_path))
-        if target.is_symlink():
-            raise ValueError(f"落点是符号链接，拒绝写入：{target}")
-        if target.exists():
-            if not target.is_dir():
-                raise ValueError(f"落点被非目录占用，拒绝写入：{target}")
-            # P1: refuse foreign content / hard links that a swap would trample.
-            _assert_landing_writable(target, normalized_entries, owned=owned)
 
-        staging = parent / f".plankton-staging-{os.getpid()}-{uuid.uuid4().hex}"
-        os.mkdir(staging)
-        for segs, data_bytes in normalized_entries:
-            sub = _safe_mkdir_chain(staging, segs[:-1])
-            _atomic_write_bytes(sub / segs[-1], data_bytes)
-            written += 1
-        _swap_into_place(staging, target)
-        staging = None
-    except Exception as exc:
-        if staging is not None:
-            shutil.rmtree(staging, ignore_errors=True)
+def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> dict:
+    """Install (or refresh) one skill by handing the bundle to the ENGINE.
+
+    Returns the engine's outcome translated into this API's envelope. No landing
+    is computed, no directory is written and no directory is removed here — the
+    engine's ``install_from_quarantine`` owns all of that (including the
+    symlink / nesting / category-bucket refusals, which surface as
+    ``engine-refused`` carrying the engine's own message).
+    """
+    slug = (data.slug or "").strip()
+    if not slug:
+        return {"ok": False, "kind": "bad-input", "detail": {"reason": "slug 为空"}}
+    reference = (data.reference or "").strip() or slug
+    planned = plan_install_path(data.name, data.category)
+    if not planned:
         return {
             "ok": False,
-            "kind": "write-failed",
-            "detail": {"message": str(exc), "written": written, "target": str(target) if target is not None else planned},
+            "kind": "bad-input",
+            "detail": {"reason": "技能名或分类不符合引擎的落点规则（拒绝取用）", "name": str(data.name), "category": str(data.category)},
         }
 
-    content_hash = engine_content_hash(target)
+    if require_confirm and not data.confirm:
+        return {
+            "ok": False,
+            "kind": "needs-confirm",
+            "detail": {"reason": "取用/更新会写入企业侧技能目录，必须带 confirm:true", "plannedPath": planned},
+        }
+
+    home = _hermes_home()
+    if home is None:
+        return {"ok": False, "kind": "enterprise-home-unavailable", "detail": {"reason": "无法确定企业侧引擎 home"}}
+    usable, reason = _enterprise_home_usable(home)
+    if not usable:
+        return {"ok": False, "kind": "enterprise-home-unavailable", "detail": {"reason": reason, "home": str(home)}}
+
+    skills_path = engine_skills_dir()
+    if skills_path is None:
+        return {"ok": False, "kind": "engine-unavailable", "detail": {"reason": "引擎未提供技能目录（get_skills_dir 不可用）"}}
+    try:
+        assert_outside_personal_trees(skills_path)
+    except ValueError as exc:
+        return {"ok": False, "kind": "blocked-personal-dir", "detail": {"message": str(exc), "skillsPath": str(skills_path)}}
+
+    cli_path, cli_source = resolve_cli()
+    if cli_path is None:
+        return {"ok": False, "kind": "cli-missing", "detail": {"message": "找不到企业副本 shaoke-cli"}}
+
+    try:
+        from tools import skills_hub as engine_hub  # type: ignore
+        from tools.skills_guard import scan_skill, should_allow_install  # type: ignore
+        from tools.skills_hub_install import (  # type: ignore
+            install_from_quarantine, quarantine_bundle)
+        from tools.skills_hub_models import SkillBundle  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "kind": "engine-unavailable", "detail": {"message": f"引擎技能管理模块不可用：{exc}"}}
+
+    # The engine's own hub bookkeeping (quarantine dir + lock.json) must exist
+    # before it can stage a bundle — its own helper, not ours.
+    try:
+        engine_hub.ensure_hub_dirs()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "kind": "write-failed", "detail": {"message": f"引擎 hub 目录不可用：{exc}"}}
+
+    target = skills_path / planned
+    replaced = bool(target.is_dir())
+
+    fetched = _download_bundle_entries(cli_path, slug)
+    if not fetched["ok"]:
+        return {"ok": False, "kind": fetched["kind"], "detail": fetched.get("detail")}
+
+    bundle = SkillBundle(
+        name=str(data.name),
+        files={str(rel): data_bytes for rel, data_bytes in fetched["entries"]},
+        source=ENGINE_SOURCE,
+        identifier=reference,
+        trust_level="community",
+        metadata={
+            "shaoke": {
+                "slug": slug,
+                "reference": reference,
+                "name": str(data.name),
+                "category": str(data.category),
+                "version": str(data.version),
+                "pickedBy": str(data.pickedBy or ""),
+            }
+        },
+    )
+
+    # ── the engine's pipeline: quarantine → scan → (refuse?) → install ───────
+    try:
+        quarantine_path = quarantine_bundle(bundle)
+    except ValueError as exc:
+        return {"ok": False, "kind": "engine-refused", "detail": {"reason": str(exc), "installPath": planned}}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "kind": "write-failed", "detail": {"message": f"引擎暂存技能包失败：{exc}"}}
+
+    try:
+        scan_result = scan_skill(quarantine_path, source=reference)
+        allowed, allow_reason = should_allow_install(scan_result, force=False)
+        if not allowed:
+            return {
+                "ok": False,
+                "kind": "blocked-by-scan",
+                "detail": {
+                    "reason": allow_reason,
+                    "verdict": str(getattr(scan_result, "verdict", "") or ""),
+                    "summary": str(getattr(scan_result, "summary", "") or ""),
+                    "findings": _scan_findings(scan_result),
+                },
+            }
+        install_dir = install_from_quarantine(
+            quarantine_path, bundle.name, str(data.category or ""), bundle, scan_result
+        )
+    except ValueError as exc:
+        return {"ok": False, "kind": "engine-refused", "detail": {"reason": str(exc), "installPath": planned}}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "kind": "write-failed", "detail": {"message": f"引擎安装失败：{exc}", "installPath": planned}}
+    finally:
+        # Remove OUR staging input if the engine left it behind (the engine
+        # rmtree's it itself on success — this is hygiene for early returns).
+        shutil.rmtree(quarantine_path, ignore_errors=True)
+
+    # Read the outcome back from the ENGINE's own bookkeeping (not from guesses).
+    entries, _note = read_engine_installations()
+    entry = next((e for e in entries if str(e.get("name") or "") == str(bundle.name)), None)
+    content_hash = str((entry or {}).get("content_hash") or "") or engine_content_hash(install_dir)
     if not content_hash:
         return {
             "ok": False,
             "kind": "hash-unavailable",
             "detail": {
-                "message": "内容哈希取不到（落点刚写入却读不出内容），未写取用记录",
-                "installPath": planned,
+                "message": "引擎安装完成但内容哈希取不到（锁文件与落点都读不出），无法确认结果",
+                "installPath": str(getattr(install_dir, "name", planned)),
             },
-        }
-
-    record = {
-        "reference": ref,
-        "slug": slug,
-        "name": str(data.name),
-        "category": str(data.category),
-        "version": str(data.version),
-        "contentHash": content_hash,
-        "installPath": planned,
-        "installedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "files": written,
-        "pickedBy": str(data.pickedBy or ""),
-    }
-    records = [record] + [
-        r
-        for r in ledger_records
-        if ref_of(r) != ref and _landing_key(str(r.get("installPath") or "")) != _landing_key(planned)
-    ]
-    try:
-        write_ledger(home, records)
-    except Exception as exc:
-        return {
-            "ok": False,
-            "kind": "write-failed",
-            "detail": {"message": f"技能已落盘但台账写不进去：{exc}", "target": str(target)},
         }
 
     return {
         "ok": True,
-        "record": record,
-        "target": str(target),
-        "files": written,
+        "engine": "install_from_quarantine",
+        "record": _lock_entry_view(entry, skills_path, set()) if entry else None,
+        "target": str(install_dir),
+        "installPath": (str((entry or {}).get("install_path") or planned)),
+        "files": len(bundle.files),
+        "replaced": replaced,
         "skillsPath": str(skills_path),
         "localHash": content_hash,
+        "scanVerdict": str(getattr(scan_result, "verdict", "") or ""),
         "cliPath": cli_path,
         "cliSource": cli_source,
     }
 
 
 def _uninstall_skill(data: UninstallRequest) -> dict:
-    ref = (data.reference or "").strip()
-    if not ref:
+    """Remove a skill through the ENGINE's own uninstall entry.
+
+    The engine refuses anything it did not install (and anything missing from,
+    or malformed in, its own lock file), so no directory is removed by this
+    module and a tampered record cannot aim the engine at a foreign directory.
+    """
+    reference = (data.reference or "").strip()
+    if not reference:
         return {"ok": False, "kind": "bad-input", "detail": {"reason": "技能标识缺失"}}
+    if not data.confirm:
+        return {
+            "ok": False,
+            "kind": "needs-confirm",
+            "detail": {"reason": "卸载会删除引擎技能落点，必须带 confirm:true", "reference": reference},
+        }
 
     home = _hermes_home()
     if home is None:
         return {"ok": False, "kind": "enterprise-home-unavailable", "detail": {"reason": "无法确定企业侧引擎 home"}}
-    skills_path = _skills_dir(home)
+    skills_path = engine_skills_dir()
+    if skills_path is None:
+        return {"ok": False, "kind": "engine-unavailable", "detail": {"reason": "引擎未提供技能目录（get_skills_dir 不可用）"}}
     try:
         assert_outside_personal_trees(skills_path)
     except ValueError as exc:
         return {"ok": False, "kind": "blocked-personal-dir", "detail": {"message": str(exc), "skillsPath": str(skills_path)}}
 
-    ledger_records, _ = read_ledger(home)
+    try:
+        from tools.skills_hub_install import uninstall_skill as engine_uninstall  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "kind": "engine-unavailable", "detail": {"message": f"引擎技能管理模块不可用：{exc}"}}
 
-    def ref_of(record: dict) -> str:
-        return str(record.get("reference") or record.get("slug") or "")
-
-    record = next(
+    entries, note = read_engine_installations()
+    wanted_path = (data.installPath or "").strip()
+    entry = next(
         (
-            r
-            for r in ledger_records
-            if ref_of(r) == ref
-            and (
-                not data.installPath
-                or _landing_key(str(r.get("installPath") or "")) == _landing_key(data.installPath)
-            )
+            e
+            for e in entries
+            if str(e.get("identifier") or "") == reference
+            and (not wanted_path or str(e.get("install_path") or "") == wanted_path)
         ),
         None,
     )
-    if record is None:
-        return {"ok": False, "kind": "no-record", "detail": {"reason": "台账里没有这条取用记录，本模块只卸载自己取用过的技能", "reference": ref}}
-
-    recorded_path = str(record.get("installPath") or "").strip()
-
-    # F7: the recorded landing must be EXACTLY what our own install rules produce
-    # for this record. A tampered ledger (e.g. installPath="." or "cat") must not
-    # become an arbitrary delete inside <HERMES_HOME>/skills.
-    expected = plan_install_path(str(record.get("name") or ""), str(record.get("category") or ""))
-    if not expected or expected != recorded_path:
+    if entry is None and wanted_path:
+        entry = next((e for e in entries if str(e.get("install_path") or "") == wanted_path), None)
+    if entry is None:
         return {
             "ok": False,
-            "kind": "unsafe-path",
+            "kind": "no-record",
             "detail": {
-                "reason": "台账记录的落点不符合本模块安装规则，拒绝卸载（疑似台账被改动）",
-                "installPath": recorded_path,
-                "expected": expected,
+                "reason": "引擎的取用记录里没有这条技能，本页只卸载引擎记录在案的技能",
+                "reference": reference,
+                "lockNote": note,
             },
         }
 
-    # P4: shape alone is NOT ownership. A record with an empty/missing
-    # ``contentHash`` was never vouched for by an install of this module — a
-    # tampered ledger could otherwise point a legal-looking landing at ANY
-    # unrelated directory under ``skills`` (e.g. a bundled engine skill) and
-    # have it deleted. Require the record to carry the hash our install writes.
-    if not str(record.get("contentHash") or "").strip():
-        return {
-            "ok": False,
-            "kind": "unsafe-path",
-            "detail": {
-                "reason": "台账记录缺少内容哈希，无法证明这条落点是本模块取用的，拒绝卸载（疑似台账被改动）",
-                "installPath": recorded_path,
-                "recordedHash": None,
-            },
-        }
-
-    # F1/F7: resolve with the per-component symlink rejection (never follow a
-    # symlinked landing out of the store, and never into a personal tree).
+    name = str(entry.get("name") or "")
+    install_path = str(entry.get("install_path") or "")
     try:
-        target = assert_safe_landing(skills_path, recorded_path)
-    except ValueError as exc:
-        return {"ok": False, "kind": "unsafe-path", "detail": {"reason": str(exc), "installPath": recorded_path}}
+        ok, message = engine_uninstall(name)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "kind": "remove-failed", "detail": {"message": f"引擎卸载失败：{exc}", "name": name}}
 
-    # F2: never rmtree a directory that still holds another record's landing.
-    nested = _nested_landings(skills_path, recorded_path, ledger_records, ref_of)
-    if nested:
-        return {
-            "ok": False,
-            "kind": "unsafe-path",
-            "detail": {
-                "reason": "落点内部仍含其它台账记录的技能目录，拒绝删除以免连坐",
-                "installPath": recorded_path,
-                "contains": nested,
-            },
-        }
+    if not ok:
+        return {"ok": False, "kind": "remove-failed", "detail": {"message": message, "name": name}}
 
-    # N2: a landing occupied by a NON-directory is not something we can remove
-    # as a skill directory. Report it truthfully — never "ok / removed:false"
-    # while ALSO stamping the ledger as uninstalled (a false green).
-    if target.exists() and not target.is_dir():
-        return {
-            "ok": False,
-            "kind": "remove-failed",
-            "detail": {
-                "reason": "落点被非目录占用（不是技能目录），未删除、台账未改动",
-                "installPath": recorded_path,
-                "target": str(target),
-            },
-        }
-
-    exists = target.is_dir()
-    current = engine_content_hash(target) if exists else None
-    changed = exists and _hash_state(record.get("contentHash"), current) == "mismatch"
-    # Human confirmation is REQUIRED for every uninstall (it removes files); a
-    # local modification additionally needs the same confirm (never a silent
-    # delete of someone's edits).
-    if not data.confirm:
-        return {
-            "ok": False,
-            "kind": "needs-confirm",
-            "detail": {
-                "reason": "落点内容与取用时的记录不一致（本地被改动过）" if changed else "卸载会删除落点目录",
-                "installPath": str(record.get("installPath") or ""),
-                "contentChanged": changed,
-            },
-        }
-
-    removed = False
-    if exists:
-        try:
-            shutil.rmtree(target)
-            removed = True
-        except Exception as exc:
-            return {"ok": False, "kind": "remove-failed", "detail": {"message": str(exc), "target": str(target)}}
-
-    next_record = {**record, "uninstalledAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    records = [
-        next_record if (ref_of(r) == ref and str(r.get("installPath") or "") == str(record.get("installPath") or "")) else r
-        for r in ledger_records
-    ]
-    try:
-        write_ledger(home, records)
-    except Exception as exc:
-        return {"ok": False, "kind": "write-failed", "detail": {"message": f"落点已删但台账写不进去：{exc}"}}
-
-    return {"ok": True, "removed": removed, "record": next_record, "target": str(target)}
+    return {
+        "ok": True,
+        "engine": "uninstall_skill",
+        "removed": not (skills_path / install_path).exists() if install_path else True,
+        "name": name,
+        "reference": reference,
+        "installPath": install_path,
+        "message": message,
+    }
 
 
 def _set_skill_enabled(name: str, enabled: bool) -> dict:
@@ -1485,7 +1195,7 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
     except Exception as exc:
         return {"ok": False, "kind": "engine-unavailable", "detail": {"message": f"引擎技能配置模块不可用：{exc}"}}
 
-    # N3: ``ESSENTIAL_SKILLS`` is only used to LABEL a failure. It lives in a
+    # ``ESSENTIAL_SKILLS`` is only used to LABEL a failure. It lives in a
     # different module, so a missing/renamed symbol there must not take the
     # whole enable/disable path down with ``engine-unavailable`` — the config
     # read/write above is what actually matters.
@@ -1500,6 +1210,8 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
 
             scope = config_write_scope(None)
         except Exception:
+            import contextlib
+
             scope = contextlib.nullcontext()
         with scope:
             config = load_config()
@@ -1509,10 +1221,9 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
             else:
                 disabled.add(skill_name)
             save_disabled_skills(config, disabled)
-            # F5: re-read the PERSISTED state. The engine silently drops
-            # essential skills (``ESSENTIAL_SKILLS``) from this key, so a
-            # "disable hermes-agent" write is a no-op — reporting ok would be a
-            # false green. Report the state that actually landed on disk.
+            # Re-read the PERSISTED state. The engine silently drops essential
+            # skills (``ESSENTIAL_SKILLS``) from this key, so a "disable
+            # hermes-agent" write is a no-op — reporting ok would be a false green.
             persisted = get_disabled_skills(load_config())
     except Exception as exc:
         return {"ok": False, "kind": "write-failed", "detail": {"message": str(exc)}}
@@ -1541,28 +1252,31 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
 
 @router.post("/skills/install")
 def install_skill(data: InstallRequest) -> dict:
-    """Install (or refresh) one skill into ``<HERMES_HOME>/skills``.
+    """Install one skill into the engine's skills store (via the engine).
 
-    Installing writes files, so the backend REQUIRES ``confirm:true`` (N4) —
-    the UI always sends it after its confirmation dialog, and a direct call
-    without it is refused rather than silently writing.
+    Installing writes files, so the backend REQUIRES ``confirm:true`` — the UI
+    always sends it after its confirmation dialog, and a direct call without it
+    is refused rather than silently writing.
     """
     return _install_skill(data, require_confirm=True)
 
 
 @router.post("/skills/update")
 def update_skill(data: InstallRequest) -> dict:
-    """Update = re-install from the catalog (same landing rules).
+    """Update = hand the ENGINE a freshly downloaded bundle for the same landing.
 
-    An update overwrites an occupied slot by definition, so it REQUIRES
-    ``confirm:true`` (F4) — matching what the docs claim, not just the UI.
+    The engine's own update CHECK (``check_for_skill_updates``) resolves through
+    its hub adapters and can never match our ``shaoke-skillhub`` source (it
+    reports such an entry as ``unavailable``), so an update is an engine install
+    of fresh bytes. It overwrites the landing by definition, so it REQUIRES
+    ``confirm:true``.
     """
     return _install_skill(data, require_confirm=True)
 
 
 @router.post("/skills/uninstall")
 def uninstall_skill(data: UninstallRequest) -> dict:
-    """Remove a skill's landing directory; the ledger record is kept."""
+    """Uninstall through the engine's own entry; the engine drops its record too."""
     return _uninstall_skill(data)
 
 

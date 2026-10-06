@@ -181,33 +181,37 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
   writeMockProviderConfig(home, mock.url, undefined, 'plugins:\n  enabled:\n    - plankton-enterprise\n')
   writeEnvFile(home)
 
-  // Seed ONE locally-installed skill + its ledger record, so the skill market's
-  // local facts (and the hash we compare) are present WITHOUT depending on the
-  // catalog/network. The recorded hash is deliberately a bogus value: the page
-  // must surface "哈希不符" (the hash-mismatch class) while still printing the
-  // current, engine-computed hash for parity.
+  // Seed ONE locally-installed skill + its record in the ENGINE's OWN hub lock
+  // file (``skills/.hub/lock.json``) — the page reads engine facts, not a
+  // private ledger of ours. The recorded hash is deliberately a bogus value:
+  // the page must surface "哈希不符" (the hash-mismatch class) while still
+  // printing the current, engine-computed hash for parity.
   const seededSkillDir = path.join(home, 'skills', 'e2e-market-skill')
   fs.mkdirSync(seededSkillDir, { recursive: true })
   fs.writeFileSync(path.join(seededSkillDir, 'SKILL.md'), '# e2e market skill\nbody\n', 'utf8')
-  fs.mkdirSync(path.join(home, 'plankton'), { recursive: true })
+  fs.mkdirSync(path.join(home, 'skills', '.hub'), { recursive: true })
   fs.writeFileSync(
-    path.join(home, 'plankton', 'skill-ledger.json'),
+    path.join(home, 'skills', '.hub', 'lock.json'),
     JSON.stringify(
       {
-        schema: 1,
-        records: [
-          {
-            reference: 'e2e/owner-e2e-market-skill',
-            slug: 'e2e-market-skill',
-            name: 'e2e-market-skill',
-            category: '',
-            version: '9.9.9',
-            contentHash: 'sha256:0000000000000000',
-            installPath: 'e2e-market-skill',
-            installedAt: '2026-10-05T00:00:00Z',
-            files: 1
+        version: 1,
+        installed: {
+          'e2e-market-skill': {
+            source: 'shaoke-skillhub',
+            identifier: 'e2e/owner-e2e-market-skill',
+            trust_level: 'community',
+            scan_verdict: 'safe',
+            content_hash: 'sha256:0000000000000000',
+            install_path: 'e2e-market-skill',
+            files: ['SKILL.md'],
+            metadata: {
+              shaoke: { slug: 'e2e-market-skill', name: 'e2e-market-skill', category: '', version: '9.9.9' }
+            },
+            scan_provenance: {},
+            installed_at: '2026-10-05T00:00:00Z',
+            updated_at: '2026-10-05T00:00:00Z'
           }
-        ]
+        }
       },
       null,
       2
@@ -300,7 +304,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
     // The seeded local install is visible with its engine-computed hash, and the
     // deliberately-bogus recorded hash shows the hash-mismatch class distinctly.
-    expect(marketText).toContain('本机已取用（台账）')
+    expect(marketText).toContain('本机已取用（引擎台账）')
     expect(marketText).toContain('e2e-market-skill')
     expect(marketText).toContain('哈希不符')
 
