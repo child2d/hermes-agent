@@ -455,14 +455,22 @@ def test_unzip_recovers_utf8_names_without_the_flag(api):
 
 
 def test_install_refuses_a_landing_that_is_a_symlink_out_of_the_store(api, tmp_path):
-    """The engine refuses a redirected landing; nothing is written through it."""
+    """The engine refuses a redirected landing; nothing is written through it.
+
+    ``overwriteLocalEdits`` is now required first: the landing holds content no
+    engine record attests (F-2), so the write is an explicit choice before the
+    ENGINE's own boundary decision even runs. That decision is what this asserts.
+    """
     home = api._TEST_HOME
     (home / "skills").mkdir(parents=True, exist_ok=True)
     outside = tmp_path / "outside"
     outside.mkdir()
     (home / "skills" / "esc").symlink_to(outside, target_is_directory=True)
 
-    result = _install_with_bundle(api, _skill_zip(), slug="esc", reference="u/esc", name="esc", category="", confirm=True)
+    result = _install_with_bundle(
+        api, _skill_zip(), slug="esc", reference="u/esc", name="esc", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
 
     assert result["ok"] is False
     assert result["kind"] == "engine-refused"
@@ -503,14 +511,18 @@ def test_a_dangerous_bundle_is_blocked_by_the_engine_scan(api):
 
 def test_install_never_clobbers_a_hardlink_at_the_landing(api):
     """The engine replaces the landing directory wholesale — a hard link's OTHER
-    name keeps its content (the escape our own writer used to have)."""
+    name keeps its content (the escape our own writer used to have). The landing
+    holds un-attested content, so the write carries the explicit ack (F-2)."""
     home = api._TEST_HOME
     (home / "skills" / "x").mkdir(parents=True)
     config = home / "config.yaml"
     config.write_text("model:\n  name: keep-me\n", encoding="utf-8")
     os.link(config, home / "skills" / "x" / "SKILL.md")
 
-    result = _install_with_bundle(api, _skill_zip("new-body"), slug="x", reference="u/x", name="x", category="", confirm=True)
+    result = _install_with_bundle(
+        api, _skill_zip("new-body"), slug="x", reference="u/x", name="x", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
 
     assert result["ok"] is True, result
     assert config.read_text(encoding="utf-8") == "model:\n  name: keep-me\n", "the other link must be untouched"
@@ -522,7 +534,12 @@ def test_install_reports_when_it_replaced_an_existing_slot(api):
     home = api._TEST_HOME
     _seed_skill(home, "x", "pre-existing")
 
-    result = _install_with_bundle(api, _skill_zip("replacement"), slug="x", reference="u/x", name="x", category="", confirm=True)
+    # A slot with content that no engine record attests needs the explicit
+    # acknowledgement (F-2) — the replacement itself is what is asserted here.
+    result = _install_with_bundle(
+        api, _skill_zip("replacement"), slug="x", reference="u/x", name="x", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
 
     assert result["ok"] is True, result
     assert result["replaced"] is True, "an overwrite must be reported, never silent"
@@ -534,7 +551,10 @@ def test_install_does_not_wipe_a_category_bucket_the_engine_refuses(api):
     home = api._TEST_HOME
     sib = _seed_skill(home, "bucket/sib")
 
-    result = _install_with_bundle(api, _skill_zip(), slug="bucket", reference="u/bucket", name="bucket", category="", confirm=True)
+    result = _install_with_bundle(
+        api, _skill_zip(), slug="bucket", reference="u/bucket", name="bucket", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
 
     assert result["ok"] is False
     assert result["kind"] == "engine-refused"
@@ -824,9 +844,9 @@ def test_update_without_local_edits_needs_no_overwrite_ack(api):
 
 def test_corrupt_lock_cannot_let_an_update_silently_overwrite_local_edits(api):
     """P1: the engine's ``_JsonStateFile._read`` swallows a corrupt lock into its
-    empty shape, so ``engine_local_edits`` answers a (false) ``False`` — "no record
-    names this skill" — for a landing it simply cannot see. The gate must PROBE
-    the file itself and treat 'cannot decide' as REFUSAL, or the update
+    empty shape, so ``engine_local_edits`` cannot see ANY record for this skill
+    and answers ``None`` (it used to answer a false ``False`` = "no record").
+    The gate must still treat 'cannot decide' as REFUSAL, or the update
     rmtree-replaces the user's work and still answers ``ok:true``."""
     home = api._TEST_HOME
     first = _install_with_bundle(api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", confirm=True)
@@ -836,11 +856,12 @@ def test_corrupt_lock_cannot_let_an_update_silently_overwrite_local_edits(api):
     (home / "skills" / "x" / "SKILL.md").write_text("USER EDIT", encoding="utf-8")
 
     # …and the engine lock is unreadable. This is the exact lie the probe must
-    # catch: the engine-side criterion can no longer see a record at all.
+    # catch: the engine-side criterion can no longer see a record at all, so it
+    # cannot attest anything about the landing.
     lock = home / "skills" / ".hub" / "lock.json"
     lock.write_text("{ not json", encoding="utf-8")
     assert api._probe_lock_file(), "the corrupt lock must be probed, not swallowed"
-    assert api.engine_local_edits("x", "x") is False, "the engine predicate cannot decide here"
+    assert api.engine_local_edits("x", "x") is None, "the engine predicate cannot decide here"
 
     # Without the acknowledgement the update is REFUSED and the disk is untouched.
     denied = api.route_update_skill(
@@ -879,10 +900,13 @@ def test_record_without_a_hash_is_undecidable_not_clean(api):
 
 
 def test_local_edit_verdict_is_a_real_tristate(api):
-    """True / False / None are three DIFFERENT answers, and None never means clean."""
+    """True / False / None are three DIFFERENT answers, and None never means clean.
+    ``False`` means "a record ATTESTED the content": an absent record cannot, so
+    "no record" is ``None`` (F-2/F-4) — the gate lets it through only because
+    there is no landing to protect (see the absent-landing counterexample)."""
     home = api._TEST_HOME
-    # No record and nothing on disk → there is nothing to protect.
-    assert api.engine_local_edits("ghost", "ghost") is False
+    # No record: nothing can attest the landing — and there is no landing.
+    assert api.engine_local_edits("ghost", "ghost") is None
     # A matching record → clean.
     target = _seed_skill(home, "m", "same")
     _seed_engine_lock(home, name="m", install_path="m", content_hash=api.engine_content_hash(target))
@@ -1046,3 +1070,163 @@ def test_installed_panel_scopes_to_app_managed_entries(api):
     names = [item["name"] for item in result["installed"]]
     assert names == ["ours"], "the panel is scoped to THIS app's pickups"
     assert result["installed"][0]["managedByApp"] is True
+
+
+# ── F-1: installState must read the version from where the ENGINE stores it ──
+# The lock entry carries NO top-level ``version`` (our platform facts ride in
+# ``metadata.shaoke``). Reading a top-level one returned "" for EVERY real
+# install, so the state was pinned at ``version-unknown``: the page's manage
+# actions stayed disabled and the batch entry never rendered. Nothing asserted
+# installState, which is how four review rounds missed it.
+
+
+def test_install_state_reads_the_version_from_the_engines_own_field(api):
+    """The three states, on a REAL install — the carrier that was missing."""
+    home = api._TEST_HOME
+    result = _install_with_bundle(
+        api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", version="2.0.0", confirm=True
+    )
+    assert result["ok"] is True, result
+
+    from tools.skills_hub import HubLockFile
+
+    entry = HubLockFile().get_installed("x")
+    # The fact F-1 turned on: no top-level version, the version is in metadata.
+    assert "version" not in entry, "the engine's lock entry must not carry a top-level version"
+    assert entry["metadata"]["shaoke"]["version"] == "2.0.0"
+
+    def row_for(catalog_version):
+        _fake_exec(api, rc=0, out=_list_page([{"slug": "x", "name": "x", "version": catalog_version}]), err="")
+        read = api.list_skills()
+        return next(s for s in read["skills"] if s["slug"] == "x")
+
+    # catalog == record → consistent
+    row = row_for("2.0.0")
+    assert row["installState"] == "consistent", row
+    assert row["recordedVersion"] == "2.0.0"
+    assert row["ownedByEngine"] is True
+
+    # catalog != record → version-differs (the batch entry's precondition)
+    row = row_for("3.1.4")
+    assert row["installState"] == "version-differs", row
+    assert row["recordedVersion"] == "2.0.0"
+
+    # a record with NO version cannot be compared → version-unknown, the only
+    # honest answer (and never the answer for every install, as it used to be)
+    _seed_engine_lock(
+        home, name="x", install_path="x",
+        content_hash=api.engine_content_hash(home / "skills" / "x"),
+        metadata={"shaoke": {"slug": "x", "name": "x", "category": ""}},
+    )
+    assert row_for("2.0.0")["installState"] == "version-unknown"
+
+
+def test_a_disabled_install_is_its_own_state_not_an_unknown(api):
+    """``disabled`` outranks the version comparison, and it must also not read as
+    version-unknown (that state is what gated the manage buttons)."""
+    home = api._TEST_HOME
+    assert _install_with_bundle(
+        api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", version="2.0.0", confirm=True
+    )["ok"]
+    assert api._set_skill_enabled("x", False)["ok"] is True
+    _fake_exec(api, rc=0, out=_list_page([{"slug": "x", "name": "x", "version": "2.0.0"}]), err="")
+    row = next(s for s in api.list_skills()["skills"] if s["slug"] == "x")
+    assert row["installState"] == "disabled", row
+    assert row["disabled"] is True
+
+
+# ── F-2: a landing with NO record is not "confirmed clean" ──────────────────
+# §9.3-3 used to say "install overwrites the engine-unaware same-name landing and
+# we do not block it" with a dialog hint only. The adopted asymmetric-cost rule
+# ("cannot confirm clean + landing exists → must not overwrite") supersedes it:
+# the hint is now a machine-enforced acknowledgement.
+
+
+def test_a_landing_with_no_record_at_all_is_not_confirmed_clean(api):
+    home = api._TEST_HOME
+    target = _seed_skill(home, "x", "someone else's content")
+    _seed_engine_lock(home, name="other")  # a LEGAL lock — just no entry for "x"
+    assert api._probe_lock_file() is None, "a legal lock is not corruption"
+    assert api.engine_local_edits("x", "x") is None, "an absent record cannot attest 'clean'"
+
+    denied = api.route_install_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="", confirm=True)
+    )
+    assert denied["ok"] is False, denied
+    assert denied["kind"] == "local-edits"
+    assert denied["detail"]["undecidable"] is True
+    assert (target / "SKILL.md").read_text(encoding="utf-8") == "someone else's content"
+
+    # The read side must expose it, or the page cannot warn nor send the ack.
+    _fake_exec(api, rc=0, out=_list_page([{"slug": "x", "name": "x", "version": "1.0.0"}]), err="")
+    row = next(s for s in api.list_skills()["skills"] if s["slug"] == "x")
+    assert row["onDisk"] is True
+    assert row["ownedByEngine"] is False
+    assert row["localEdits"] is False
+    assert row["localEditsUnknown"] is True
+    assert row["localEditsUnknown"] == (api.engine_local_edits("x", "x") is None and row["onDisk"]), (
+        "read and write must reach the SAME verdict"
+    )
+
+    # …and the explicit acknowledgement opens the write.
+    acked = _install_with_bundle(
+        api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
+    assert acked["ok"] is True, acked
+    assert (target / "SKILL.md").read_text(encoding="utf-8") == "v1"
+
+
+def test_an_empty_landing_with_no_record_is_still_a_plain_first_install(api):
+    """The F-2 guard must not mis-fire where there is nothing to lose."""
+    home = api._TEST_HOME
+    _seed_engine_lock(home, name="other")
+    assert not (home / "skills" / "fresh").exists()
+    assert api.engine_local_edits("fresh", "fresh") is None  # still cannot attest…
+    result = _install_with_bundle(
+        api, _skill_zip("v1"), slug="fresh", reference="u/fresh", name="fresh", category="", confirm=True
+    )
+    assert result["ok"] is True, result  # …but no landing means no refusal
+
+
+# ── F-3: the refusal must never be a dead end ───────────────────────────────
+# The engine's criterion answers about the landing its RECORD names, which can
+# differ from the landing this write plans. The page used to derive its warning
+# from the PLANNED landing's hash state alone, so it rendered "nothing here"
+# (hashState=missing, localEdits=false, localEditsUnknown=false) while the
+# backend refused with `local-edits` — with no way to send the acknowledgement.
+
+
+def test_a_record_naming_another_landing_is_presented_and_ackable(api):
+    home = api._TEST_HOME
+    legacy = _seed_skill(home, "legacy/x", "USER EDIT AT THE RECORD LANDING")
+    _seed_engine_lock(
+        home, name="x", install_path="legacy/x", content_hash="sha256:deadbeefdeadbeef",
+        metadata={"shaoke": {"slug": "x", "name": "x", "category": "", "version": "1.0.0"}},
+    )
+    # The gate's own verdict: the RECORD's landing drifted, the planned one is empty.
+    assert api.engine_local_edits("x", "x") is True
+    assert not (home / "skills" / "x").exists()
+
+    _fake_exec(api, rc=0, out=_list_page([{"slug": "x", "name": "x", "version": "1.0.0"}]), err="")
+    row = next(s for s in api.list_skills()["skills"] if s["slug"] == "x")
+    assert row["onDisk"] is False, "the planned landing is not there"
+    assert row["hashState"] is None, "…so the page-side hash state says nothing"
+    assert row["localEdits"] is True, "the page MUST see the gate's own verdict"
+    assert row["recordInstallPath"] == "legacy/x", "…and which landing the record names"
+    assert row["localEdits"] == (api.engine_local_edits("x", "x") is True)
+
+    # Bare confirm → refused (no dead end: the ack path exists and works).
+    denied = api.route_update_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="", confirm=True)
+    )
+    assert denied["ok"] is False, denied
+    assert denied["kind"] == "local-edits"
+    assert (legacy / "SKILL.md").read_text(encoding="utf-8") == "USER EDIT AT THE RECORD LANDING"
+
+    acked = _install_with_bundle(
+        api, _skill_zip("v2"), slug="x", reference="u/x", name="x", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
+    assert acked["ok"] is True, acked
+    assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "v2"

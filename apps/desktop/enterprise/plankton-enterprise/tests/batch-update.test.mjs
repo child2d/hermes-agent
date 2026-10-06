@@ -133,3 +133,70 @@ test('a confirmed local edit still wins over the cannot-decide wording', async (
   assert.match(copy.description, /本地已修改/)
   assert.doesNotMatch(copy.description, /无法判定/)
 })
+
+// F-1: the manage buttons are gated on the ENGINE's RECORD, never on the
+// displayed version state. Gating them on `installState !== 'version-unknown'`
+// left uninstall/disable permanently disabled for real installs.
+test('manage actions follow the engine record, not the displayed version state', async () => {
+  const { canManageSkill } = await loadPlugin()
+  // A real install whose version could not be compared: still manageable.
+  assert.equal(canManageSkill({ installState: 'version-unknown', ownedByEngine: true }), true)
+  assert.equal(canManageSkill({ installState: 'consistent', ownedByEngine: true }), true)
+  assert.equal(canManageSkill({ installState: 'version-differs', ownedByEngine: true }), true)
+  assert.equal(canManageSkill({ installState: 'disabled', ownedByEngine: true }), true)
+  // Nothing installed here → no manage action.
+  assert.equal(canManageSkill({ installState: 'not-installed', ownedByEngine: false }), false)
+  assert.equal(canManageSkill({ installState: 'name-missing', ownedByEngine: false }), false)
+  // Content at the landing that no record of ours claims → uninstall would be
+  // a no-record failure, so it is not offered.
+  assert.equal(canManageSkill({ installState: 'version-unknown', ownedByEngine: false }), false)
+})
+
+// F-1/F-3: the batch entry only carries items whose local-edit status is
+// CONFIRMED clean (the batch has no per-item overwrite acknowledgement).
+test('only confirmed-clean skills ride the batch update', async () => {
+  const { canBatchUpdate } = await loadPlugin()
+  assert.equal(canBatchUpdate({ installState: 'version-differs' }), true)
+  assert.equal(canBatchUpdate({ installState: 'version-differs', localEdits: false, localEditsUnknown: false }), true)
+  // A confirmed edit would deterministically fail; a cannot-decide could silently
+  // replace the user's work. Both go the individual route.
+  assert.equal(canBatchUpdate({ installState: 'version-differs', localEdits: true }), false)
+  assert.equal(canBatchUpdate({ installState: 'version-differs', localEditsUnknown: true }), false)
+  assert.equal(canBatchUpdate({ installState: 'consistent' }), false)
+  assert.equal(canBatchUpdate({ installState: 'not-installed' }), false)
+})
+
+// F-3: when the engine's record names a DIFFERENT landing than the write plans
+// to use, the dialog must say so — the refusal is about a directory the user
+// cannot otherwise see.
+test('a record landing that differs from the plan is named in the dialog', async () => {
+  const { writeConfirmCopy } = await loadPlugin()
+  const copy = writeConfirmCopy('update', {
+    name: 'x',
+    installPath: 'x',
+    recordInstallPath: 'legacy/x',
+    localEdits: true
+  })
+  assert.match(copy.description, /本地已修改/)
+  assert.match(copy.description, /落点是 legacy\/x/)
+  assert.equal(copy.destructive, true)
+  // Same plan and record landing → no noise.
+  const same = writeConfirmCopy('update', { name: 'x', installPath: 'x', recordInstallPath: 'x' })
+  assert.doesNotMatch(same.description, /落点是/)
+})
+
+// F-2/F-3: the acknowledgement the confirm button actually SENDS. Without it the
+// backend refuses with `local-edits` — a refusal nobody could answer is a dead
+// end, so the payload is asserted here rather than assumed.
+test('the confirm payload acknowledges every not-confirmed-clean landing', async () => {
+  const { overwriteLocalEditsFor } = await loadPlugin()
+  // Confirmed drift…
+  assert.equal(overwriteLocalEditsFor({ localEdits: true }), true)
+  // …the page-side mismatch signal…
+  assert.equal(overwriteLocalEditsFor({ hashState: 'mismatch' }), true)
+  // …"cannot decide" (no record at the landing / record without a hash)…
+  assert.equal(overwriteLocalEditsFor({ localEditsUnknown: true }), true)
+  // …and a plain, confirmed-clean write needs no acknowledgement.
+  assert.equal(overwriteLocalEditsFor({ hashState: 'match' }), false)
+  assert.equal(overwriteLocalEditsFor({}), false)
+})

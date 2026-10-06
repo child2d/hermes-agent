@@ -63,6 +63,53 @@ function engineContentHash(dir: string): string {
 }
 
 
+/**
+ * A deterministic `skillhub` source for the market page — WITHOUT weakening the
+ * tools-page evidence. The wrapper execs the SAME seeded CLI the artifact
+ * dropped (so `tools list`, and therefore the whole tool catalog, still comes
+ * from the artifact's binary byte-for-byte) and answers only `skillhub`
+ * subcommands from a fixed catalog. `PLANKTON_SHAOKE_CLI` is the plugin's own
+ * documented override, so GET /skills becomes reproducible — which is what makes
+ * the version/manage/batch UI states (F-1) assertable at all; before this the
+ * catalog came from a live network call and none of those states were checked.
+ *
+ * Placed in `<home>/bin` under a distinct name: the seeded `shaoke-cli` (and its
+ * byte-equality assertion against the artifact) is left exactly as the app
+ * dropped it. Returns the wrapper path.
+ */
+function writeDeterministicMarketCli(home: string, items: unknown[]): string {
+  const realCli = path.join(home, 'bin', 'shaoke-cli')
+  const wrapper = path.join(home, 'bin', 'enterprise-shaoke-cli')
+  const envelope = JSON.stringify({ ok: true, data: { items, nextCursor: null } })
+  if (envelope.includes("'")) {
+    throw new Error('the fixed catalog must not contain a single quote (shell quoting)')
+  }
+  fs.writeFileSync(
+    wrapper,
+    '#!/bin/sh\n' +
+      'if [ "$1" = "skillhub" ]; then\n' +
+      `  printf '%s' '${envelope}'\n` +
+      '  exit 0\n' +
+      'fi\n' +
+      `exec "${realCli}" "$@"\n`,
+    'utf8'
+  )
+  fs.chmodSync(wrapper, 0o755)
+  return wrapper
+}
+
+/**
+ * Seed ONE locally-installed skill landing (the engine's lock record for it is
+ * written by the caller into ``skills/.hub/lock.json``). Returns the landing so
+ * the caller can hash it with the engine's own function.
+ */
+function seedInstalledSkill(home: string, name: string, body = '# e2e market skill\nbody\n'): string {
+  const landing = path.join(home, 'skills', name)
+  fs.mkdirSync(landing, { recursive: true })
+  fs.writeFileSync(path.join(landing, 'SKILL.md'), body, 'utf8')
+  return landing
+}
+
 /** Resolve the packaged Plankton.app, or fail loudly (never a silent skip). */
 function resolvePackagedApp(): string {
   const explicit = process.env.PLANKTON_APP
@@ -181,41 +228,83 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
   writeMockProviderConfig(home, mock.url, undefined, 'plugins:\n  enabled:\n    - plankton-enterprise\n')
   writeEnvFile(home)
 
-  // Seed ONE locally-installed skill + its record in the ENGINE's OWN hub lock
-  // file (``skills/.hub/lock.json``) — the page reads engine facts, not a
-  // private ledger of ours. The recorded hash is deliberately a bogus value:
-  // the page must surface "哈希不符" (the hash-mismatch class) while still
-  // printing the current, engine-computed hash for parity.
-  const seededSkillDir = path.join(home, 'skills', 'e2e-market-skill')
-  fs.mkdirSync(seededSkillDir, { recursive: true })
-  fs.writeFileSync(path.join(seededSkillDir, 'SKILL.md'), '# e2e market skill\nbody\n', 'utf8')
+  // Seed THREE locally-installed skills + their records in the ENGINE's OWN hub
+  // lock file (``skills/.hub/lock.json``) — the page reads engine facts, not a
+  // private ledger of ours. One recorded hash is deliberately bogus (the page
+  // must surface "哈希不符"/local edits while still printing the current,
+  // engine-computed hash for parity); the other two are the REAL engine hash, so
+  // the version comparison (F-1) can actually be exercised:
+  //   * e2e-consistent-skill: record version == catalog version → 已装 · 一致
+  //   * e2e-outdated-skill:   record version != catalog version → 已装 · 与目录不一致
+  //     …and it is the item the batch entry must appear for.
+  const seededSkillDir = seedInstalledSkill(home, 'e2e-market-skill')
+  const consistentDir = seedInstalledSkill(home, 'e2e-consistent-skill', '# consistent\n')
+  const outdatedDir = seedInstalledSkill(home, 'e2e-outdated-skill', '# outdated\n')
+  // F-2: content at a landing that NO engine record attests — the page must flag
+  // it ("是否改动无法判定") and the dialog must be the path that can acknowledge it.
+  seedInstalledSkill(home, 'e2e-occupied-skill', '# nobody recorded this\n')
+
+  const marketCatalog = [
+    { slug: 'e2e-market-skill', name: 'e2e-market-skill', category: '', version: '9.9.9',
+      install: { reference: 'e2e/owner-e2e-market-skill' } },
+    { slug: 'e2e-consistent-skill', name: 'e2e-consistent-skill', category: '', version: '1.0.0',
+      install: { reference: 'e2e/owner-e2e-consistent-skill' } },
+    { slug: 'e2e-outdated-skill', name: 'e2e-outdated-skill', category: '', version: '2.5.0',
+      install: { reference: 'e2e/owner-e2e-outdated-skill' } },
+    // Not installed anywhere: the plain 取用 path (nothing at the landing).
+    { slug: 'e2e-new-skill', name: 'e2e-new-skill', category: '', version: '1.0.0' },
+    // Content on disk, no record: "cannot confirm clean" (F-2). No record also
+    // means it is NOT a manage-action row.
+    { slug: 'e2e-occupied-skill', name: 'e2e-occupied-skill', category: '', version: '1.0.0' }
+  ]
+
+  const lockEntries = (): Record<string, unknown> => ({
+    'e2e-market-skill': {
+      source: 'shaoke-skillhub',
+      identifier: 'e2e/owner-e2e-market-skill',
+      trust_level: 'community',
+      scan_verdict: 'safe',
+      content_hash: 'sha256:0000000000000000',
+      install_path: 'e2e-market-skill',
+      files: ['SKILL.md'],
+      metadata: { shaoke: { slug: 'e2e-market-skill', name: 'e2e-market-skill', category: '', version: '9.9.9' } },
+      scan_provenance: {},
+      installed_at: '2026-10-05T00:00:00Z',
+      updated_at: '2026-10-05T00:00:00Z'
+    },
+    'e2e-consistent-skill': {
+      source: 'shaoke-skillhub',
+      identifier: 'e2e/owner-e2e-consistent-skill',
+      trust_level: 'community',
+      scan_verdict: 'safe',
+      content_hash: engineContentHash(consistentDir),
+      install_path: 'e2e-consistent-skill',
+      files: ['SKILL.md'],
+      metadata: { shaoke: { slug: 'e2e-consistent-skill', name: 'e2e-consistent-skill', category: '', version: '1.0.0' } },
+      scan_provenance: {},
+      installed_at: '2026-10-05T00:00:00Z',
+      updated_at: '2026-10-05T00:00:00Z'
+    },
+    'e2e-outdated-skill': {
+      source: 'shaoke-skillhub',
+      identifier: 'e2e/owner-e2e-outdated-skill',
+      trust_level: 'community',
+      scan_verdict: 'safe',
+      content_hash: engineContentHash(outdatedDir),
+      install_path: 'e2e-outdated-skill',
+      files: ['SKILL.md'],
+      metadata: { shaoke: { slug: 'e2e-outdated-skill', name: 'e2e-outdated-skill', category: '', version: '1.0.0' } },
+      scan_provenance: {},
+      installed_at: '2026-10-05T00:00:00Z',
+      updated_at: '2026-10-05T00:00:00Z'
+    }
+  })
+
+  fs.mkdirSync(path.join(home, 'bin'), { recursive: true })
   fs.mkdirSync(path.join(home, 'skills', '.hub'), { recursive: true })
   fs.writeFileSync(
     path.join(home, 'skills', '.hub', 'lock.json'),
-    JSON.stringify(
-      {
-        version: 1,
-        installed: {
-          'e2e-market-skill': {
-            source: 'shaoke-skillhub',
-            identifier: 'e2e/owner-e2e-market-skill',
-            trust_level: 'community',
-            scan_verdict: 'safe',
-            content_hash: 'sha256:0000000000000000',
-            install_path: 'e2e-market-skill',
-            files: ['SKILL.md'],
-            metadata: {
-              shaoke: { slug: 'e2e-market-skill', name: 'e2e-market-skill', category: '', version: '9.9.9' }
-            },
-            scan_provenance: {},
-            installed_at: '2026-10-05T00:00:00Z',
-            updated_at: '2026-10-05T00:00:00Z'
-          }
-        }
-      },
-      null,
-      2
-    ),
+    JSON.stringify({ version: 1, installed: lockEntries() }, null, 2),
     'utf8'
   )
 
@@ -231,6 +320,11 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
   const env = packagedEnv(sandbox)
   expect('HERMES_DESKTOP_VARIANT' in env, 'the variant must NOT be handed to the app').toBe(false)
+  // Deterministic skill catalog (see writeDeterministicMarketCli): the wrapper
+  // still execs the artifact's own CLI for `tools`, so the tools-page evidence
+  // above is unchanged — only `skillhub` is answered from a fixed list.
+  const cliWrapper = writeDeterministicMarketCli(home, marketCatalog)
+  env.PLANKTON_SHAOKE_CLI = cliWrapper
 
   const app = await _electron.launch({
     executablePath: executable,
@@ -277,6 +371,14 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     // Sanity: the seeded CLI really is the artifact's CLI (content identity).
     expect(fs.readFileSync(path.join(home, 'bin', 'shaoke-cli')).equals(fs.readFileSync(cliPath))).toBe(true)
 
+    // …and the deterministic-market wrapper (PLANKTON_SHAOKE_CLI) changes NOTHING
+    // about that evidence: for `tools` it execs the very same binary, so its
+    // output is byte-identical to the artifact CLI's own run.
+    expect(
+      execFileSync(cliWrapper, ['tools', 'list'], { encoding: 'utf8' }),
+      'the market wrapper must not alter the tools catalog'
+    ).toBe(execFileSync(path.join(home, 'bin', 'shaoke-cli'), ['tools', 'list'], { encoding: 'utf8' }))
+
     expect(text, 'must not render a minified React error').not.toContain('Minified React error')
     expect(text).not.toContain('#62')
 
@@ -309,15 +411,14 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     expect(marketText, 'the plugin backend must answer GET /skills (not a request failure)').not.toContain(
       '读取技能市场失败'
     )
-    if (catalogReady) {
-      // A ready banner must carry the real, numeric count — not just the word.
-      expect(marketText, 'a ready catalog must report a numeric approved-skill count').toMatch(/已审技能\s*\d+\s*条/)
-    } else {
-      // A typed failure must NAME its cause (auth / network / format / missing CLI).
-      expect(marketText, 'the categorical failure must name a failure class').toMatch(
-        /未授权|网络不可达|不是 JSON|结构不符|找不到企业副本|no-bundle|download-failed|extract-failed/
-      )
-    }
+    // From here on the catalog is DETERMINISTIC (a fixed skillhub list), so the
+    // states below are asserted against the real packaged UI instead of being
+    // skipped whenever the live registry was unreachable.
+    expect(
+      catalogReady,
+      'with a fixed skillhub catalog the market must be READY — 取不到目录 here means the PLANKTON_SHAOKE_CLI override never reached the backend'
+    ).toBe(true)
+    expect(marketText, 'a ready catalog must report a numeric approved-skill count').toMatch(/已审技能\s*\d+\s*条/)
 
     // The seeded local install is visible with its engine-computed hash, and the
     // deliberately-bogus recorded hash shows the hash-mismatch class distinctly.
@@ -333,20 +434,78 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     const oracleHash = engineContentHash(seededSkillDir)
     expect(pageHash, `page hash ${pageHash} must equal engine content_hash ${oracleHash}`).toBe(oracleHash)
 
-    // HUMAN CONFIRMATION: a 取用 (install) action must open a confirmation
-    // dialog — a write never fires on the first click. This assertion is HARD:
-    // it is never silently skipped. When the catalog is ready a 取用 button MUST
-    // exist and MUST open the dialog; when it is not, there is no write
-    // affordance at all and that absence is asserted too.
-    const pickup = page.getByRole('button', { name: '取用' })
-    if (!catalogReady) {
-      expect(await pickup.count(), 'no catalog → no 取用 button may be offered').toBe(0)
-    } else {
-      await expect(pickup.first(), 'a ready catalog must offer a 取用 action').toBeVisible({ timeout: 10_000 })
-      await pickup.first().click()
-      await expect(page.getByText('取用技能', { exact: false }).first()).toBeVisible({ timeout: 10_000 })
-      await page.keyboard.press('Escape')
+    const dialog = page.getByRole('dialog')
+
+    // ── F-1 acceptance, on the artifact's real DOM ─────────────────────────
+    // The version comparison (recorded version vs catalog version) — the state
+    // that was pinned at `version-unknown` for EVERY install, which is what
+    // disabled the manage actions and the batch entry.
+    expect(marketText, 'record version == catalog version').toContain('已装 · 一致')
+    expect(marketText, 'record version != catalog version').toContain('已装 · 与目录不一致')
+    expect(marketText, 'the recorded version must be shown for the differing entry').toContain('记录版本 1.0.0')
+
+    // Uninstall must be ENABLED for every recorded, on-disk entry. Before F-1 it
+    // was permanently disabled (the version state was always version-unknown),
+    // and nothing asserted it.
+    const uninstall = page.getByRole('button', { name: '卸载', exact: true })
+    await expect(uninstall, 'one 卸载 per recorded, on-disk catalog entry').toHaveCount(3)
+    for (let index = 0; index < 3; index++) {
+      expect(await uninstall.nth(index).isEnabled(), `卸载 #${index} must not be permanently disabled`).toBe(true)
     }
+
+    // The batch entry renders for the ONE confirmed-clean `version-differs` entry
+    // (the other two are `version-unknown` / `consistent`, and the drifted one is
+    // held out — a batch carries no per-item overwrite acknowledgement).
+    const batch = page.getByRole('button', { name: '批量更新 1 条（需确认）' })
+    await expect(batch, 'a confirmed-clean version-differs entry must offer the batch update').toBeVisible({
+      timeout: 10_000
+    })
+    expect(await batch.isEnabled()).toBe(true)
+    await batch.click()
+    await expect(dialog).toContainText('批量更新 1 条技能？')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+
+    // F-2/F-3: a landing that no engine record attests ("cannot confirm clean")
+    // must be STATED, and the acknowledgement must be reachable — the backend
+    // refuses it with `local-edits` and the page can always answer.
+    expect(
+      marketText,
+      'content at a landing no record attests must be flagged on the entry'
+    ).toContain('是否改动无法判定')
+    expect(
+      marketText,
+      'the engine-visible drift at a recorded landing must be flagged on the entry'
+    ).toContain('本地已改动')
+
+    // A plain first install (nothing at the landing): no loss warning.
+    const pickup = page.getByRole('button', { name: '取用', exact: true })
+    await expect(pickup, 'the not-installed catalog entry must offer 取用').toHaveCount(1)
+    await pickup.nth(0).click()
+    await expect(dialog).toContainText('取用技能「e2e-new-skill」？')
+    expect(
+      await dialog.innerText(),
+      'a landing with nothing in it must not claim a local-edit risk'
+    ).not.toContain('无法判定本地是否有改动')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+
+    // The occupied landing (content, no record) warns in plain language — that
+    // dialog is the path that lets the acknowledgement be SENT, instead of the
+    // backend's `local-edits` refusal being a dead end.
+    await page.getByRole('button', { name: '更新', exact: true }).nth(3).click()
+    await expect(dialog).toContainText('更新技能「e2e-occupied-skill」？')
+    await expect(dialog).toContainText('无法判定本地是否有改动')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+
+    // HUMAN CONFIRMATION for the drifted entry: the update dialog states the
+    // loss plainly (F-3: the backend's `local-edits` refusal is answerable).
+    await page.getByRole('button', { name: '更新', exact: true }).nth(0).click()
+    await expect(dialog).toContainText('更新技能「e2e-market-skill」？')
+    await expect(dialog).toContainText('本地已修改')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
 
     await page.screenshot({ path: test.info().outputPath('tool-catalog.png') })
   } finally {

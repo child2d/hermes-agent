@@ -70,11 +70,20 @@ silently collapsed into "no skills"):
   ``hash-unavailable`` / ``no-record`` / ``remove-failed`` / ``write-failed``
   / ``essential-skill`` / ``not-effective`` / ``unreadable-config`` /
   ``local-edits``.
-  ``local-edits`` is the ONE gate that also covers "cannot decide": the update
-  guard treats an engine record it cannot settle (unreadable/corrupt lock, or a
-  record with no comparable hash) as a refusal when the planned landing already
-  holds content, and carries ``detail.undecidable`` + ``detail.lockNote``. The
-  read routes expose the same fact per entry as ``localEditsUnknown``.
+  ``local-edits`` is the ONE gate that also covers "cannot decide": the write
+  guard lets a landing be replaced only on a CONFIRMED "no local edits"
+  (``engine_local_edits`` returning ``False`` — a record whose hash attests the
+  on-disk content). Both a confirmed drift (``True``) and every "no record can
+  attest this" case (``None``: no record at all, no comparable hash in the
+  record, or an unreadable/corrupt record) are refusals when the planned landing
+  already holds content, and the summary carries ``detail.undecidable`` +
+  ``detail.lockNote``. The read routes expose the SAME verdict per entry as
+  ``localEdits`` / ``localEditsUnknown``, so the page can always present the
+  fact and reach the acknowledgement — a refusal the UI cannot answer is a
+  dead end, and there is none.
+  The per-entry ``installState`` version comparison reads the recorded version
+  from where the engine actually keeps our platform facts — the lock entry's
+  ``metadata.shaoke.version``; the entry has no top-level ``version`` key.
 An EMPTY catalog is a SUCCESS (``{ok: true, catalog: {ok: true, count: 0}}``).
 A catalog capped at the page limit is a SUCCESS that carries ``truncated: true``
 — never silently read as the whole catalog.
@@ -558,35 +567,21 @@ def _hash_state(recorded: Any, current: Optional[str]) -> str:
     return "match" if rec == current else "mismatch"
 
 
-def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
-    """True when the on-disk skill no longer matches the engine's recorded hash.
+def _local_edit_verdict(entry: Optional[dict], install_rel: str,
+                        skills_path: Optional[Path] = None) -> Optional[bool]:
+    """The tri-state local-change verdict for ONE engine record vs ONE landing.
 
-    Uses the ENGINE's OWN predicate ``hermes_cli.skills_hub._has_local_edits`` —
-    the very gate ``hermes_cli.skills_hub.do_update`` applies so an update never
-    silently destroys the user's work — and CONFIRMS a negative with the same
-    逐字 comparison ``_hash_state`` names.
+    ``True`` = the content drifted, ``False`` = the record's hash attests the
+    on-disk content, ``None`` = cannot decide. See :func:`engine_local_edits`
+    for the criterion and why a negative must be CONFIRMED rather than trusted.
 
-    A ``False`` from the engine's predicate is deliberately NOT trusted on its
-    own: that function also answers ``False`` when it had nothing to compare
-    against (a record with an empty ``content_hash``, or an unreadable path), and
-    "could not compare" is not "still matches". Only a definite ``match`` is
-    reported as ``False``.
-
-    Returns ``True`` when the content drifted, ``False`` when the engine attests
-    the on-disk content still matches, ``None`` when neither test can decide.
-    ``None`` is never treated as "no edits" by the overwrite gate.
+    ``install_rel`` is the landing this app PLANS to write (the value the write
+    gate passes as ``planned``); the engine's own predicate, however, answers
+    about the landing the RECORD names, which can be a different directory —
+    that is deliberate: it is the engine's criterion, taken as-is.
     """
-    try:
-        from tools.skills_hub import HubLockFile  # type: ignore
-
-        entry = HubLockFile().get_installed(str(name))
-    except Exception:  # noqa: BLE001 - an unreadable lock means "cannot decide"
+    if not isinstance(entry, dict) or not entry:
         return None
-    if not entry:
-        # No record names this skill. (An unreadable/corrupt lock never reaches
-        # here: ``_read`` swallows it into the empty shape, so the entry is
-        # ``None`` too — the gate separates the two by probing the FILE.)
-        return False
     try:
         from hermes_cli.skills_hub import _has_local_edits  # type: ignore
 
@@ -598,8 +593,8 @@ def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
     # when the recorded hash is empty or the path could not be hashed. Compare
     # the record against the on-disk content ourselves; anything short of a
     # definite match is "cannot decide", never "clean".
-    skills_path = engine_skills_dir()
-    target = (skills_path / install_rel) if (skills_path and install_rel) else None
+    path = skills_path if skills_path is not None else engine_skills_dir()
+    target = (path / install_rel) if (path and install_rel) else None
     current = engine_content_hash(target) if (target is not None and target.is_dir()) else None
     state = _hash_state(entry.get("content_hash"), current)
     if state == "match":
@@ -607,6 +602,39 @@ def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
     if state == "mismatch":
         return True
     return None
+
+
+def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
+    """The engine's own local-change verdict for ``name`` landing at ``install_rel``.
+
+    The criterion is the ENGINE's OWN predicate
+    ``hermes_cli.skills_hub._has_local_edits`` — the very gate
+    ``hermes_cli.skills_hub.do_update`` applies so an update never silently
+    destroys the user's work — whose verdict is CONFIRMED with the same 逐字
+    comparison ``_hash_state`` names.
+
+    Returns ``True`` when the content drifted, ``False`` ONLY when a record
+    attests that the on-disk content still matches, and ``None`` when neither
+    test can decide. ``False`` is therefore NOT overloaded: a ``None`` here does
+    NOT mean "no edits" and is never treated as such by the overwrite gate.
+
+    Two different situations land on ``None``, both deliberately:
+      * **no record names this skill** — an absent record cannot attest anything
+        about a landing, so a landing that exists with no record of ours is
+        "cannot confirm clean", not "clean";
+      * **an unreadable/corrupt/shape-anomalous lock** — the engine's own
+        ``_JsonStateFile._read`` swallows it into the empty shape, so NO record
+        is visible either (and a shape-anomalous file raises on access); here,
+        too, nothing can be attested. `_probe_lock_file()` is what NAMES that
+        cause for the user; it does not change the verdict.
+    """
+    try:
+        from tools.skills_hub import HubLockFile  # type: ignore
+
+        entry = HubLockFile().get_installed(str(name))
+    except Exception:  # noqa: BLE001 - an unreadable lock means "cannot decide"
+        return None
+    return _local_edit_verdict(entry, install_rel)
 
 
 def _lock_entry_view(entry: dict, skills_path: Optional[Path], disabled_set: set) -> dict:
@@ -816,13 +844,22 @@ def fetch_disabled(cli_path: Optional[str] = None) -> dict:
 
 
 def _derive_install_state(skill: dict, record: Optional[dict], on_disk: bool, disabled: Optional[bool]) -> str:
-    """The already-installed state for one catalog entry (mirrors the old view)."""
+    """The already-installed state for one catalog entry (mirrors the old view).
+
+    The RECORDED version is read from the ENGINE's own lock entry the way the
+    engine stores it: our platform facts ride in ``metadata.shaoke`` (see the
+    module docstring), and the entry has NO top-level ``version`` key — reading
+    one returned ``""`` for every real install, which pinned the state at
+    ``version-unknown`` and left the page's manage actions and the batch entry
+    permanently disabled. Same source as ``recordedVersion`` so the two cannot
+    disagree.
+    """
     if not skill.get("installPath"):
         return "name-missing"
     if record and on_disk:
         if disabled is True:
             return "disabled"
-        recorded = str(record.get("version") or "").strip()
+        recorded = str(_shaoke_meta(record).get("version") or "").strip()
         catalog = str(skill.get("version") or "").strip()
         if recorded and catalog:
             return "consistent" if recorded == catalog else "version-differs"
@@ -924,6 +961,7 @@ def list_skills() -> dict:
 
     by_ref: dict = {}
     by_landing: dict = {}
+    by_name: dict = {}
     for entry in lock_entries:
         ref = str(entry.get("identifier") or "")
         if ref:
@@ -931,6 +969,9 @@ def list_skills() -> dict:
         landing = str(entry.get("install_path") or "")
         if landing:
             by_landing.setdefault(landing, entry)
+        name = str(entry.get("name") or "")
+        if name:
+            by_name.setdefault(name, entry)
 
     enriched: list = []
     for skill in catalog_skills:
@@ -942,16 +983,19 @@ def list_skills() -> dict:
         entry_attested = bool(entry) and _hash_state(entry.get("content_hash"), current) == "match"
         effective_entry = entry if entry_attested else None
         hash_state = _hash_state(entry.get("content_hash"), current) if entry else None
-        # The permission state the update gate refuses without an explicit ack:
-        # a landing that EXISTS but whose local-edit status cannot be settled —
-        # the engine record is unreadable/corrupt (``lock_note``), or the record
-        # carries no hash to compare against, or the landing's hash cannot be
-        # computed. ``localEdits`` below stays the CONFIRMED-drift flag; this is
-        # the honest "can't tell" that must not ride the batch and must warn
-        # before a single replace.
-        local_edits_unknown = bool(
-            on_disk and (lock_note is not None or hash_state in ("unknown", "missing"))
-        )
+        # The permission state the write gate refuses without an explicit ack,
+        # computed with the GATE'S OWN function and the GATE'S OWN record lookup
+        # (by name — the key the engine's lock file uses, the key the write body
+        # carries). Deriving it from this entry's landing/hashState instead left
+        # the page unable to reach the acknowledgement in two shapes: the engine
+        # predicate answers about the landing the RECORD names (which can differ
+        # from the planned one), and a landing with NO record at all is not
+        # "clean" either. Both are `True`/`None` here, so the page can say so and
+        # send `overwriteLocalEdits`.
+        name_record = by_name.get(str(skill.get("name") or ""))
+        verdict = _local_edit_verdict(name_record, install_path, skills_path) if install_path else None
+        local_edits = verdict is True
+        local_edits_unknown = bool(verdict is None and on_disk)
         disabled_flag = None
         if disabled_info.get("ok"):
             disabled_flag = str(skill.get("name") or "").strip() in disabled_names
@@ -963,8 +1007,12 @@ def list_skills() -> dict:
                 "recordedVersion": str(_shaoke_meta(effective_entry).get("version") or "") if effective_entry else "",
                 "localHash": current,
                 "hashState": hash_state,
-                "localEdits": bool(entry) and on_disk and _hash_state(entry.get("content_hash"), current) == "mismatch",
+                "localEdits": local_edits,
                 "localEditsUnknown": local_edits_unknown,
+                # The landing the engine's RECORD names, so the page can show a
+                # plan/record split instead of silently writing to a different
+                # slot than the one the refusal was about.
+                "recordInstallPath": str((name_record or {}).get("install_path") or ""),
                 "disabled": disabled_flag,
                 # Engine facts the UI uses to warn before an overwrite: the slot
                 # exists on disk but no engine record of ours claims it.
@@ -1171,25 +1219,28 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
     # recorded hash would rmtree-destroy the user's edits, so it must be an
     # EXPLICIT, separately-acknowledged choice — a bare ``confirm`` is not enough.
     #
-    # 口径：只有「确定无改动」才放行。凡引擎侧给不出确定结论、而计划落点又已存在
-    # 内容的情形，一律按「无法判定」拒写，要求显式 overwriteLocalEdits:true：
-    #   * 引擎取用记录文件读不出（损坏/不可读）——`_probe_lock_file()` 给得出 note，
-    #     而引擎的 `_read` 会把它吞成空形状，此时 `engine_local_edits` 只会回一个
-    #     不可信的 False（"没有这条记录"），因此必须由文件探测来分辨；
-    #   * `engine_local_edits` 回 None（记录里没有内容哈希可比、或落点哈希算不出）。
-    # 理由（风险偏置）：误判「无改动」是不可逆的 rmtree，抹掉用户劳动还回 ok:true；
-    # 误判「无法判定」只多一次确认点击。两者代价不对称，故偏向拒写。
+    # 口径（代价不对称）：只有「确定无改动」（``edits is False``，即引擎记录里的哈希与
+    # 磁盘内容逐字相符）才放行。其余都算不得「确定无改动」：
+    #   * ``edits is True``：引擎判据把它记录在案的那个落点判为已改动——即使那不是
+    #     本次计划落点，也一律要人明确确认（页面必须能呈现该事实并送出 ack）；
+    #   * ``edits is None``：没有任何记录能为此落点背书——记录根本没有这条技能
+    #     （F-2：既有内容 + 无记录，同样是「说不清」）、记录里没有可比对的内容哈希、
+    #     或锁读不出（损坏/不可读/形状异常 → 引擎只看得见空形状 → 同样回 None；探测
+    #     函数 ``_probe_lock_file()`` 只负责把原因说给用户听，不参与判定）。
+    # 计划落点已存在内容时，``None`` 必须拒写；落点不存在时放行（全新取用，没有
+    # 可失去的东西）。理由：误判「无改动」是不可逆的 rmtree，抹掉用户劳动还回
+    # ok:true；误判「无法判定」只多一次确认点击。
     if not data.overwriteLocalEdits:
         edits = engine_local_edits(str(data.name), planned)
         landing_exists = (skills_path / planned).is_dir()
         lock_note = _probe_lock_file()
-        if edits is True or (landing_exists and (edits is None or lock_note is not None)):
+        if edits is True or (landing_exists and edits is not False):
             if edits is True:
                 reason = ("本地已修改：磁盘内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些改动；"
                           "确认覆盖需显式带 overwriteLocalEdits:true。")
             else:
-                reason = ("无法判定本地是否有改动：引擎取用记录读不出（损坏/不可读）或记录里没有可比对的内容哈希，"
-                          "而该落点已存在内容。继续可能覆盖并丢失本地改动；"
+                reason = ("无法判定本地是否有改动：引擎取用记录里没有这条技能、记录里没有可比对的内容哈希、"
+                          "或记录读不出（损坏/不可读），而该落点已存在内容。继续可能覆盖并丢失本地改动；"
                           "确认覆盖需显式带 overwriteLocalEdits:true。")
             return {
                 "ok": False,
@@ -1474,8 +1525,9 @@ def route_install_skill(data: InstallRequest) -> dict:
 
     Installing writes files, so the backend REQUIRES ``confirm:true`` — the UI
     always sends it after its confirmation dialog, and a direct call without it
-    is refused rather than silently writing. An install whose landing already
-    holds locally-edited content ALSO requires ``overwriteLocalEdits:true``.
+    is refused rather than silently writing. A landing that already holds content
+    whose local-edit status is not CONFIRMED clean (drifted content, or no record
+    that can attest it) ALSO requires ``overwriteLocalEdits:true``.
     """
     return _install_skill(data, require_confirm=True)
 
@@ -1488,8 +1540,10 @@ def route_update_skill(data: InstallRequest) -> dict:
     its hub adapters and can never match our ``shaoke-skillhub`` source (it
     reports such an entry as ``unavailable``), so an update is an engine install
     of fresh bytes. It overwrites the landing by definition, so it REQUIRES
-    ``confirm:true``; when the landing holds locally-edited content it ALSO
-    requires ``overwriteLocalEdits:true`` (the engine's own local-change rule).
+    ``confirm:true``; when the landing already holds content whose local-edit
+    status is not CONFIRMED clean it ALSO requires ``overwriteLocalEdits:true``
+    (the engine's own local-change rule, taken as a "cannot confirm clean →
+    must be an explicit choice" rule).
     """
     return _install_skill(data, require_confirm=True)
 

@@ -401,8 +401,13 @@
    pickedBy）存进引擎锁条目的 `metadata.shaoke`。`<HERMES_HOME>/plankton/skill-ledger.json` **不再创建、不再读**。
    历史用旧实现装过、只在我们台账里的技能，在新实现下会显示为「未装」——企业首启场景无此包袱，但**如实记录在这里**。
 2. **卸载不再「保留台账记录」**：引擎的 `uninstall_skill` 会一并 `record_uninstall`（从锁里移除）。界面文案已随之改。
-3. **安装会覆盖「引擎不认得的同名落点」**：引擎把「直接含 `SKILL.md` 的目录」视为既有安装并整体替换。我方**不拦**
-   （拦就是自造第二套落点语义），而是在列表里给出 `onDisk` / `ownedByEngine` 两个事实，并在确认对话框里显式提示。
+3. **安装会覆盖「引擎不认得的同名落点」**：引擎把「直接含 `SKILL.md` 的目录」视为既有安装并整体替换。
+   我方**不自造第二套落点语义**（不按自己的路径规则拦），而是在列表里给出 `onDisk` / `ownedByEngine` 两个事实，
+   并在确认对话框里显式提示。
+   **2026-10 增补（F-2，以新口径为准，见 §9.8）**：上面的「不拦」只指**不新增落点判定**；既有内容 + 引擎
+   取用记录里查无此条（或记录读不出）时，按已采纳的「代价不对称」口径（不能确定无改动 + 落点存在 → 不得覆写），
+   后端会以 `local-edits` **拒写**，要求显式 `overwriteLocalEdits:true`——即把当时的对话框提示升级为
+   **机器强制的确认**（页面必须能呈现该事实并送出 ack）。落点判定归属未变，变的只是「没有 ack 就不许覆写」。
 
 ### 9.4 引擎侧仍存在的缺口（**如实上报，本轮不自造补丁**）
 
@@ -475,3 +480,76 @@
   `test_undecidable_local_edits_is_flagged_on_the_catalog_entry`；旧版 vs 新版同场景实测：
   旧 `ok:true / 磁盘=v2` vs 新 `ok:false / kind=local-edits / 磁盘=USER EDIT`；
   批量横幅反例 2 条（`node --test tests/batch-update.test.mjs`）。
+
+### 9.8 批 2 第二步 · 第五轮复核整改（F-1 / F-2 / F-3 / F-4）
+
+本轮只动四处，全部在 `plankton-enterprise` 插件内，**不改引擎、不改上游默认行为**。
+
+- **F-1（实质）`installState` 取错字段 → 卸载/停用恒禁、批量入口永不出现**。引入点 `5a91cae9`（存储交回引擎时
+  漏改此函数）：`_derive_install_state` 读锁条目的**顶层** `version`，而引擎的 `record_install` **不写顶层 version**
+  （实测锁条目顶层键：`content_hash / files / identifier / install_path / installed_at / metadata /
+  scan_provenance / scan_verdict / source / trust_level / updated_at`），我们的平台事实在
+  `metadata.shaoke.version` → 恒 `""` → `installState` 恒 `version-unknown`：`manage` 恒假（卸载/停用恒禁）、
+  `updatable`（`version-differs`）恒空（批量按钮不渲染）。**四轮复核都没抓到，因为没有任何测试断言 `installState`。**
+  整改：① 版本改从 `_shaoke_meta(record).get("version")` 取（与 `recordedVersion` 同源，不会两边打架）；
+  ② `manage` 不再挂在版本态上——卸载/启停作用于**引擎记录**（`ownedByEngine`），否则「本地改过 = 哈希不符 =
+  version-unknown」会连带把卸载也锁死；③ 新增断言三态（`consistent` / `version-differs` / `version-unknown`）
+  的测试 `test_install_state_reads_the_version_from_the_engines_own_field` +
+  `test_a_disabled_install_is_its_own_state_not_an_unknown`；④ 前端把两个判据抽成可测的纯函数
+  `canManageSkill` / `canBatchUpdate` 并由 `tests/batch-update.test.mjs` 断言（堵住「无人断言 UI 判据」）；
+  ⑤ 打包 e2e lane 断言真实 DOM（卸载按钮 enabled + 批量按钮出现）。实测读数见 §9.8.1。
+- **F-2（边界）合法锁 + 无该技能条目 + 落点已存在 → 曾无 ack 直接覆盖**。根因：`engine_local_edits` 在「查无记录」
+  时回 `False`（=「引擎证实匹配」），守门只拒 `True`/`None`，于是这条从缝里溜过去。整改：**「查无记录」≠「干净」**，
+  改为回 `None`，守门口径统一成一句话——**只有 `edits is False`（记录里的哈希与磁盘逐字相符）才放行；计划落点
+  已存在内容时，`True`/`None` 一律拒写并要 ack**（`if edits is True or (landing_exists and edits is not False)`）。
+  与 §9.3-3 的关系：**以新口径为准**（该条已就地增补说明），落点归属（引擎）不变，变的是「不拦」= 「不新增落点
+  判定」，而「没有 ack 就不许覆写」是同一份代价不对称规则的延伸。连带效果（如实登记）：四个 §9.3-3 载体测试
+  （引擎自己的符号链接拒写 / 硬链接保护 / 覆盖既有落点 / 分类桶拒写）现在要先带 `overwriteLocalEdits:true`
+  才走到引擎那一步——断言的目标（引擎自己的判定）未变。反例：
+  `test_a_landing_with_no_record_at_all_is_not_confirmed_clean`、
+  `test_an_empty_landing_with_no_record_is_still_a_plain_first_install`。
+- **F-3（边界）后端拒写但界面无路送 ack（死路）**。场景：引擎记录里的落点 ≠ 目录计划落点，且**记录落点**已改动时，
+  后端按引擎判据（`_has_local_edits(entry)` 查的是**记录**的落点）回 `local-edits`；而页面此前只用**计划落点**的
+  哈希态算 `localEdits`，于是渲染成 `hashState=missing / localEdits=false / localEditsUnknown=false /
+  installState=not-installed` → 无法送 `overwriteLocalEdits` → 死路。整改：**读写同源**——`GET /skills` 每个条目
+  的 `localEdits` / `localEditsUnknown` 改用**写盘那道门自己的函数与记录口径**（按名字取记录 + `_local_edit_verdict`），
+  并新增 `recordInstallPath` 把「记录落点」这一事实交给页面；确认框在两者不一致时点名记录落点。反例：
+  `test_a_record_naming_another_landing_is_presented_and_ackable`（同一场景下裸 confirm 被拒、带 ack 成功落盘）。
+- **F-4（措辞）`engine_local_edits` 的 docstring/注释与代码不符**两处：`False` 并非只代表「引擎证实匹配」（它还
+  包含「查无记录」）；「不可读锁 → None」当时并不可达（引擎 `_read` 把损坏吞成空形状）。整改：F-2 之后
+  `False` 收窄为**只**表示「有记录且逐字相符」，docstring 与行内注释同步改写为「未读到的锁/无记录**都**走
+  『查无记录 → None』这条路，`_probe_lock_file()` 只负责把原因说给用户，不参与判定」。
+
+#### 9.8.1 F-1 字段取值的实测依据（本机真跑，非推断）
+
+`.venv/bin/python3` 走插件自己的安装入口真装一条技能（version=2.0.0），再读引擎自己的锁条目与目录路由：
+
+```
+lock entry top-level keys: ['content_hash','files','identifier','install_path','installed_at','metadata',
+                            'scan_provenance','scan_verdict','source','trust_level','updated_at']
+top-level 'version' present: False
+metadata.shaoke: {"slug":"x","reference":"u/x","name":"x","category":"","version":"2.0.0","pickedBy":""}
+修复前  catalog version='2.0.0' -> installState='version-unknown'   （recordedVersion='2.0.0'，两处自相矛盾）
+修复后  catalog version='2.0.0' -> installState='consistent'
+修复后  catalog version='9.9.9' -> installState='version-differs'
+```
+
+#### 9.8.2 本轮验收证据
+
+- 后端：`apps/desktop/enterprise/plankton-enterprise/tests/`（68 passed；上一轮的 P1 矩阵、五类失败、确认闩、
+  真引擎委托、未登录不可达、Q2/Q4/Q5/Q6 全部重跑仍绿）。
+- 前端判据：`node --test tests/batch-update.test.mjs`（12 passed，含 `canManageSkill` / `canBatchUpdate` 三态）。
+- 类型：`npm run typecheck`（三个 tsconfig + electron-builder 配置）。
+- 打包产物 lane：仓外目录打包的 `Plankton.app` + `npm run test:e2e:packaged`（见 §9.8.3）。
+
+#### 9.8.3 打包 e2e 的加硬（避免「界面坏了测试还绿」）
+
+打包 lane 原本只能断言「本机已取用」面板与哈希同源——**目录**来自 `shaoke-cli skillhub +list`（真网络，
+非确定），所以从来没有断言过 `installState` / 批量入口 / 卸载按钮这些**依赖目录条目**的 UI 状态，正好是 F-1
+出事的地方。本轮把 CLI 换成**沙箱内的确定性包装脚本**（`PLANKTON_SHAOKE_CLI` 覆盖：`tools list` 仍 `exec`
+产物自带的那份 CLI，`skillhub +list` 回固定目录），于是可在真实产物上硬断言：
+
+- 目录版本＝记录版本 → `已装 · 一致`；目录版本≠记录版本 → `已装 · 与目录不一致` + 记录版本；
+- **卸载按钮 enabled**（F-1 的「恒禁」回归）；目录里那条 `version-differs` 条目让**批量入口渲染出现**；
+- 原有断言（产物身份、真 CLI 输出 `cc +whoami`、哈希与独立进程同源、取用按钮开确认框）一条不减；
+  `home/bin/shaoke-cli` 与产物自带 CLI 的**逐字节相等**断言也不受影响（包装脚本另放沙箱目录，不动落点那份）。

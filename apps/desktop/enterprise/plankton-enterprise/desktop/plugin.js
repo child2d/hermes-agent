@@ -222,20 +222,59 @@ function stateMeta(installState) {
   return INSTALL_STATE[installState] || { label: installState, tone: 'info' }
 }
 
+/**
+ * Uninstall / enable / disable act on the ENGINE's RECORD (its name and its
+ * layout), NOT on the version attestation `installState` displays. Gating them
+ * on `installState !== 'version-unknown'` is what made them dead for every real
+ * install (the state was pinned at version-unknown by a mis-read version field),
+ * and it dead-locks a locally-edited skill too (its hash no longer matches → it
+ * is `version-unknown` as well, yet the engine can uninstall it fine).
+ * Exported so the gating is asserted by a test instead of by nobody.
+ */
+export function canManageSkill(skill) {
+  const installed =
+    Boolean(skill.installState) && skill.installState !== 'not-installed' && skill.installState !== 'name-missing'
+  return installed && Boolean(skill.ownedByEngine)
+}
+
+/**
+ * A BATCH update sends no per-item overwrite acknowledgement, so only skills
+ * whose local-edit status is CONFIRMED clean may ride it: a confirmed edit
+ * (`localEdits`) would deterministically fail, and a "cannot decide"
+ * (`localEditsUnknown`) could silently replace the user's work. Those are
+ * updated individually, where the dialog can ask and the answer travels.
+ * Exported so the filter is asserted by a test instead of by nobody.
+ */
+export function canBatchUpdate(skill) {
+  return skill.installState === 'version-differs' && !skill.localEdits && !skill.localEditsUnknown
+}
+
+/**
+ * The acknowledgement the confirmation dialog's confirm button SENDS: the write
+ * is only allowed to replace a landing whose local-edit status is not confirmed
+ * clean when this rides along. Exported (and used by `perform`) so "the page can
+ * always answer the backend's `local-edits` refusal" is asserted, not assumed.
+ */
+export function overwriteLocalEditsFor(skill) {
+  return Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
+}
+
 function SkillRow({ skill, onAction }) {
   const meta = stateMeta(skill.installState)
   const canPickup = Boolean(skill.installPath)
   const installed = skill.installState && skill.installState !== 'not-installed' && skill.installState !== 'name-missing'
-  // Only skills this app installed (a record) get manage actions; the engine's
-  // disabled flag must be known (not null) to offer a toggle.
-  const manage = installed && skill.recordedVersion !== undefined && skill.installState !== 'version-unknown'
+  const manage = canManageSkill(skill)
   const disabledKnown = typeof skill.disabled === 'boolean'
+  // A landing whose local-edit status is not CONFIRMED clean: the update also
+  // needs the human's overwrite acknowledgement (backend: `local-edits`).
+  const needsOverwriteAck = Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
 
   return jsxs('div', { style: { ...S.card, gap: '4px' }, children: [
     jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }, children: [
       jsx('span', { style: { fontWeight: 600 }, children: skill.name || '(未命名)' }),
       skill.category ? jsx('span', { style: { ...S.badge, color: 'var(--ui-text-tertiary)' }, children: skill.category }) : null,
       jsx('span', { style: { ...S.badge, color: TONE_COLOR[meta.tone] }, children: meta.label }),
+      needsOverwriteAck ? jsx('span', { style: { ...S.badge, color: TONE_COLOR.warn }, children: skill.localEdits ? '本地已改动' : '是否改动无法判定' }) : null,
       skill.version ? jsx('span', { style: S.meta, children: `目录版本 ${skill.version}` }) : jsx('span', { style: S.meta, children: '目录未给版本' }),
       skill.recordedVersion ? jsx('span', { style: S.meta, children: `记录版本 ${skill.recordedVersion}` }) : null
     ] }),
@@ -319,6 +358,12 @@ export function writeConfirmCopy(action, skill) {
   // edited (unreadable/corrupt record, or a record with no hash to compare).
   // Not the same statement as "已修改" — say what is actually known.
   const localEditsUnknown = Boolean(skill.localEditsUnknown) && !localEdits
+  // The engine's criterion can answer about the landing its RECORD names, which
+  // need not be the landing this write plans to use. When the two differ, say so
+  // — otherwise the warning would talk about a directory the user cannot see.
+  const recordElsewhere = Boolean(
+    skill.recordInstallPath && skill.installPath && skill.recordInstallPath !== skill.installPath
+  )
   return {
     localEdits,
     localEditsUnknown,
@@ -327,8 +372,9 @@ export function writeConfirmCopy(action, skill) {
       (localEdits
         ? `⚠ 本地已修改：磁盘上的内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些本地改动。`
         : localEditsUnknown
-        ? `⚠ 无法判定本地是否有改动：引擎取用记录读不出（损坏或不可读），或记录里没有可比对的内容哈希，而该落点已存在内容。继续可能覆盖并丢失本地改动。`
+        ? `⚠ 无法判定本地是否有改动：引擎取用记录里没有这条技能、读不出（损坏或不可读），或记录里没有可比对的内容哈希，而该落点已存在内容。继续可能覆盖并丢失本地改动。`
         : '') +
+      (recordElsewhere ? `（该技能在引擎取用记录里的落点是 ${skill.recordInstallPath}，与本次计划落点不同。）` : '') +
       `将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：${skill.installPath}。` +
       (skill.onDisk && !skill.ownedByEngine
         ? `注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。`
@@ -379,7 +425,7 @@ function SkillMarketPage({ ctx }) {
       // the engine record cannot settle that); this is the explicit
       // acknowledgement the backend requires before it overwrites them (it
       // refuses with `local-edits` otherwise).
-      overwriteLocalEdits: Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
+      overwriteLocalEdits: overwriteLocalEditsFor(skill)
     }
     const endpoint = action === 'install' ? '/skills/install' : action === 'update' ? '/skills/update' : null
     if (endpoint) {
@@ -506,12 +552,14 @@ function SkillMarketPage({ ctx }) {
   const skills = q
     ? all.filter(s => `${s.name} ${s.slug} ${s.category} ${s.description} ${(s.tags || []).join(' ')}`.toLowerCase().includes(q))
     : all
-  // A skill whose local-edit status CANNOT be settled must never ride the
-  // batch: the batch sends no per-item overwrite acknowledgement, so an
-  // undecidable item is exactly the one a batch could silently replace. Those
-  // stay out until the user opens them individually (where the dialog asks).
-  const batchExcluded = all.filter(s => s.installState === 'version-differs' && s.localEditsUnknown)
-  const updatable = all.filter(s => s.installState === 'version-differs' && !s.localEditsUnknown)
+  // A skill whose local-edit status is not CONFIRMED clean must never ride the
+  // batch: the batch sends no per-item overwrite acknowledgement, so those are
+  // exactly the items a batch would silently replace — or, when the drift is
+  // already confirmed, deterministically fail on. They stay out until the user
+  // opens them individually (the dialog is the one place that CAN ask, and whose
+  // answer travels as `overwriteLocalEdits`).
+  const batchNeedsAck = all.filter(s => s.installState === 'version-differs' && !canBatchUpdate(s))
+  const updatable = all.filter(canBatchUpdate)
   const when = data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''
 
   return jsxs('div', { style: S.page, children: [
@@ -561,11 +609,10 @@ function SkillMarketPage({ ctx }) {
       ? jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: () => requestBatchUpdate(updatable), children: `批量更新 ${updatable.length} 条（需确认）` }) })
       : null,
 
-    // Undecidable skills are held OUT of the batch (the batch carries no
-    // per-item overwrite acknowledgement). Say so by name — a silently shrunken
-    // button would read as "there was nothing else to update".
-    batchExcluded.length > 0
-      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: `以下技能本地是否有改动无法判定（引擎取用记录读不出，或记录里没有可比对的内容哈希），已排除在批量更新之外，请逐条更新并在确认框里明确是否覆盖：${batchExcluded.map(s => s.name || s.installPath || s.slug || '?').join('、')}` })
+    // Skills kept out of the batch are named — a silently shrunken button would
+    // read as "there was nothing else to update".
+    batchNeedsAck.length > 0
+      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: `以下技能不能进批量更新（批量不带逐项覆盖确认），请逐条更新并在确认框里明确是否覆盖：${batchNeedsAck.map(s => `${s.name || s.installPath || s.slug || '?'}（${s.localEdits ? '本地已改动' : '是否改动无法判定'}）`).join('、')}` })
       : null,
 
     catalog.ok && all.length === 0
