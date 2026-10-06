@@ -30,7 +30,16 @@ import { writeEnvFile, writeMockProviderConfig } from '../../../../tests-js/scri
 import { startMockServer } from '../../../../tests-js/scripts/mock-server'
 import { createSandbox, type Sandbox, waitForAppReady } from '../fixtures'
 
-test.describe.configure({ timeout: 180_000 })
+// The outer budget MUST exceed the sum of this spec's own readiness waits,
+// otherwise the spec can go RED even when every wait is individually healthy:
+//   app-ready 120s + composer 60s + carrier-presentation 90s = 270s,
+// plus Electron launch + sandbox setup. A cold first launch additionally pays
+// the app's model warm-up ("Waking up default…", which leaves
+// /v1/chat/completions at zero hits until it lands); that used to blow through
+// a 180s budget on the FIRST run while a warm rerun took ~20s — a gate that
+// only passes on a rerun is not a gate. 360s keeps the invariant
+// (timeout > sum of waits) with headroom for launch + one cold warm-up.
+test.describe.configure({ timeout: 360_000 })
 
 const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -100,6 +109,9 @@ function assertEnterpriseArtifactIdentity(appPath: string): void {
   const api = fs.readFileSync(path.join(pluginDir, 'dashboard/plugin_api.py'), 'utf8')
   expect(api, '产物 plugin_api.py 必须带 /packs/read 只读路由').toContain('@router.post("/packs/read")')
   expect(api, '产物 backend 必须 fail-closed 拒写模板').toContain('read-path-cannot-use-write-template')
+  // The NUL/control-char input screen must ship in the artifact (the %00 ⇒ HTTP
+  // 500 fix is a backend-only change; assert the packaged bytes carry it).
+  expect(api, '产物 backend 必须带 NUL/控制字符入参闸').toContain('_FORBIDDEN_ARGV_CHARS')
 }
 
 function packagedEnv(sandbox: Sandbox): Record<string, string> {

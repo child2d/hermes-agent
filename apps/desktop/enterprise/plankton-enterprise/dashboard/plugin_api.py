@@ -108,6 +108,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -453,6 +454,26 @@ def _find_cli_envelope(text: str):
     return None
 
 
+# Control characters (C0 + DEL) can never legitimately appear in a CLI argv: a
+# NUL byte makes ``subprocess`` raise ``ValueError: embedded null byte``, which
+# used to escape the read door's except clause as an HTTP 500. The reference key
+# is attacker-reachable (``…{key="list-issues?project-id=1%00"}``), so the door
+# screens values at the INPUT layer.
+_FORBIDDEN_ARGV_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _has_forbidden_argv_char(value: object) -> bool:
+    """True when a value carries a C0/DEL control character (incl. NUL).
+
+    A NUL byte reaches this door through the reference key — a param value is
+    ``decodeURIComponent``-decoded in the renderer, so ``…?project-id=1%00``
+    arrives as ``"1\\x00"``. Handing that to ``subprocess.run`` raises
+    ``ValueError: embedded null byte``; no flag value legitimately carries a
+    control char, so the read door rejects such a value up front.
+    """
+    return bool(_FORBIDDEN_ARGV_CHARS.search(str(value)))
+
+
 def _read_argv(template: dict, params: dict) -> Tuple[Optional[list], Optional[str]]:
     params = params or {}
     allowed = [str(f) for f in (list(template.get("required") or []) + list(template.get("optional") or []))]
@@ -464,11 +485,15 @@ def _read_argv(template: dict, params: dict) -> Tuple[Optional[list], Optional[s
         value = params.get(str(flag))
         if value is None or str(value).strip() == "":
             return None, f"missing-param:{flag}"
+        if _has_forbidden_argv_char(value):
+            return None, f"control-char-in-param:{flag}"
         argv += [f"--{flag}", str(value)]
     for flag in template.get("optional") or []:
         value = params.get(str(flag))
         if value is None or str(value).strip() == "":
             continue
+        if _has_forbidden_argv_char(value):
+            return None, f"control-char-in-param:{flag}"
         argv += [f"--{flag}", str(value)]
     return argv, None
 
@@ -503,6 +528,12 @@ def pack_read(req: PackReadRequest) -> dict:
         )
     except subprocess.TimeoutExpired:
         return {"kind": "timeout", "note": "read-unknown"}
+    except ValueError as exc:
+        # Defence in depth: argv is already screened for control chars above, so
+        # this should be unreachable — but an unexpected ``ValueError`` from
+        # ``subprocess`` (e.g. an embedded NUL that slipped a future edit) must
+        # still degrade to a typed answer, never an HTTP 500.
+        return {"kind": "rejected", "note": f"invalid-argv:{exc}"}
     except OSError as exc:
         return {"kind": "spawn-error", "note": f"cli-failed:{exc}"}
 

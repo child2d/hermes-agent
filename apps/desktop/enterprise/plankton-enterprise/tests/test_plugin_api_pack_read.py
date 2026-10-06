@@ -126,6 +126,48 @@ def test_unparseable_output_is_a_typed_failure(monkeypatch, api, cli):
     assert api.pack_read(api.PackReadRequest(packId="baymax", templateId="whoami", params={}))["kind"] == "unparsed"
 
 
+def test_nul_decoded_reference_key_is_refused_before_any_spawn(monkeypatch, api, cli):
+    """A ``%00``-decoded reference key used to reach ``subprocess.run`` as a NUL
+    byte ⇒ ``ValueError: embedded null byte`` ⇒ an HTTP 500 (the except clause
+    only caught ``TimeoutExpired``/``OSError``). The door must refuse a control
+    char at the INPUT layer, with a distinguishable reason and NO spawn."""
+    monkeypatch.setattr(api.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no spawn")))
+    result = api.pack_read(api.PackReadRequest(packId="baymax", templateId="list-issues", params={"project-id": "1\x00"}))
+    assert result["kind"] == "rejected"
+    assert result["note"] == "control-char-in-param:project-id"
+
+
+def test_control_char_in_optional_param_is_refused(monkeypatch, api, cli):
+    monkeypatch.setattr(api.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no spawn")))
+    result = api.pack_read(
+        api.PackReadRequest(packId="baymax", templateId="list-issues", params={"project-id": "1", "limit": "5\x1b"})
+    )
+    assert result["kind"] == "rejected"
+    assert result["note"] == "control-char-in-param:limit"
+
+
+def test_subprocess_valueerror_degrades_to_a_typed_answer(monkeypatch, api, cli):
+    """Defence in depth: even if a NUL slips past the input screen and reaches
+    ``subprocess.run``, the route answers a typed refusal — the ``ValueError``
+    must never become an HTTP 500."""
+    monkeypatch.setattr(
+        api.subprocess, "run", lambda *_a, **_k: (_ for _ in ()).throw(ValueError("embedded null byte"))
+    )
+    result = api.pack_read(api.PackReadRequest(packId="baymax", templateId="list-issues", params={"project-id": "1"}))
+    assert result["kind"] == "rejected"
+    assert result["note"].startswith("invalid-argv:")
+
+
+def test_legit_values_are_not_over_rejected(monkeypatch, api, cli):
+    """The control-char screen must not narrow the allow-list: printable values
+    (unicode, dashes, dots) still reach the fixed argv table."""
+    monkeypatch.setattr(api.subprocess, "run", lambda *_a, **_k: _FakeCompleted(stdout=_ok({"total": 0})))
+    result = api.pack_read(
+        api.PackReadRequest(packId="baymax", templateId="list-issues", params={"project-id": "1", "label-ids": "a-b.c 件"})
+    )
+    assert result["kind"] == "ok"
+
+
 def test_read_templates_mirror_the_pack_declaration_read_templates(api):
     """Drift lock: the backend's read allow-list must be exactly the pack's read
     templates — a template added to the pack but not here fails CLOSED (refused),

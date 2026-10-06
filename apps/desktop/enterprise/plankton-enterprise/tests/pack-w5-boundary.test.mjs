@@ -108,6 +108,19 @@ test('正控：装上那一条 ⇒ 写路径与指令都在（排除集非空转
 })
 
 // ── 3 · 写通道唯一：one executor, one spawn, one orchestration ──────────────
+//
+// SCOPE OF THIS LOCK (author-not-self-auditing note): the assertions below are a
+// STRING lock — they count definitions/spawn-call sites in the source text, so a
+// semantic refactor that keeps the invariant but renames a symbol could move
+// them. They are deliberately NOT the sole guard: the invariant also has a
+// BEHAVIOURAL lock in this batch — this file's 「拔包即消失」 run proves that
+// dropping the single assembly entry makes `registry.hasAnyWritePath()` false at
+// RUNTIME (write path really disappears, not merely un-referenced), and
+// pack-w5-readpath.test.mjs drives the read port and asserts it never reaches the
+// single write runner. So: string lock + behavioural lock, together. Making
+// 「one executor instance / one spawn point」 purely behavioural would require
+// instrumenting internals the module does not expose, at a cost out of proportion
+// to the residual risk here.
 
 test('写通道唯一：全宿主只有一个执行器、一个 spawn 点、写只经 packActions.run', () => {
   assert.equal((SOURCE.match(/function createPackExecutor\(/g) ?? []).length, 1, '执行器定义只该一处')
