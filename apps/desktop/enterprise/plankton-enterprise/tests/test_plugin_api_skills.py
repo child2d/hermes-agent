@@ -1550,3 +1550,30 @@ def test_the_guard_is_consulted_at_the_single_enforcement_point():
         "install / uninstall / toggle must each funnel through the single write guard"
     )
     assert "write-guard-failed" in source
+
+
+def test_the_record_check_follows_the_store_under_inspection(api, tmp_path):
+    """The engine resolves its lock from the PROCESS home; the self-check must
+    inspect the store it was ASKED about, never silently read another home's
+    record (a store under inspection and the process home can differ)."""
+    # The process home: a perfectly fine store.
+    process_home = api._TEST_HOME
+    (process_home / "skills" / ".hub").mkdir(parents=True, exist_ok=True)
+    (process_home / "skills" / ".hub" / "lock.json").write_text(
+        json.dumps({"version": 1, "installed": {}}), encoding="utf-8"
+    )
+
+    # A DIFFERENT store whose record is a redirect — it must be caught.
+    other_home = tmp_path / "other-home"
+    (other_home / "skills" / ".hub").mkdir(parents=True)
+    victim = tmp_path / "other-lock.json"
+    victim.write_text("{}", encoding="utf-8")
+    (other_home / "skills" / ".hub" / "lock.json").symlink_to(victim)
+
+    guard = api.run_startup_self_check(other_home, other_home / "skills")
+    assert guard["ok"] is False, guard
+    assert [f["check"] for f in guard["findings"]] == ["record-is-symlink"], guard["findings"]
+    assert guard["recordPath"] == str(other_home / "skills" / ".hub" / "lock.json")
+
+    # …and the process home's own (fine) record is what IT inspects.
+    assert api.write_path_guard(process_home, process_home / "skills")["ok"] is True

@@ -568,11 +568,23 @@ def check_skills_root_chain(home: Path, skills_path: Path,
 
 def _record_path(skills_path: Path) -> Path:
     """The engine's install record — its OWN ``_lock_file()``, else the documented
-    ``<skills>/.hub/lock.json``. Never a path we invent outside the store."""
+    ``<skills>/.hub/lock.json``. Never a path we invent outside the store.
+
+    The engine resolves ``_lock_file()`` from the PROCESS home, so when the store
+    under inspection is not that home's store (an explicit argument, e.g. a test
+    or a caller passing a different store) the check must stay consistent with
+    the store it is inspecting rather than silently reading someone else's lock.
+    """
+    fallback = Path(skills_path) / ".hub" / "lock.json"
     engine_path = _engine_lock_path()
-    if engine_path is not None:
-        return Path(engine_path)
-    return Path(skills_path) / ".hub" / "lock.json"
+    if engine_path is None:
+        return fallback
+    engine_path = Path(engine_path)
+    try:
+        engine_path.relative_to(_lexical(skills_path))
+    except ValueError:
+        return fallback
+    return engine_path
 
 
 def _file_kind(mode: int) -> str:
