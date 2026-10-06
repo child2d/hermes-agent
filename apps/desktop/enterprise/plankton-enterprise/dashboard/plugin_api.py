@@ -383,6 +383,138 @@ def list_tools() -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Pack READ port (取数口) — the ONLY CLI-read door this backend opens
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Design: docs/plankton/N7-technical-design/N7-20261006-plankton-session-packs.md
+# §0 / §8 with the W5 ruling "取数口＝只读读路径". The pack renderer fetches its
+# payload by reference key through the host bridge (``ctx.rest`` → here); this
+# route runs the pack's DECLARED READ command read-only on the plugin's behalf,
+# and answers in the same ``{kind, envelope}`` contract the desktop ``runRead``
+# uses, so the renderer can feed the result straight into ``resolveOutput``.
+#
+# Fail-closed READ-ONLY (this door can never write):
+#   * only templates in ``READ_TEMPLATES`` (kind:'read') may run — a write
+#     template id is refused BEFORE any spawn (``read-path-cannot-use-write-template``);
+#   * argv is built from the fixed table; a param whose flag is not declared for
+#     that template is refused (``unknown-param``) ⇒ no free-text argv; array
+#     args, ``shell=False``, timeout;
+#   * no human-confirmation latch is consulted because there is nothing to
+#     confirm — the route cannot reach a write command.
+#
+# Drift note: ``READ_TEMPLATES`` mirrors the pack declaration's read templates
+# (``desktop/plugin.js``). A mismatch fails CLOSED (unknown template ⇒ refused);
+# the parity is pinned by ``tests/test_plugin_api_pack_read.py``.
+PACK_READ_TIMEOUT_S = 30
+PACK_READ_PACKS = ("baymax",)
+READ_TEMPLATES: dict = {
+    "list-issues": {"module": "baymax", "command": "+issue-list", "required": ["project-id"], "optional": ["scene", "status", "assignee", "label-ids", "offset", "limit", "fields"]},
+    "get-issue": {"module": "baymax", "command": "+issue-get", "required": ["project-id", "id"], "optional": []},
+    "issue-history": {"module": "baymax", "command": "+issue-history", "required": ["project-id", "id"], "optional": []},
+    "relation-list": {"module": "baymax", "command": "+relation-list", "required": ["issue-id"], "optional": []},
+    "project-list": {"module": "baymax", "command": "+project-list", "required": [], "optional": ["offset", "limit"]},
+    "project-get": {"module": "baymax", "command": "+project-get", "required": ["project-id"], "optional": []},
+    "status-list": {"module": "baymax", "command": "+status-list", "required": ["project-id"], "optional": []},
+    "type-list": {"module": "baymax", "command": "+type-list", "required": ["project-id"], "optional": []},
+    "user-list": {"module": "baymax", "command": "+user-list", "required": [], "optional": []},
+    "whoami": {"module": "baymax", "command": "+whoami", "required": [], "optional": []},
+}
+
+
+class PackReadRequest(BaseModel):
+    packId: str = ""
+    templateId: str = ""
+    params: dict = {}
+
+
+def _find_cli_envelope(text: str):
+    """The CLI's discriminant is the envelope's ``ok``; failures go to stderr
+    mixed with upgrade noise ⇒ whole-string JSON object first, else the LAST
+    parseable JSON object line."""
+    if not text:
+        return None
+    stripped = text.strip()
+    try:
+        whole = json.loads(stripped)
+        if isinstance(whole, dict):
+            return whole
+    except (ValueError, TypeError):
+        pass
+    for line in reversed(stripped.splitlines()):
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            parsed = json.loads(candidate)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _read_argv(template: dict, params: dict) -> Tuple[Optional[list], Optional[str]]:
+    params = params or {}
+    allowed = [str(f) for f in (list(template.get("required") or []) + list(template.get("optional") or []))]
+    for flag in params:
+        if str(flag) not in allowed:
+            return None, f"unknown-param:{flag}"
+    argv = [str(template["module"]), str(template["command"])]
+    for flag in template.get("required") or []:
+        value = params.get(str(flag))
+        if value is None or str(value).strip() == "":
+            return None, f"missing-param:{flag}"
+        argv += [f"--{flag}", str(value)]
+    for flag in template.get("optional") or []:
+        value = params.get(str(flag))
+        if value is None or str(value).strip() == "":
+            continue
+        argv += [f"--{flag}", str(value)]
+    return argv, None
+
+
+@router.post("/packs/read")
+def pack_read(req: PackReadRequest) -> dict:
+    """Run ONE declared READ command read-only (the pack renderer's 取数口)."""
+    if req.packId not in PACK_READ_PACKS:
+        return {"kind": "rejected", "note": "pack-not-declared"}
+    template = READ_TEMPLATES.get(req.templateId)
+    if template is None:
+        # A write template id (or anything not in the read table) is refused here
+        # BEFORE any spawn — this door can never write.
+        return {"kind": "rejected", "note": "read-path-cannot-use-write-template"}
+
+    params = {str(k): str(v) for k, v in (req.params or {}).items()}
+    argv, refusal = _read_argv(template, params)
+    if refusal is not None:
+        return {"kind": "rejected", "note": refusal}
+
+    cli_path, _source = resolve_cli()
+    if cli_path is None:
+        return {"kind": "spawn-error", "note": "cli-not-found"}
+
+    try:
+        completed = subprocess.run(
+            [cli_path, *argv],
+            capture_output=True,
+            text=True,
+            timeout=PACK_READ_TIMEOUT_S,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"kind": "timeout", "note": "read-unknown"}
+    except OSError as exc:
+        return {"kind": "spawn-error", "note": f"cli-failed:{exc}"}
+
+    envelope = _find_cli_envelope(completed.stdout) or _find_cli_envelope(completed.stderr)
+    if envelope is None or not isinstance(envelope.get("ok"), bool):
+        return {"kind": "unparsed", "rc": completed.returncode, "note": "read-failed"}
+    if envelope.get("ok") is not True:
+        return {"kind": "rejected", "rc": completed.returncode, "note": "read-failed"}
+    return {"kind": "ok", "rc": completed.returncode, "envelope": envelope}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Skill market — request models / policy gates
 # ─────────────────────────────────────────────────────────────────────────────
 

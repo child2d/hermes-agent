@@ -3039,6 +3039,8 @@ const CARRIER_AREA = 'transcript.directives'
 const REF_KEY = 'key'
 const DIRECTIVE_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+const asArray = (v) => (Array.isArray(v) ? v : [])
+const nonEmptyString = (v) => typeof v === 'string' && v.trim() !== ''
 
 /** 指令名是否是可被认领的形态（新底座对指令名的硬约束：小写、`[a-z0-9-]`、≤64）。 */
 function isDirectiveName(name) {
@@ -3115,7 +3117,17 @@ function createPackRenderer({ registry, session, loadPayload = () => null, now =
     if (payload === null || payload === undefined) {
       return Object.freeze({ ok: false, kind: 'refused', tag: String(name), packId: pack.id, reason: 'payload-unresolved', ref })
     }
-    const resolved = /** @type {any} */ (resolveOutput(pack, payload))
+    // **指令名优先（F1 回归修复）**：取回的载荷若自己声明了 `block`，必须与**所寻地址**（指令名
+    // ＝该块 tag）一致；不一致 ⇒ 整块拒、退回原文，免得「界面按 A 块寻址、宿主按 B 块画卡」——
+    // 那会画出一张与所寻地址不符的卡（旧壳围栏载体同一判据：`block-tag-mismatch`，见旧
+    // `render-protocol.parseCarrierBlocks` 复核 F12；本步按新载体恢复）。载荷**没写** `block` 时
+    // 与旧壳同口径，一律按指令名归一（指令名优先），故此处只拦「写了但不同」。
+    const claimed = isPlainObject(payload) ? payload.block : undefined
+    if (claimed !== undefined && String(claimed) !== String(name)) {
+      return Object.freeze({ ok: false, kind: 'refused', tag: String(name), packId: pack.id, reason: 'block-tag-mismatch', detail: String(claimed), ref })
+    }
+    const bound = isPlainObject(payload) ? Object.freeze({ ...payload, block: String(name) }) : payload
+    const resolved = /** @type {any} */ (resolveOutput(pack, bound))
     if (!resolved.ok) {
       return Object.freeze({ ok: false, kind: 'refused', tag: String(name), packId: pack.id, reason: resolved.reason, detail: resolved.detail ?? null, ref })
     }
@@ -3327,28 +3339,123 @@ function carrierDirectiveContributions({ registry, renderer, runAction, identity
 }
 
 /**
- * 引用式载荷的**宿主存储适配**（自取数的默认落点）：键→载荷。
- * 落在宿主给插件的**命名空间 JSON 存储**（`ctx.storage`）里 —— agent 侧提交载荷是它自己的活
- * （skill/工具），渲染器只按引用键把它取回。取不到 ⇒ null（退回文本）。
+ * **取数口**（裁定：只读读路径）——渲染器按**引用键**触发该域声明的**读命令**取回记录。
+ *
+ * 口径（N2 §0.1／§4.0、N7 §0.4 的「取数口＝读路径」半截）：
+ *   · **引用键＝读地址**：`<读模板 id>` 或 `<读模板 id>?<参数键>=<值>&…`（扁平 kv 查询串；
+ *     命名空间＝该指令所在的**包**——指令名已定位到包，引用键无需再带包名）；
+ *   · **只读**：模板必须在该包声明里 `kind === 'read'`；**写模板一律不可从这里走**（把写模板 id
+ *     伪装成读地址 ⇒ 取不到东西 ⇒ 退化文本，绝不触发一次写）；
+ *   · **不落盘、不确认**：本口不写任何地方、不需人工确认（与 W3 写路径截然不同）；
+ *   · **取不到 ⇒ null**（上层退化文本，内容不丢）。
+ *
+ * `runRead` 由宿主**注入**：生产链上是**主机桥**（`ctx.rest` → 插件执行层）到插件后端，由后端
+ * 以 shaoke-cli 只读执行（无 spawner／桥不可用即取不到 ⇒ 退化文本）。本模块自己不 spawn、不读盘。
  */
-function createPayloadStore(storage) {
-  return {
-    keyOf: (ref) => `carrier:${String(ref)}`,
-    load: (ref) => {
+function createReadPathLoader({ registry, runRead } = /** @type {any} */ ({})) {
+  async function load(ref, { packId = '', block = null } = /** @type {any} */ ({})) {
+    const address = parseReadReference(ref)
+    if (!address) return null
+    const pack = registry?.get?.(String(packId)) ?? null
+    if (!pack) return null
+    const templates = Array.isArray(pack.declaration?.templates) ? pack.declaration.templates : []
+    const template = templates.find((t) => isPlainObject(t) && String(t.id) === address.templateId)
+    if (!template) return null
+    // **只读闸**：写模板一律拒（fail-closed，宁可不画也不触发写）。
+    if (String(template.kind ?? '') !== 'read') return null
+    if (typeof runRead !== 'function') return null
+    let result = null
+    try {
+      result = await runRead({ packId: String(pack.id), templateId: address.templateId, params: address.params })
+    } catch {
+      return null
+    }
+    if (!isPlainObject(result) || result.kind !== 'ok') return null
+    return payloadFromRead(block, template, result.envelope)
+  }
+  return Object.freeze({ load })
+}
+
+/** 引用键的**读地址**：`<读模板 id>` 或 `<读模板 id>?k=v&k2=v2`。模板 id 形态与指令名同约束。 */
+function parseReadReference(ref) {
+  const text = typeof ref === 'string' ? ref.trim() : ''
+  if (!text) return null
+  const cut = text.indexOf('?')
+  const id = cut === -1 ? text : text.slice(0, cut)
+  if (!DIRECTIVE_NAME_RE.test(id)) return null
+  const params = {}
+  if (cut !== -1) {
+    for (const pair of text.slice(cut + 1).split('&')) {
+      if (!pair) continue
+      const eq = pair.indexOf('=')
+      let key = ''
+      let value = ''
       try {
-        return storage?.get?.(`carrier:${String(ref)}`, null) ?? null
+        key = decodeURIComponent(eq === -1 ? pair : pair.slice(0, eq))
+        value = eq === -1 ? '' : decodeURIComponent(pair.slice(eq + 1))
       } catch {
         return null
       }
-    },
-    save: (ref, payload) => {
-      try {
-        storage?.set?.(`carrier:${String(ref)}`, payload)
-        return true
-      } catch {
-        return false
+      if (!key) continue
+      params[key] = value
+    }
+  }
+  return Object.freeze({ templateId: id, params: Object.freeze(params) })
+}
+
+/**
+ * 读命令的输出信封 → **协议载荷**（`resolveOutput` 的输入）。
+ *
+ * 记录按**该块声明的字段键**投影：字段键 → 取值路径默认同名，块可用 `source.fields` 逐键改指
+ * （CLI 的字段名与声明键不一致时用，如 `assignee` ← `assigneeName`）。取不到值的键**不出现**
+ * （读回来「键缺失 ＝ 无值」，与声明口径一致）。整个映射失败 ⇒ null（退化文本）。
+ */
+function payloadFromRead(block, template, envelope) {
+  if (!isPlainObject(block) || !isPlainObject(envelope)) return null
+  const declaredKeys = asArray(block.fields).map(String)
+  if (!declaredKeys.length) return null
+  const source = isPlainObject(block.source) ? block.source : {}
+  const fieldMap = isPlainObject(source.fields) ? source.fields : {}
+  const project = (raw) => {
+    if (!isPlainObject(raw)) return null
+    const out = {}
+    for (const key of declaredKeys) {
+      const path = nonEmptyString(fieldMap[key]) ? String(fieldMap[key]) : key
+      const value = pick(raw, path)
+      if (value === undefined) continue
+      if (isPlainObject(value)) {
+        // 读回来是对象（如 status{name}）：取它的人类可读名；取不到就不带这个键。
+        if (nonEmptyString(value.name)) out[key] = value.name
+        continue
       }
-    },
+      if (Array.isArray(value)) continue
+      out[key] = value
+    }
+    return out
+  }
+  const actions = asArray(block.actions).map(String)
+  if (String(block.record ?? '') === 'single') {
+    const raw = pick(envelope, nonEmptyString(source.itemPath) ? String(source.itemPath) : 'data')
+    const one = project(raw)
+    if (!one) return null
+    return Object.freeze({ block: String(block.tag), record: Object.freeze(one), actions: Object.freeze(actions) })
+  }
+  const rawList = pick(envelope, nonEmptyString(source.itemsPath) ? String(source.itemsPath) : String(template.itemsPath ?? 'data.data'))
+  if (!Array.isArray(rawList)) return null
+  const records = rawList.map(project).filter(Boolean).map(Object.freeze)
+  return Object.freeze({ block: String(block.tag), records: Object.freeze(records), actions: Object.freeze(actions) })
+}
+
+/** 生产链上的取数桥：渲染器 → **主机桥**（`ctx.rest`）→ 插件执行层（只读读命令）。 */
+function createHostReadBridge(rest, path = '/packs/read') {
+  return async function runRead({ packId, templateId, params }) {
+    if (typeof rest !== 'function') return null
+    try {
+      const result = await rest(path, { method: 'POST', body: { packId, templateId, params } })
+      return isPlainObject(result) ? result : null
+    } catch {
+      return null
+    }
   }
 }
 
@@ -3365,7 +3472,10 @@ return Object.freeze({
   createIdentityProvider,
   describeAction,
   carrierDirectiveContributions,
-  createPayloadStore,
+  createReadPathLoader,
+  createHostReadBridge,
+  parseReadReference,
+  payloadFromRead,
 })
 })()
 
@@ -3379,7 +3489,10 @@ const {
   planktonIdentityAsync,
   createIdentityProvider,
   carrierDirectiveContributions,
-  createPayloadStore
+  createReadPathLoader,
+  createHostReadBridge,
+  parseReadReference,
+  payloadFromRead
 } = packRender
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3897,6 +4010,28 @@ const BAYMAX_PLUGIN_FACE = {
       {
         tag: 'plankton-baymax-update',
         record: 'single',
+        // **取数口（只读读路径）**：本块的记录由 `get-issue` 读回来（更新既有工单 ⇒ 它的现值本来
+        // 就是台账事实）。字段键 → 读回字段路径；不同名的在此改指（`id` 就是 id，其余按下表）。
+        source: {
+          template: 'get-issue',
+          itemPath: 'data',
+          fields: {
+            id: 'id',
+            'project-id': 'projectId',
+            title: 'title',
+            description: 'description',
+            'status-id': 'statusId',
+            'type-id': 'typeId',
+            'priority-id': 'priorityId',
+            'assignee-id': 'assigneeId',
+            'estimate-start': 'estimateStartDate',
+            'estimate-end': 'estimateEndDate',
+            'estimate-workload': 'estimateWorkload',
+            'actual-workload': 'actualWorkload',
+            'label-ids': 'labels',
+            'parent-id': 'parentId'
+          }
+        },
         fields: [
           'id',
           'project-id',
@@ -3918,6 +4053,13 @@ const BAYMAX_PLUGIN_FACE = {
       {
         tag: 'plankton-baymax-plan',
         record: 'collection',
+        // **取数口（只读读路径）**：本块＝「项目 1 的工单一览」，由 `list-issues` 读回来
+        // （分页双层 data：条目在 data.data；null 值的键不出现 ⇒ 映射时自然跳过）。
+        source: {
+          template: 'list-issues',
+          itemsPath: 'data.data',
+          fields: { issueKey: 'issueKey', title: 'title', status: 'status.name', assignee: 'assigneeName', estimateEnd: 'estimateEndDate' }
+        },
         fields: ['issueKey', 'title', 'status', 'assignee', 'estimateEnd'],
         actions: ['refresh', 'mark-progress']
       }
@@ -4880,12 +5022,15 @@ export default {
       session: carrierSession,
       identityOf: identityProvider.identityOf,
     })
-    // 引用式载荷的自取数落点：宿主给插件的命名空间 JSON 存储（agent 侧提交载荷是它自己的活）。
-    const payloadStore = createPayloadStore(ctx.storage)
+    // **取数口**（裁定：只读读路径）。渲染器按引用键触发该域声明的**读命令**，经**主机桥**
+    // （`ctx.rest` → 插件执行层 / 后端）取回记录 —— **只读、不需确认、不落盘**；取不到即退化
+    // 文本。**不引入自建存储/生产者**（旧的 `ctx.storage` 载荷仓已删除）；写模板在此口走不通。
+    const runRead = createHostReadBridge((path, init) => ctx.rest(path, init))
+    const readPath = createReadPathLoader({ registry: carrierRegistry, runRead })
     const carrierRenderer = createPackRenderer({
       registry: carrierRegistry,
       session: carrierSession,
-      loadPayload: (ref) => payloadStore.load(ref),
+      loadPayload: (ref, context) => readPath.load(ref, context),
     })
     const carrier = carrierDirectiveContributions({
       registry: carrierRegistry,
@@ -5030,5 +5175,8 @@ export {
   planktonIdentityAsync,
   createIdentityProvider,
   carrierDirectiveContributions,
-  createPayloadStore
+  createReadPathLoader,
+  createHostReadBridge,
+  parseReadReference,
+  payloadFromRead
 }
