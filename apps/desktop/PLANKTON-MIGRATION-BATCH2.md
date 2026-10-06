@@ -592,3 +592,57 @@ metadata.shaoke: {"slug":"x","reference":"u/x","name":"x","category":"","version
 §10.3 四项**不构成**本批收敛的阻断项：它们各自有台账/文档落点与明确的收敛触发条件（分发 / 密钥轮换 / 签名时收敛），
 属「已裁定挂起」而非「未处置」。批 3（会话内呈现与动作）的需求载体已落
 `spec-library/docs/plankton/`（`event-20261006-plankton-session-packs` + 对应 N2/N7），见 `PLANKTON-MIGRATION.md` §3「批 3」。
+
+---
+
+## 11. 批 2 加固 · 技能写路径启动自检（fail-closed，2026-10-06）
+
+> 本节**只增不改**：§9.4 登记的两条引擎缺口（**KI-PLANKTON-0072** 引擎不校 `SKILLS_DIR` 根自身符号链接、
+> **KI-PLANKTON-0073** 手改引擎锁条目可让引擎 `rmtree` `skills/` 下任意目录）原文保留；此处登记**我方这一层**
+> 对它们的处置——按 Perry 口径：引擎不肯改的两处，改由企业侧「强制不可变 + 启动自检」堵住，**机器契约优于事后巡检**。
+> 不新增第二套落点语义（§9.2 未破），不碰引擎，不改上游四变体。
+
+### 11.1 自检项（逐条）
+
+| # | 自检项 | 判据 | 失败时的 `check` 名 | 层 |
+|---|---|---|---|---|
+| ① | 技能根**自身**不是符号链接 | 对 `engine_skills_dir()` 本身 `lstat`, `S_ISLNK` 即拒 | `symlink-in-path-chain`（`layer: skills-root`） | `skills/` |
+| ② | 技能根到企业 home 的**路径链不含符号链接** | 从 `HERMES_HOME` **逐段** `lstat` 到技能根；受信边界 = `HERMES_HOME` 的**父**（边界及以上不查，故 macOS `/var`→`/private/var` 不会误拒） | `symlink-in-path-chain`（`layer: path-chain`） | `HERMES_HOME` |
+| ③ | 取用记录是**常规文件**（非链接 / 非设备 / 非目录 / 非 fifo/socket） | `lstat` + `S_ISREG`；符号链接单独可辨 | `record-is-symlink` / `record-not-regular` | `skills/.hub/lock.json` |
+| ④ | 取用记录**权限合理** | 对同组/其他用户可写（`S_IWGRP|S_IWOTH`）即拒 | `record-too-permissive` | 同上 |
+| ⑤ | 取用记录**内容可读** | `read_bytes()` 成功；内容是否合法 JSON 只**如实上报**（`recordParseable`），不据此拒写 | `record-unreadable` | 同上 |
+| ⑥ | 引擎 home / 技能目录可命名 | 两者任一取不到即拒 | `store-unresolved` | 引擎 home |
+
+口径边界（如实）：③④⑤ 是**结构**门。内容是坏 JSON（形状仍对）**不在**此门拒写——理由：既有内容门
+（`local-edits` / `no-record` + 显式 `overwriteLocalEdits` 确认）必须保持可达，否则「记录损坏 + 用户明确确认覆盖」
+这条既有验收路径会被结构门一刀切死。内容语义仍由既有探测（`_probe_lock_file`）与两道内容门负责。
+
+### 11.2 fail-closed 与「响亮」
+
+- **拒写**：`取用 / 更新 / 卸载 / 启用 / 停用` 五条写路径**全部**经**唯一**执行点 `_require_write_guard(...)`；
+  任一自检项不符即回 `write-guard-failed`，`detail` 逐条给出 `checks` / `findings`（含 `layer` 与 `path`）/ `successPath` /
+  `boundary`，**不静默降级、不半只读**。
+- **响亮**：自检未通过时 `logger.error` 输出一条含**全部失败项与所在层**的错误行（成功时 `logger.info`）。
+- **界面可见**：读路径保留，`GET /skills` 载荷新增 `writeGuard`（`ok` / `findings` / `recordParseable` / `boundary` …）；
+  前端 `plugin.js` 的 `writeGuardNotice()` 渲染红色横幅列出每条 `check` 与层，并在横幅在场时**不再弹确认框**（写动作在 UI 即被挡）。
+- **顺序**：写路由里自检**在**个人树策略门（`assert_outside_personal_trees`）**之后** —— 指向个人树的符号链接技能根
+  仍报更具体的 `blocked-personal-dir`，不被泛化的守门拒绝盖掉。
+
+### 11.3 承重证据（自检移除/短路即变红）
+
+| 反证 | 结果 |
+|---|---|
+| 把 `write_path_guard` 对 `run_startup_self_check` 的取值**短路成恒 `ok`** | 5 条结构反例测试（符号链接根 / 符号链接记录 / 不可读记录 / 记录是目录 / 五写路径计数）**全部变红** |
+| 把 `_install_skill` 里那一处 `_require_write_guard(...)` 调用**删掉** | 探针测试 `test_every_write_route_consults_the_write_guard` 变红（咨询计数 `3 != 5`） |
+
+另有常驻探针：`test_the_guard_is_what_refuses_a_redirected_store`（短路自检后那条拒绝**消失**且真的落到仓外 ⇒ 证明拒绝来自自检本身）；
+`test_the_guard_is_consulted_at_the_single_enforcement_point`（源码级：写入口必须都汇到唯一执行点）。
+
+### 11.4 覆盖与仍拦不住的（如实）
+
+- **拦得住**：技能根自身是链接（0072 的我方路径）、路径链上任何一层是链接、取用记录是链接/目录/设备、记录不可读、记录权限过宽。
+- **仍拦不住**：**格式合法、形状自洽的手改锁条目**（0073 的核心形态）——引擎的 `uninstall_skill` 仍会按那条自洽的
+  `name`+`install_path` `rmtree`。我们**不**自造落点判定去拦（§9.2），只拒结构不可信。
+  残留面与 0073 原文一致：需先对本机企业 home 有写权限。**该条仍留在 KI 台账（0073），未闭合。**
+- 另注：自检**不缓存通过**——「启动自检」= 首次就绪（首次请求）时的求值，此后每次写都重算（几处 `lstat`），
+  故启动之后才种下的链接会在下一次写被抓住。

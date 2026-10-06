@@ -77,7 +77,10 @@ const SKILL_FAILURE_COPY = {
   'no-record': '引擎的取用记录里没有这条技能，本页只卸载引擎记录在案的技能（若记录文件损坏，请见页面顶部的读取失败提示）',
   'local-edits': '本地已修改：磁盘内容与引擎取用记录不一致。继续更新会覆盖并丢失这些改动，需你确认覆盖',
   'unreadable-config': '引擎配置读取失败，启停开关已禁用',
-  'engine-unavailable': '引擎技能配置模块不可用，无法改启停'
+  'engine-unavailable': '引擎技能配置模块不可用，无法改启停',
+  // The startup write-path self-check (fail-closed): the store's path chain or
+  // the engine's install record is not the shape a write may be aimed at.
+  'write-guard-failed': '技能写路径自检未通过（技能路径链含符号链接，或引擎取用记录不是可读的常规文件）：已按 fail-closed 拒绝这次写动作'
 }
 
 /** Display state for one catalog entry (semantic source: backend installState). */
@@ -247,6 +250,30 @@ export function canManageSkill(skill) {
  */
 export function canBatchUpdate(skill) {
   return skill.installState === 'version-differs' && !skill.localEdits && !skill.localEditsUnknown
+}
+
+/**
+ * The read-page notice for the write-path self-check (batch-3 hardening).
+ *
+ * `writeGuard` is the backend's fail-closed structural verdict. When it FAILS
+ * every write route is refused, so the page must SAY SO loudly (and the action
+ * buttons must not pretend otherwise) instead of letting each write fail one by
+ * one. Pure and exported so the wording — and the fact that a failing check is
+ * VISIBLE, never silent — is asserted directly.
+ *
+ * Returns `null` when the check passed (or the backend did not report one).
+ */
+export function writeGuardNotice(writeGuard) {
+  if (!writeGuard || writeGuard.ok !== false) return null
+  const findings = Array.isArray(writeGuard.findings) ? writeGuard.findings : []
+  const lines = findings.map(
+    f => `· ${f.message || f.check || '自检未通过'}（${f.check || 'unknown'} @ ${f.layer || f.path || '?'}）`
+  )
+  return [
+    '技能写路径自检未通过：已按 fail-closed 拒绝全部写动作（取用 / 卸载 / 启用 / 停用 / 更新）。',
+    '本页的列表与状态仍可读，但在这条问题修好之前，任何写操作都不会被执行。',
+    ...lines
+  ].join('\n')
 }
 
 /**
@@ -456,6 +483,13 @@ function SkillMarketPage({ ctx }) {
 
   // Human confirmation is required for EVERY write; batch update is explicit.
   const requestAction = (action, skill) => {
+    // The write-path self-check refused the whole write surface: say so ONCE,
+    // loudly, instead of opening a dialog that can only fail.
+    const guard = state.data && state.data.writeGuard
+    if (guard && guard.ok === false) {
+      setBanner({ tone: 'error', text: writeGuardNotice(guard) })
+      return
+    }
     if (action === 'enable' || action === 'disable') {
       setConfirm({
         title: `${action === 'enable' ? '启用' : '停用'}技能「${skill.name}」？`,
@@ -548,6 +582,10 @@ function SkillMarketPage({ ctx }) {
   // backend PROBES the file and hands us a note. Rendered explicitly: without
   // it, a corrupt record would read as "0 条" = "you never installed anything".
   const lockNote = typeof data.lockNote === 'string' && data.lockNote ? data.lockNote : null
+  // The fail-closed write-path self-check verdict. Rendered prominently: while it
+  // fails, EVERY write action is refused by the backend (and gated here too), so
+  // the page must show WHY instead of failing writes one click at a time.
+  const guardNotice = writeGuardNotice(data.writeGuard)
   const q = query.trim().toLowerCase()
   const skills = q
     ? all.filter(s => `${s.name} ${s.slug} ${s.category} ${s.description} ${(s.tags || []).join(' ')}`.toLowerCase().includes(q))
@@ -570,6 +608,15 @@ function SkillMarketPage({ ctx }) {
       `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 技能落点 ${data.skillsPath || '未知'}${when ? ` · ${when}` : ''}`
     ] }),
     jsx(Banner, { banner }),
+
+    // The write-path self-check is INDEPENDENTLY visible (fail-closed): a
+    // redirected store root or install record must never be a silent fact.
+    guardNotice
+      ? jsx('div', {
+          style: { ...S.notice, borderColor: 'var(--ui-error, #d05a5a)', whiteSpace: 'pre-wrap' },
+          children: guardNotice
+        })
+      : null,
 
     // A corrupt/unreadable engine record is INDEPENDENTLY visible and never
     // collapsed into the empty list ("0 条"). Uninstall also surfaces it.

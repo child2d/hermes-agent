@@ -1230,3 +1230,323 @@ def test_a_record_naming_another_landing_is_presented_and_ackable(api):
     )
     assert acked["ok"] is True, acked
     assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "v2"
+
+
+# ── startup self-check: 技能路径链 / 取用记录 的 fail-closed 门 ──────────────
+#
+# The two engine gaps this layer closes (Perry 2026-10: 机器契约优于事后巡检):
+#   1. the engine never inspects the skill store ROOT for a redirect
+#      (`_resolve_lock_install_path` walks only the components BELOW it);
+#   2. the engine trusts its install record's file shape as written.
+# Every counterexample below asserts a REFUSAL with `write-guard-failed` AND a
+# byte-for-byte unchanged disk — the refusal must not be a side effect.
+
+GUARD_KIND = "write-guard-failed"
+
+
+def _snapshot(root: Path) -> list:
+    """(relative path, kind) for every entry under ``root`` — a disk oracle."""
+    out = []
+    if not root.exists() or not root.is_dir():
+        return out
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        base = Path(dirpath)
+        for name in sorted(dirnames + filenames):
+            path = base / name
+            kind = "link" if path.is_symlink() else ("dir" if path.is_dir() else "file")
+            out.append((str(path.relative_to(root)), kind))
+    return sorted(out)
+
+
+def _install(api, name="x", **kwargs):
+    """Install `name` with an injected bundle (never spawns the CLI)."""
+    return _install_with_bundle(
+        api, _skill_zip("body"), slug=name, reference=f"u/{name}", name=name, category="", **kwargs
+    )
+
+
+def test_self_check_passes_in_a_normal_environment(api):
+    """③ 正常环境不得误拒：一个普通企业 home 必须通过自检."""
+    home = api._TEST_HOME
+    guard = api.write_path_guard(home, api.engine_skills_dir())
+    assert guard["ok"] is True, guard["findings"]
+    assert guard["findings"] == []
+    assert guard["boundary"] == str(home.parent)
+    # The verdict rides the read page (so a refusal is never a surprise).
+    _fake_exec(api, rc=0, out=_list_page([]), err="")
+    read = api.list_skills()
+    assert read["writeGuard"]["ok"] is True
+    # …and a real write still goes through (the guard is not a blanket refusal).
+    assert _install(api, "ok-skill", confirm=True)["ok"] is True
+
+
+def test_symlinked_skills_root_is_refused_with_zero_disk_change(api, tmp_path):
+    """反例①：技能根自身是（仓外）符号链接 —— 引擎照落，我们这层必须拒."""
+    home = api._TEST_HOME
+    outside = tmp_path / "outside-store"
+    outside.mkdir()
+    (home / "skills").symlink_to(outside, target_is_directory=True)
+
+    before_home, before_out = _snapshot(home), _snapshot(outside)
+    guard = api.write_path_guard(home, api.engine_skills_dir())
+    assert guard["ok"] is False
+    assert [f["check"] for f in guard["findings"]] == ["symlink-in-path-chain"]
+    assert guard["findings"][0]["layer"] == "skills-root"
+    assert guard["findings"][0]["linkTarget"] == str(outside)
+
+    for result in (
+        api._install_skill(api.InstallRequest(slug="x", reference="u/x", name="x", confirm=True)),
+        api.route_update_skill(api.InstallRequest(slug="x", reference="u/x", name="x", confirm=True)),
+        api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True)),
+        api.route_enable_skill(api.ToggleRequest(name="x", confirm=True)),
+        api.route_disable_skill(api.ToggleRequest(name="x", confirm=True)),
+    ):
+        assert result["ok"] is False, result
+        assert result["kind"] == GUARD_KIND, result
+        assert result["detail"]["checks"] == ["symlink-in-path-chain"]
+        assert result["detail"]["skillsPath"] == str(home / "skills")
+
+    assert _snapshot(home) == before_home, "a refused write must touch nothing"
+    assert _snapshot(outside) == before_out, "nothing may land outside the store"
+
+
+def test_symlink_in_the_path_chain_above_the_store_is_refused(api, tmp_path, monkeypatch):
+    """反例②：链中含链接（这里是 HERMES_HOME 自身）—— 同样拒."""
+    real_home = tmp_path / "real-home"
+    real_home.mkdir()
+    chain_home = tmp_path / "linked-home"
+    chain_home.symlink_to(real_home, target_is_directory=True)
+    monkeypatch.setenv("HERMES_HOME", str(chain_home))
+    # The ENGINE resolves the same home, so the store is the real subtree.
+    assert api.engine_skills_dir() == chain_home / "skills"
+
+    guard = api.run_startup_self_check(chain_home, chain_home / "skills")
+    assert guard["ok"] is False
+    checks = [f["check"] for f in guard["findings"]]
+    assert checks == ["symlink-in-path-chain"], guard["findings"]
+    layers = {f["layer"] for f in guard["findings"]}
+    assert layers == {"path-chain"}, "the LINK is above the store, not the store root"
+
+    before = _snapshot(real_home)
+    result = _install(api, "x", confirm=True)
+    assert result["kind"] == GUARD_KIND, result
+    assert result["detail"]["boundary"] == str(tmp_path), "边界是 HERMES_HOME 的父"
+    assert _snapshot(real_home) == before
+
+
+def test_trusted_boundary_is_not_walked_so_var_is_not_a_false_refusal(api, tmp_path):
+    """受信边界之上的链接不算问题：/var → /private/var 不得误拒."""
+    real = tmp_path / "realroot"
+    (real / "home" / "skills").mkdir(parents=True)
+    # A boundary that is ITSELF a symlink (the /var → /private/var shape).
+    boundary_link = tmp_path / "var-link"
+    boundary_link.symlink_to(real, target_is_directory=True)
+    home = boundary_link / "home"
+    guard = api.write_path_guard(home, home / "skills")
+    assert guard["ok"] is True, guard["findings"]
+    assert guard["boundary"] == str(boundary_link)
+
+
+def test_symlinked_install_record_is_refused(api, tmp_path):
+    """反例③：取用记录是符号链接 —— 引擎会顺着它读，我们这层必须拒."""
+    home = api._TEST_HOME
+    victim = tmp_path / "elsewhere-lock.json"
+    victim.write_text(json.dumps({"version": 1, "installed": {}}), encoding="utf-8")
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.symlink_to(victim)
+
+    before_home, before_victim = _snapshot(home), victim.read_bytes()
+    guard = api.write_path_guard(home, api.engine_skills_dir())
+    assert guard["ok"] is False
+    assert [f["check"] for f in guard["findings"]] == ["record-is-symlink"]
+    assert guard["findings"][0]["layer"] == "install-record"
+
+    result = api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
+    assert result["kind"] == GUARD_KIND, result
+    assert _snapshot(home) == before_home
+    assert victim.read_bytes() == before_victim
+
+
+def test_unreadable_install_record_is_refused(api):
+    """反例④：取用记录读不出来（权限）—— 拒."""
+    home = api._TEST_HOME
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(json.dumps({"version": 1, "installed": {}}), encoding="utf-8")
+    lock.chmod(0o000)
+
+    try:
+        guard = api.write_path_guard(home, api.engine_skills_dir())
+        assert guard["ok"] is False, guard
+        assert "record-unreadable" in [f["check"] for f in guard["findings"]]
+        result = _install(api, "x", confirm=True)
+        assert result["kind"] == GUARD_KIND, result
+        assert result["detail"]["checks"] == ["record-unreadable"]
+    finally:
+        lock.chmod(0o644)
+
+
+def test_install_record_that_is_a_directory_is_refused(api):
+    """反例⑤：取用记录是目录 —— 拒（不是常规文件）."""
+    home = api._TEST_HOME
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.mkdir(parents=True)
+
+    guard = api.write_path_guard(home, api.engine_skills_dir())
+    assert guard["ok"] is False
+    assert [f["check"] for f in guard["findings"]] == ["record-not-regular"]
+    assert guard["findings"][0]["fileKind"] == "directory"
+    result = api.route_disable_skill(api.ToggleRequest(name="x", confirm=True))
+    assert result["kind"] == GUARD_KIND, result
+    assert lock.is_dir(), "the refused write must not touch the store"
+
+
+def test_a_group_or_world_writable_record_is_refused(api):
+    """记录权限合理：对同组/其他用户可写即拒."""
+    home = api._TEST_HOME
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(json.dumps({"version": 1, "installed": {}}), encoding="utf-8")
+    lock.chmod(0o666)
+
+    try:
+        guard = api.write_path_guard(home, api.engine_skills_dir())
+        assert [f["check"] for f in guard["findings"]] == ["record-too-permissive"]
+    finally:
+        lock.chmod(0o644)
+
+
+def test_a_corrupt_record_is_not_a_structural_refusal_but_is_reported(api):
+    """口径边界（如实）：内容是坏 JSON ≠ 结构不符 —— 不据此拒写，交给既有内容门.
+
+    The F-2/Q1 contract REQUIRES the corrupt-record acknowledgement path to stay
+    reachable (an acked overwrite must still go through), so parseability is
+    REPORTED (``recordParseable``) rather than fail-closed. The structural gate
+    covers shape (symlink / non-regular / perms / readability).
+    """
+    home = api._TEST_HOME
+    # A real install first, then the record is corrupted — the state the
+    # corrupt-record gate is about.
+    assert _install_with_bundle(
+        api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", confirm=True
+    )["ok"] is True
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.write_text("{ not json", encoding="utf-8")
+
+    guard = api.write_path_guard(home, api.engine_skills_dir())
+    assert guard["ok"] is True, guard["findings"]
+    assert guard["recordExists"] is True
+    assert guard["recordParseable"] is False
+    assert guard["notes"], "a non-parseable record must still be reported"
+    # …and the EXISTING content gate is what refuses: the update needs the ack.
+    denied = api.route_update_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="", confirm=True)
+    )
+    assert denied["ok"] is False
+    assert denied["kind"] == "local-edits", denied
+    # The acknowledgement path stays reachable (that is WHY this is not fail-closed).
+    acked = _install_with_bundle(
+        api, _skill_zip("v2"), slug="x", reference="u/x", name="x", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
+    assert acked["ok"] is True, acked
+
+
+def test_read_page_carries_a_failing_guard_verdict(api, tmp_path):
+    """读路径保留但必须标注状态：列表仍可读，且带 writeGuard 事实."""
+    home = api._TEST_HOME
+    (home / "skills").symlink_to(tmp_path / "nope-elsewhere", target_is_directory=True)
+    _fake_exec(api, rc=0, out=_list_page([]), err="")
+
+    read = api.list_skills()
+    assert read["ok"] is True, "the read path must survive a failing self-check"
+    assert read["writeGuard"]["ok"] is False
+    assert read["writeGuard"]["findings"][0]["check"] == "symlink-in-path-chain"
+
+
+# ── 探针：自检本身承重（移除/短路即变红）────────────────────────────────────
+
+
+def test_every_write_route_consults_the_write_guard(api, monkeypatch):
+    """探针：五条写路径都必须经过守门 —— 少一条这个计数就对不上.
+
+    A stub verdict that FAILS is injected at the check itself; every write route
+    must then refuse with ``write-guard-failed``. If a route stops consulting the
+    guard (or a future write route forgets to), this goes red.
+    """
+    home = api._TEST_HOME
+    consultations: list = []
+
+    def failing_check(home_arg=None, skills_path=None, record_path=None):
+        consultations.append(str(skills_path))
+        return {
+            "ok": False,
+            "kind": api.SELF_CHECK_KIND,
+            "findings": [{
+                "check": "probe-injected", "layer": "skills-root",
+                "path": str(skills_path), "message": "probe",
+            }],
+            "notes": [],
+            "home": str(home_arg), "skillsPath": str(skills_path),
+            "recordPath": None, "boundary": None, "checkedAt": 0,
+        }
+
+    monkeypatch.setattr(api, "run_startup_self_check", failing_check)
+
+    before = _snapshot(home)
+    results = [
+        api.route_install_skill(api.InstallRequest(slug="x", reference="u/x", name="x", confirm=True)),
+        api.route_update_skill(api.InstallRequest(slug="x", reference="u/x", name="x", confirm=True)),
+        api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True)),
+        api.route_enable_skill(api.ToggleRequest(name="x", confirm=True)),
+        api.route_disable_skill(api.ToggleRequest(name="x", confirm=True)),
+    ]
+
+    assert len(consultations) == 5, f"every write route must consult the guard: {consultations}"
+    for result in results:
+        assert result["ok"] is False, result
+        assert result["kind"] == GUARD_KIND, result
+        assert result["detail"]["checks"] == ["probe-injected"]
+    assert _snapshot(home) == before
+
+
+def test_the_guard_is_what_refuses_a_redirected_store(api, tmp_path, monkeypatch):
+    """探针（反证）：把自检短路成「通过」，那条符号链接反例就不再被拒.
+
+    This is the other half of load-bearing: it proves the refusal in
+    ``test_symlinked_skills_root_is_refused_with_zero_disk_change`` came FROM the
+    self-check, not from an unrelated engine refusal. Remove/short-circuit the
+    check and that test goes red.
+    """
+    home = api._TEST_HOME
+    outside = tmp_path / "outside-store"
+    outside.mkdir()
+    (home / "skills").symlink_to(outside, target_is_directory=True)
+
+    monkeypatch.setattr(api, "write_path_guard", lambda home_arg=None, skills_path=None: {
+        "ok": True, "findings": [], "notes": [],
+        "home": str(home_arg), "skillsPath": str(skills_path),
+        "recordPath": None, "boundary": None, "checkedAt": 0,
+    })
+
+    result = _install(api, "esc", confirm=True)
+    assert result.get("kind") != GUARD_KIND, "with the check short-circuited the guard must be silent"
+    assert result["ok"] is True, result
+    # …and the write really does land OUTSIDE the store — the engine gap the
+    # self-check exists to refuse.
+    assert (outside / "esc" / "SKILL.md").is_file()
+
+
+def test_the_guard_is_consulted_at_the_single_enforcement_point():
+    """Source probe: the write entry points funnel through ``_require_write_guard``.
+
+    A source-level companion to the runtime probe above — it fails the moment a
+    write entry point stops calling the single enforcement point (e.g. someone
+    returns early before the gate).
+    """
+    source = PLUGIN_API.read_text(encoding="utf-8")
+    assert source.count("_require_write_guard(") >= 4, (
+        "install / uninstall / toggle must each funnel through the single write guard"
+    )
+    assert "write-guard-failed" in source
