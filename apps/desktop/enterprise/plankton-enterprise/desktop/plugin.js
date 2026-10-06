@@ -63,11 +63,15 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 // payload, N7 §8) — this layer stays carrier-neutral and consumes a payload it
 // has already been handed.
 //
-// The pack-exec EXEC_KINDS list is inlined because pack-exec itself is W3; the
-// list is byte-identical to pack-exec.js:35 until W3 re-homes it.
+// SAME-VALUE LOCK · PRE-W3 REGISTRATION (recorded here and ONLY here):
+// pack-exec itself is W3, so its EXEC_KINDS list is inlined below. Its value is
+// byte-identical to the old shell's `desktop/electron/pack-exec.js:35`. BEFORE
+// W3 lands this inline copy MUST be deleted and the constant MUST be sourced
+// from the re-homed pack-exec module — never keep two copies drifting abreast.
+// (Deliberately NOT restated in N7 §8: one registration, not two.)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// 口径源＝旧壳 pack-exec.js:35（W3 落地时改为从该模块取；此处冻结同值）
+// 同值锁 · W3 前必须改为从模块取（口径源＝旧壳 desktop/electron/pack-exec.js:35；此处冻结同值）
 const PACK_EXEC_SCOPE = Object.freeze({
   EXEC_KINDS: Object.freeze(['ok', 'rejected', 'unparsed', 'timeout', 'spawn-error', 'refused'])
 })
@@ -469,6 +473,12 @@ const SHAPE_ID = Object.freeze({
   pattern: new RegExp(`[a-z0-9][a-z0-9._-]*[-_.](${SHAPE_SUFFIXES.join('|')})\\b`, 'i'),
 })
 
+/**
+ * 版式词素清单：`RENDER_PRIMITIVES` 各原语名 + 各槽位名 + 形状 id。形状 id 一项**没有 `norms`**
+ * （只按 `pattern` 判），故类型里两个字段都标可选 —— 两处消费点各自「先看 `norms`、否则回退 `pattern`」。
+ *
+ * @type {ReadonlyArray<{ id: string, pattern?: RegExp, norms?: readonly string[] }>}
+ */
 const LAYOUT_TOKENS = Object.freeze([
   ...RENDER_PRIMITIVES.map((name) =>
     Object.freeze({
@@ -782,6 +792,8 @@ function pick(node, path) {
  * - `shape: 'paged'` → 按声明的 `itemsPath`／`totalPath` 取（实测列表是**双层 data**：`data.data` / `data.total`）。
  * - 声明缺形状 ⇒ `shape: null` 且 `items` 为空，**并且如实标 `undeclared: true`**（未声明就是未声明，
  *   不猜成空结果）。
+ *
+ * @returns {Readonly<{ ok: boolean, shape: string|null, items: readonly any[], total: number|null, undeclared: boolean, truncated?: boolean|null, empty?: boolean, reason?: string }>}
  */
 function readPage(envelope, template) {
   if (!isPlainObject(envelope)) return Object.freeze({ ok: false, reason: 'not-an-envelope', shape: null, items: [], total: null, undeclared: false })
@@ -884,6 +896,8 @@ function outletOf(declaration, fieldKey) {
  *
  * 需要「来源」的出口（`readback`／`derived` 用 `derived` 佐证）会核对 `from` **指向本包声明过的一步**：
  * 不是随口写个来源就能过。
+ *
+ * @returns {Readonly<{ ok: boolean, reason?: any, field?: string }>}
  */
 function evidenceOk(declaration, field) {
   const key = String(field?.key ?? '')
@@ -1021,7 +1035,7 @@ function freezeField(field) {
  * 造一张草稿卡片。`fields` 里每个字段都必须声明分级：未分级字段无法判断「agent 能不能代笔」，
  * 因此在这里就被拒绝（把「没人认领的字段」挡在卡片之外，而不是等到写入时才发现）。
  */
-function createPlanCard({ id, title = '', fields = [] } = {}) {
+function createPlanCard(/** @type {{ id?: string, title?: string, fields?: any[] }} */ { id, title = '', fields = [] } = {}) {
   if (!String(id ?? '').trim()) return { ok: false, errors: ['missing-id'] }
   if (!Array.isArray(fields) || fields.length === 0) return { ok: false, errors: ['missing-fields'] }
   const errors = []
@@ -1776,7 +1790,7 @@ function createPackSession() {
    * 会话里增量扫描不会造出重复卡片，agent 把措辞改好是刷新同一张。
    * 卡片一旦离开 `draft`（人已经确认过、或已经写过），后续扫描**不再覆盖**它。
    */
-  function buildDraft({ pack, block = '', record = null, title = '', userMessages = [], requiredFields = [] } = {}) {
+  function buildDraft(/** @type {{ pack?: any, block?: string, record?: any, title?: string, userMessages?: any[], requiredFields?: any[] }} */ { pack, block = '', record = null, title = '', userMessages = [], requiredFields = [] } = {}) {
     if (!pack?.id) return { ok: false, reason: 'pack-not-loaded' }
     if (!isPlainObject(record)) return { ok: false, reason: 'malformed-record' }
     const declaration = pack.declaration ?? {}

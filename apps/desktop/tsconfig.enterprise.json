@@ -1,0 +1,23 @@
+{
+  "//": "企业插件侧的类型检查 lane —— 只覆盖 apps/desktop/enterprise/**，不进上游三个 tsconfig。",
+  "//include": "上游 tsconfig.json=src、tsconfig.electron.json=electron、tsconfig.e2e.json=e2e，三者都不含 enterprise/，故此新增一个最小配置补覆盖。",
+  "//host": "react / react/jsx-runtime / @hermes/plugin-sdk 由宿主在求值 plugin.js 时注入；这里用 enterprise/plugin-host-ambient.d.ts 把三者按宿主契约（any）建模，避免把渲染器 src/** 整套图（及其 Vite 专属 ambient 声明）拖进本 lane。",
+  "//strict": "插件是纯 JS：strict/noImplicitAny 关掉的只是「朴素 JS 的隐式 any」噪声；引用错误(TS2304)、类型不匹配(TS2322)、模块解析(TS2307)、语法(TS1xxx) 一律照报（承重证据见提交说明）。",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "noEmit": true,
+    "composite": false,
+    "types": ["node"],
+    "paths": {
+      "@hermes/plugin-sdk": ["./enterprise/plugin-host-ambient.d.ts"],
+      "react": ["./enterprise/plugin-host-ambient.d.ts"],
+      "react/jsx-runtime": ["./enterprise/plugin-host-ambient.d.ts"]
+    }
+  },
+  "include": ["enterprise"],
+  "exclude": ["enterprise/**/__pycache__"]
+}
