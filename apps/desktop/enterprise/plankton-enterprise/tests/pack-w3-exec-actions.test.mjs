@@ -523,6 +523,28 @@ test('F1 · 装载期：readback.check 为空、或未覆盖必填 ⇒ 装载即
   assert.ok(uncovered.invalid.some((e) => e.includes('未覆盖必填 title')), JSON.stringify(uncovered))
 })
 
+test('F1 · 原场景（真实 BAYMAX 声明）：+issue-update 只给 project-id/id ⇒ 拒 no-op-write，绝不落 written', async () => {
+  const registry = M.createPackRegistry()
+  const loaded = registry.register(M.BAYMAX_DECLARATION)
+  assert.equal(loaded.ok, true, JSON.stringify(loaded))
+  const spawns = []
+  const executor = M.createPackExecutor({
+    registry, cliPath: '/fake/shaoke-cli',
+    execFileImpl: (file, args, opts, cb) => { spawns.push(args); cb(null, '{"ok":true,"data":{"id":"3268"}}', '') },
+  })
+  const card = {
+    id: 'baymax-update:x', title: 'x', state: 'confirmed', confirmedBy: '陈涛',
+    fields: [
+      { key: 'project-id', label: '项目', value: '1', tier: 'user-designated', source: 'human', attestation: { kind: 'lookup', field: 'project-id' } },
+      { key: 'id', label: 'id', value: '3268', tier: 'user-designated', source: 'human', attestation: { kind: 'derived', from: 'get-issue', source: 'by key' } },
+    ],
+  }
+  const res = await executor.runTemplate({ packId: 'baymax', templateId: 'update-item', card })
+  assert.equal(res.kind, 'refused')
+  assert.equal(res.refusal, 'no-op-write')
+  assert.equal(spawns.filter((args) => args[1] === '+issue-update').length, 0, '空更新不得发出 +issue-update')
+})
+
 // ── 8 · 复核 F3：「不给删除」按集合判（运行期），不再靠名字字形 ───────────────
 
 test('F3 · resolveTemplate：删除类**集合**（remove/purge/rm/archive/drop + camelCase）一律拒', () => {
