@@ -56,7 +56,19 @@ test('a resolved {ok:false} in a batch is reported as a failure, never "完成"'
   assert.equal(summary.tone, 'error')
   assert.doesNotMatch(summary.text, /完成/)
   assert.match(summary.text, /成功 1 条、失败 1 条/)
-  assert.match(summary.text, /b（write-failed）/)
+  assert.match(summary.text, /b：写入企业侧技能目录失败（write-failed）/)
+})
+
+test('a local-edits failure in a batch is plain language, never a bare token', async () => {
+  const { summarizeBatchUpdate } = await loadPlugin()
+  const summary = summarizeBatchUpdate([
+    { skill: { name: 'a' }, result: { ok: true } },
+    { skill: { name: 'x' }, result: { ok: false, kind: 'local-edits' } }
+  ])
+  assert.equal(summary.ok, false)
+  assert.match(summary.text, /本地已修改/)
+  assert.match(summary.text, /需你确认覆盖/)
+  assert.doesNotMatch(summary.text, /失败项：x（local-edits）/)
 })
 
 test('a rejected request is folded into the same honest banner', async () => {
@@ -102,4 +114,22 @@ test('an untouched update carries no overwrite warning', async () => {
   const copy = writeConfirmCopy('update', { name: 'x', installPath: 'x', hashState: 'match' })
   assert.equal(copy.destructive, false)
   assert.doesNotMatch(copy.description, /本地已修改/)
+})
+
+// P1: when the engine record cannot settle whether the landing was edited, the
+// dialog must say exactly that — "已修改" would be a claim nobody can make.
+test('a cannot-decide local-edit state warns in plain language and is destructive', async () => {
+  const { writeConfirmCopy } = await loadPlugin()
+  const copy = writeConfirmCopy('update', { name: 'x', installPath: 'x', localEditsUnknown: true })
+  assert.equal(copy.destructive, true)
+  assert.equal(copy.localEditsUnknown, true)
+  assert.match(copy.description, /无法判定本地是否有改动/)
+  assert.doesNotMatch(copy.description, /本地已修改/)
+})
+
+test('a confirmed local edit still wins over the cannot-decide wording', async () => {
+  const { writeConfirmCopy } = await loadPlugin()
+  const copy = writeConfirmCopy('update', { name: 'x', localEdits: true, localEditsUnknown: true })
+  assert.match(copy.description, /本地已修改/)
+  assert.doesNotMatch(copy.description, /无法判定/)
 })

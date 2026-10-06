@@ -558,13 +558,18 @@ def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
 
     Uses the ENGINE's OWN predicate ``hermes_cli.skills_hub._has_local_edits`` —
     the very gate ``hermes_cli.skills_hub.do_update`` applies so an update never
-    silently destroys the user's work. Falls back to comparing the engine's
-    recorded ``content_hash`` against the current on-disk hash (the same 逐字
-    comparison ``_hash_state`` names).
+    silently destroys the user's work — and CONFIRMS a negative with the same
+    逐字 comparison ``_hash_state`` names.
 
-    Returns ``False`` when there is no record or the content still matches,
-    ``True`` when it drifted, ``None`` when neither test can decide. ``None`` is
-    never treated as "no edits".
+    A ``False`` from the engine's predicate is deliberately NOT trusted on its
+    own: that function also answers ``False`` when it had nothing to compare
+    against (a record with an empty ``content_hash``, or an unreadable path), and
+    "could not compare" is not "still matches". Only a definite ``match`` is
+    reported as ``False``.
+
+    Returns ``True`` when the content drifted, ``False`` when the engine attests
+    the on-disk content still matches, ``None`` when neither test can decide.
+    ``None`` is never treated as "no edits" by the overwrite gate.
     """
     try:
         from tools.skills_hub import HubLockFile  # type: ignore
@@ -573,13 +578,21 @@ def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
     except Exception:  # noqa: BLE001 - an unreadable lock means "cannot decide"
         return None
     if not entry:
+        # No record names this skill. (An unreadable/corrupt lock never reaches
+        # here: ``_read`` swallows it into the empty shape, so the entry is
+        # ``None`` too — the gate separates the two by probing the FILE.)
         return False
     try:
         from hermes_cli.skills_hub import _has_local_edits  # type: ignore
 
-        return bool(_has_local_edits(entry))
+        if _has_local_edits(entry):
+            return True
     except Exception:  # noqa: BLE001 - fall through to our own comparison
         pass
+    # Confirming the negative: the engine said "no edits", but it also says that
+    # when the recorded hash is empty or the path could not be hashed. Compare
+    # the record against the on-disk content ourselves; anything short of a
+    # definite match is "cannot decide", never "clean".
     skills_path = engine_skills_dir()
     target = (skills_path / install_rel) if (skills_path and install_rel) else None
     current = engine_content_hash(target) if (target is not None and target.is_dir()) else None
@@ -923,6 +936,17 @@ def list_skills() -> dict:
         entry = by_ref.get(skill["reference"]) or (by_landing.get(install_path) if install_path else None)
         entry_attested = bool(entry) and _hash_state(entry.get("content_hash"), current) == "match"
         effective_entry = entry if entry_attested else None
+        hash_state = _hash_state(entry.get("content_hash"), current) if entry else None
+        # The permission state the update gate refuses without an explicit ack:
+        # a landing that EXISTS but whose local-edit status cannot be settled —
+        # the engine record is unreadable/corrupt (``lock_note``), or the record
+        # carries no hash to compare against, or the landing's hash cannot be
+        # computed. ``localEdits`` below stays the CONFIRMED-drift flag; this is
+        # the honest "can't tell" that must not ride the batch and must warn
+        # before a single replace.
+        local_edits_unknown = bool(
+            on_disk and (lock_note is not None or hash_state in ("unknown", "missing"))
+        )
         disabled_flag = None
         if disabled_info.get("ok"):
             disabled_flag = str(skill.get("name") or "").strip() in disabled_names
@@ -933,8 +957,9 @@ def list_skills() -> dict:
                 "installState": _derive_install_state(skill, effective_entry if on_disk else None, on_disk, disabled_flag),
                 "recordedVersion": str(_shaoke_meta(effective_entry).get("version") or "") if effective_entry else "",
                 "localHash": current,
-                "hashState": _hash_state(entry.get("content_hash"), current) if entry else None,
+                "hashState": hash_state,
                 "localEdits": bool(entry) and on_disk and _hash_state(entry.get("content_hash"), current) == "mismatch",
+                "localEditsUnknown": local_edits_unknown,
                 "disabled": disabled_flag,
                 # Engine facts the UI uses to warn before an overwrite: the slot
                 # exists on disk but no engine record of ours claims it.
@@ -1140,15 +1165,34 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
     # Replacing a landing whose on-disk content no longer matches the engine's
     # recorded hash would rmtree-destroy the user's edits, so it must be an
     # EXPLICIT, separately-acknowledged choice — a bare ``confirm`` is not enough.
+    #
+    # 口径：只有「确定无改动」才放行。凡引擎侧给不出确定结论、而计划落点又已存在
+    # 内容的情形，一律按「无法判定」拒写，要求显式 overwriteLocalEdits:true：
+    #   * 引擎取用记录文件读不出（损坏/不可读）——`_probe_lock_file()` 给得出 note，
+    #     而引擎的 `_read` 会把它吞成空形状，此时 `engine_local_edits` 只会回一个
+    #     不可信的 False（"没有这条记录"），因此必须由文件探测来分辨；
+    #   * `engine_local_edits` 回 None（记录里没有内容哈希可比、或落点哈希算不出）。
+    # 理由（风险偏置）：误判「无改动」是不可逆的 rmtree，抹掉用户劳动还回 ok:true；
+    # 误判「无法判定」只多一次确认点击。两者代价不对称，故偏向拒写。
     if not data.overwriteLocalEdits:
         edits = engine_local_edits(str(data.name), planned)
-        if edits is True:
+        landing_exists = (skills_path / planned).is_dir()
+        lock_note = _probe_lock_file()
+        if edits is True or (landing_exists and (edits is None or lock_note is not None)):
+            if edits is True:
+                reason = ("本地已修改：磁盘内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些改动；"
+                          "确认覆盖需显式带 overwriteLocalEdits:true。")
+            else:
+                reason = ("无法判定本地是否有改动：引擎取用记录读不出（损坏/不可读）或记录里没有可比对的内容哈希，"
+                          "而该落点已存在内容。继续可能覆盖并丢失本地改动；"
+                          "确认覆盖需显式带 overwriteLocalEdits:true。")
             return {
                 "ok": False,
                 "kind": "local-edits",
                 "detail": {
-                    "reason": "本地已修改：磁盘内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些改动；"
-                              "确认覆盖需显式带 overwriteLocalEdits:true。",
+                    "reason": reason,
+                    "undecidable": edits is not True,
+                    "lockNote": lock_note,
                     "name": str(data.name),
                     "installPath": planned,
                 },

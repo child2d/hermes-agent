@@ -822,6 +822,117 @@ def test_update_without_local_edits_needs_no_overwrite_ack(api):
     assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "v2"
 
 
+def test_corrupt_lock_cannot_let_an_update_silently_overwrite_local_edits(api):
+    """P1: the engine's ``_JsonStateFile._read`` swallows a corrupt lock into its
+    empty shape, so ``engine_local_edits`` answers a (false) ``False`` — "no record
+    names this skill" — for a landing it simply cannot see. The gate must PROBE
+    the file itself and treat 'cannot decide' as REFUSAL, or the update
+    rmtree-replaces the user's work and still answers ``ok:true``."""
+    home = api._TEST_HOME
+    first = _install_with_bundle(api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", confirm=True)
+    assert first["ok"] is True, first
+
+    # The user edits the installed skill locally.
+    (home / "skills" / "x" / "SKILL.md").write_text("USER EDIT", encoding="utf-8")
+
+    # …and the engine lock is unreadable. This is the exact lie the probe must
+    # catch: the engine-side criterion can no longer see a record at all.
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.write_text("{ not json", encoding="utf-8")
+    assert api._probe_lock_file(), "the corrupt lock must be probed, not swallowed"
+    assert api.engine_local_edits("x", "x") is False, "the engine predicate cannot decide here"
+
+    # Without the acknowledgement the update is REFUSED and the disk is untouched.
+    denied = api.route_update_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="", confirm=True)
+    )
+    assert denied["ok"] is False, denied
+    assert denied["kind"] == "local-edits", denied
+    assert denied["detail"]["undecidable"] is True, denied
+    assert denied["detail"]["lockNote"], "the refusal must name why it could not decide"
+    assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "USER EDIT"
+
+    # Only the explicit acknowledgement may replace it.
+    acked = _install_with_bundle(
+        api, _skill_zip("v2"), slug="x", reference="u/x", name="x", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
+    assert acked["ok"] is True, acked
+    assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "v2"
+
+
+def test_record_without_a_hash_is_undecidable_not_clean(api):
+    """A record that carries no ``content_hash`` has nothing to compare against;
+    with a landing on disk that is 'cannot decide', never 'no edits'."""
+    home = api._TEST_HOME
+    _seed_skill(home, "x", "user edit")
+    _seed_engine_lock(home, name="x", content_hash="")
+    assert api.engine_local_edits("x", "x") is None, "no hash to compare = cannot decide"
+
+    denied = api.route_update_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="", confirm=True)
+    )
+    assert denied["ok"] is False, denied
+    assert denied["kind"] == "local-edits"
+    assert denied["detail"]["undecidable"] is True
+    assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "user edit"
+
+
+def test_local_edit_verdict_is_a_real_tristate(api):
+    """True / False / None are three DIFFERENT answers, and None never means clean."""
+    home = api._TEST_HOME
+    # No record and nothing on disk → there is nothing to protect.
+    assert api.engine_local_edits("ghost", "ghost") is False
+    # A matching record → clean.
+    target = _seed_skill(home, "m", "same")
+    _seed_engine_lock(home, name="m", install_path="m", content_hash=api.engine_content_hash(target))
+    assert api.engine_local_edits("m", "m") is False
+    # Drifted content → edited.
+    (target / "SKILL.md").write_text("drifted", encoding="utf-8")
+    assert api.engine_local_edits("m", "m") is True
+    # A record with no hash → cannot decide.
+    _seed_engine_lock(home, name="m", install_path="m", content_hash="")
+    assert api.engine_local_edits("m", "m") is None
+
+
+def test_absent_lock_and_absent_landing_is_not_falsely_refused(api):
+    """The guard must not mis-fire on a plain first install (③)."""
+    home = api._TEST_HOME
+    assert not (home / "skills" / "x").exists()
+    assert api._probe_lock_file() is None, "an absent lock is not corruption"
+    result = _install_with_bundle(api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", confirm=True)
+    assert result["ok"] is True, result
+
+
+def test_undecidable_local_edits_is_flagged_on_the_catalog_entry(api):
+    """The page must be able to TELL 'cannot decide' from 'clean' — the batch
+    filter and the dialog depend on it."""
+    home = api._TEST_HOME
+    _seed_skill(home, "x")
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("{ not json", encoding="utf-8")
+    _fake_exec(api, rc=0, out=_list_page([{"slug": "x", "name": "x"}]), err="")
+
+    result = api.list_skills()
+    assert result["lockNote"]
+    entry = next(s for s in result["skills"] if s["slug"] == "x")
+    assert entry["onDisk"] is True
+    assert entry["localEditsUnknown"] is True, "cannot-decide must be surfaced, never read as clean"
+    assert entry["localEdits"] is False
+
+    # A valid record with NO hash to compare is the same 'cannot decide'.
+    lock.write_text(
+        json.dumps({"version": 1, "installed": {"x": {
+            "source": "shaoke-skillhub", "identifier": "x", "install_path": "x", "content_hash": ""}}}),
+        encoding="utf-8",
+    )
+    result = api.list_skills()
+    assert result["lockNote"] is None
+    entry = next(s for s in result["skills"] if s["slug"] == "x")
+    assert entry["localEditsUnknown"] is True
+
+
 # ── Q2: a corrupt engine record is DISTINGUISHABLE from "never installed" ────
 # The engine's _JsonStateFile._read swallows a JSONDecodeError into its empty
 # shape, so the backend probes the file itself and reports a note the page shows.

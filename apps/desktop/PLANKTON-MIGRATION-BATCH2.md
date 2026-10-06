@@ -453,3 +453,25 @@
   `test_corrupt_engine_lock_is_visible_not_reported_as_zero`、`test_missing_engine_validation_module_is_not_bad_input`、
   `test_rc0_error_envelope_is_classified_not_shape_mismatch`、`test_installed_panel_scopes_to_app_managed_entries`，
   以及上一轮五类失败/确认闩/真引擎委托等**重跑仍绿**。
+
+### 9.7 收尾批 2 第二步 · 第四轮复核整改（P1）
+
+- **P1 引擎锁文件损坏时「本地改动保护」整段失效**：引擎 `_JsonStateFile._read` 把损坏锁吞成空形状 →
+  `get_installed()` 回 `None` → 我方 `engine_local_edits()` 只能回一个**不可信的 `False`**（"没有这条记录"）→
+  守门只拒 `True` → 更新**静默 rmtree 覆盖用户本地改动且回 `ok:true`**（实测：磁盘 `USER EDIT` → `v2`）。
+  **整改（复用 Q2 已做好的 `_probe_lock_file()`）**：
+  ① 守门口径改为「只有**确定无改动**才放行」——`engine_local_edits()` 只在引擎判据给出明确 `match` 时回
+  `False`；引擎判据的 `False` 还要用逐字哈希比对复核（记录里没有 `content_hash`、或落点哈希算不出，都回 `None`）；
+  ② 「计划落点已存在」时，`edits is None` **或** `_probe_lock_file()` 有 note（锁读不出/损坏/形状异常），
+  一律判**无法判定** → 拒写 `local-edits`（`detail.undecidable:true` + `lockNote`），要求显式 `overwriteLocalEdits:true`；
+  ③ 界面：`GET /skills` 每个条目新增 `localEditsUnknown`；确认框对「无法判定」用大白话
+  （"无法判定本地是否有改动…继续可能覆盖并丢失"）并标 destructive；**无法判定的技能不得进批**
+  （批量不带逐项覆盖确认），并在页面按名列出被排除项；批量失败横幅改大白话（不再只印 `（local-edits）` token）。
+  **口径理由**：两种误判代价不对称——误判「无改动」是不可逆的 rmtree、抹掉用户劳动还回 `ok:true`；
+  误判「无法判定」只多一次确认点击。故一律偏向拒写。（锁文件**不存在**且落点不存在时仍不误拦。）
+- 反例与对照：`test_corrupt_lock_cannot_let_an_update_silently_overwrite_local_edits`、
+  `test_record_without_a_hash_is_undecidable_not_clean`、`test_local_edit_verdict_is_a_real_tristate`、
+  `test_absent_lock_and_absent_landing_is_not_falsely_refused`、
+  `test_undecidable_local_edits_is_flagged_on_the_catalog_entry`；旧版 vs 新版同场景实测：
+  旧 `ok:true / 磁盘=v2` vs 新 `ok:false / kind=local-edits / 磁盘=USER EDIT`；
+  批量横幅反例 2 条（`node --test tests/batch-update.test.mjs`）。

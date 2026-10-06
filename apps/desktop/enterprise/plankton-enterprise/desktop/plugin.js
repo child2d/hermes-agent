@@ -290,7 +290,11 @@ export function summarizeBatchUpdate(results) {
     .map(entry => {
       const skill = (entry && entry.skill) || {}
       const kind = (entry && entry.result && entry.result.kind) || 'request-failed'
-      return `${skill.name || skill.installPath || skill.slug || '?'}（${kind}）`
+      // Plain language first, machine token in parentheses (the same shape the
+      // single-item banner uses). A bare `（local-edits）` left the user with no
+      // idea that their own edits were about to be lost.
+      const plain = SKILL_FAILURE_COPY[kind] || '操作失败'
+      return `${skill.name || skill.installPath || skill.slug || '?'}：${plain}（${kind}）`
     })
     .join('、')
   return {
@@ -311,19 +315,26 @@ export function summarizeBatchUpdate(results) {
  */
 export function writeConfirmCopy(action, skill) {
   const localEdits = Boolean(skill.localEdits || skill.hashState === 'mismatch')
+  // The landing exists but the engine record cannot settle whether it was
+  // edited (unreadable/corrupt record, or a record with no hash to compare).
+  // Not the same statement as "已修改" — say what is actually known.
+  const localEditsUnknown = Boolean(skill.localEditsUnknown) && !localEdits
   return {
     localEdits,
+    localEditsUnknown,
     title: action === 'update' ? `更新技能「${skill.name}」？` : `取用技能「${skill.name}」？`,
     description:
       (localEdits
         ? `⚠ 本地已修改：磁盘上的内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些本地改动。`
+        : localEditsUnknown
+        ? `⚠ 无法判定本地是否有改动：引擎取用记录读不出（损坏或不可读），或记录里没有可比对的内容哈希，而该落点已存在内容。继续可能覆盖并丢失本地改动。`
         : '') +
       `将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：${skill.installPath}。` +
       (skill.onDisk && !skill.ownedByEngine
         ? `注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。`
         : '') +
       `企业侧技能目录之外的任何内容都不会被改动。`,
-    destructive: localEdits
+    destructive: localEdits || localEditsUnknown
   }
 }
 
@@ -364,10 +375,11 @@ function SkillMarketPage({ ctx }) {
       category: skill.category || '',
       version: skill.version || '',
       confirm: true,
-      // The dialog above warns in plain language when local edits exist; this is
-      // the explicit acknowledgement the backend requires before it overwrites
-      // them (it refuses with `local-edits` otherwise).
-      overwriteLocalEdits: Boolean(skill.localEdits || skill.hashState === 'mismatch')
+      // The dialog above warns in plain language when local edits exist (or when
+      // the engine record cannot settle that); this is the explicit
+      // acknowledgement the backend requires before it overwrites them (it
+      // refuses with `local-edits` otherwise).
+      overwriteLocalEdits: Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
     }
     const endpoint = action === 'install' ? '/skills/install' : action === 'update' ? '/skills/update' : null
     if (endpoint) {
@@ -494,7 +506,12 @@ function SkillMarketPage({ ctx }) {
   const skills = q
     ? all.filter(s => `${s.name} ${s.slug} ${s.category} ${s.description} ${(s.tags || []).join(' ')}`.toLowerCase().includes(q))
     : all
-  const updatable = all.filter(s => s.installState === 'version-differs')
+  // A skill whose local-edit status CANNOT be settled must never ride the
+  // batch: the batch sends no per-item overwrite acknowledgement, so an
+  // undecidable item is exactly the one a batch could silently replace. Those
+  // stay out until the user opens them individually (where the dialog asks).
+  const batchExcluded = all.filter(s => s.installState === 'version-differs' && s.localEditsUnknown)
+  const updatable = all.filter(s => s.installState === 'version-differs' && !s.localEditsUnknown)
   const when = data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''
 
   return jsxs('div', { style: S.page, children: [
@@ -510,7 +527,7 @@ function SkillMarketPage({ ctx }) {
     // collapsed into the empty list ("0 条"). Uninstall also surfaces it.
     lockNote
       ? jsxs('div', { style: { ...S.notice, borderColor: 'var(--ui-error, #d05a5a)' }, children: [
-          jsx('div', { children: '引擎取用记录读取失败/已损坏：下方「本机已取用」显示为 0 条，是「读不到记录」，不是「从未装过」；此时卸载会报“记录里没有”。' }),
+          jsx('div', { children: '引擎取用记录读取失败/已损坏：下方「本机已取用」显示为 0 条，是「读不到记录」，不是「从未装过」；此时卸载会报“记录里没有”，更新也会按「无法判定本地是否有改动」处理，必须显式确认覆盖（不会静默替换），这类技能也不会进入批量更新。' }),
           jsx('div', { style: S.meta, children: lockNote })
         ] })
       : null,
@@ -542,6 +559,13 @@ function SkillMarketPage({ ctx }) {
 
     updatable.length > 0
       ? jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: () => requestBatchUpdate(updatable), children: `批量更新 ${updatable.length} 条（需确认）` }) })
+      : null,
+
+    // Undecidable skills are held OUT of the batch (the batch carries no
+    // per-item overwrite acknowledgement). Say so by name — a silently shrunken
+    // button would read as "there was nothing else to update".
+    batchExcluded.length > 0
+      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: `以下技能本地是否有改动无法判定（引擎取用记录读不出，或记录里没有可比对的内容哈希），已排除在批量更新之外，请逐条更新并在确认框里明确是否覆盖：${batchExcluded.map(s => s.name || s.installPath || s.slug || '?').join('、')}` })
       : null,
 
     catalog.ok && all.length === 0
