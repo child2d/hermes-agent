@@ -121,7 +121,29 @@ fi
 
 echo "[plankton-pack] HERMES_PYTHON=$HERMES_PYTHON"
 echo "[plankton-pack] ELECTRON_MIRROR=$ELECTRON_MIRROR"
+# Output land: default = electron-builder's own `directories.output` (release/);
+# PLANKTON_OUTPUT_DIR redirects it (e.g. a build outside the repo) — never touch a
+# running instance's `release/` by accident. The artifact path printed below is
+# DERIVED from this, never hardcoded: a redirected build used to print a path that
+# did not exist (it misled a reviewer).
+OUTPUT_DIR="$(node -e "const c=require('./electron-builder.config.cjs');process.stdout.write(String(c.directories?.output||'release'))")"
+if [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
+  OUTPUT_DIR="$PLANKTON_OUTPUT_DIR"
+  echo "[plankton-pack] output redirected to: $OUTPUT_DIR"
+fi
 echo "[plankton-pack] start  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-npm run pack
+if [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
+  npm run build
+  npm run builder -- --dir --publish never -c.directories.output="$OUTPUT_DIR"
+else
+  npm run pack
+fi
 echo "[plankton-pack] done   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "[plankton-pack] artifact: $(pwd)/release/mac-arm64/Plankton.app"
+# Report the artifact that ACTUALLY landed (derived from the real output dir), so
+# the log can never point at a path a redirected build did not produce.
+APP_PATH="$(find "$OUTPUT_DIR" -maxdepth 2 -name '*.app' -type d 2>/dev/null | head -1)"
+if [ -n "$APP_PATH" ]; then
+  echo "[plankton-pack] artifact: $(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
+else
+  echo "[plankton-pack] artifact dir: $(pwd)/$OUTPUT_DIR (no .app found)"
+fi

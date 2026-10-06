@@ -3006,6 +3006,382 @@ const {
   normalizeIdentity
 } = packActions
 
+// ── pack-render.js (W4 · 载体接入，REWRITTEN) ────────────────────────────────────────
+const packRender = (function () {
+// electron/pack-render.js — **载体接入**（W4 重写：指令式组件 + 引用式载荷）。
+//
+// 旧壳把「会话消息里的围栏块（```<tag>{json}```）」当载体；该载体在新底座**已被实测排除**
+// （N7 §0／§9.0 #1：围栏段原样透传、旧标记名过不了 16 字符语言名校验）。新载体＝**插件注册的
+// 指令式组件**：agent 在正文发 `::<名字>{<引用键>="…"}`，**数据不由消息携带**，由**渲染器自取**
+// （`::preview{file=…}` 渲染器自读文件即既有范式）。
+//
+// 于是旧 `render-protocol.parseCarrierBlocks`（围栏入口适配）**在本步被引用式入口适配取代** ——
+// 「取块 → 过协议 → 落卡片」的语义不变，只是入口从围栏换成了指令、载荷从「内联 JSON」换成了
+// 「引用键」。三个硬约束（属性仅扁平 kv／禁嵌套花括号／花括号体 ≤1024）由此绕开：引用远在 1024 之内。
+//
+// 三条判定与旧壳同源：
+//   ① 只认**声明过的**块名（此处＝指令名）：声明里没有这个名 ⇒ 宿主不认领，回落普通文本；
+//   ② 逐块过 `resolveOutput`（记录形态、字段键、动作不在声明内就拒）；
+//   ③ 宿主呈现规则选卡片 ⇒ 落**草稿卡片**；选表格 ⇒ 出一份呈现模型。
+//
+// **画法优先 HTML、不可用才退化 markdown**（裁定 2）：指令组件里画的是**完整 app 权限**的富交互
+// 卡片（确认弹框 + 经 W3 直写）；引用解析不出可画的东西时**退回原文按文本呈现**（内容不丢）。
+// `::preview` 沙箱**仅作逃生舱**，不在本模块。
+//
+// **写动作落实到人**（裁定 4）：确认人＝注入的**服务端铸发**会话身份（`planktonAuth.status()`
+// → `whoami`）；拿不到身份即 fail-closed 拒写。写一律经 W3 的编排层（`packActions.run`）——
+// 本模块**不开第二个写口**。
+//
+// 纯逻辑 + 注入的会话/取数口/动作口：本模块自己不 spawn、不读盘（取数口由宿主注入）。
+
+const CARRIER_AREA = 'transcript.directives'
+/** 指令属性里的**引用键**（skill 与 agent 约定的扁平 kv 名）。 */
+const REF_KEY = 'key'
+const DIRECTIVE_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+
+/** 指令名是否是可被认领的形态（新底座对指令名的硬约束：小写、`[a-z0-9-]`、≤64）。 */
+function isDirectiveName(name) {
+  return typeof name === 'string' && DIRECTIVE_NAME_RE.test(name)
+}
+
+/**
+ * 指令属性里的**引用键**。属性是**扁平 kv**（新底座 `ATTR_RE`），引用键默认 `key`；
+ * 值为空 / 不是字符串 ⇒ `null`（没有引用 ⇒ 渲不出东西，退回文本）。
+ */
+function directiveReference(attrs, refKey = REF_KEY) {
+  const value = isPlainObject(attrs) ? attrs[refKey] : undefined
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** 按**指令名**（＝声明里的块 tag）找包与块。宿主不认识任何具体块名。 */
+function blockForDirective(registry, name) {
+  if (!isDirectiveName(name)) return null
+  for (const entry of registry?.list?.() ?? []) {
+    const pack = registry.get(entry.id)
+    if (!pack) continue
+    const { blocks } = readOutputs(pack.declaration)
+    const block = blocks.find((b) => String(b.tag) === String(name))
+    if (block) return { pack, block }
+  }
+  return null
+}
+
+/** **这一个**动作要写的那份模板的必填键（动作 → `writes` → `templates`）。 */
+function requiredKeysForAction(pack, actionId) {
+  const { actions } = readOutputs(pack?.declaration)
+  const templates = Array.isArray(pack?.declaration?.templates) ? pack.declaration.templates : []
+  const templateId = String(actions[String(actionId)]?.writes ?? '')
+  if (!templateId) return []
+  const template = templates.find((t) => t.id === templateId)
+  return Array.isArray(template?.required) ? template.required.map(String) : []
+}
+
+/** 这份标准输出上**每个动作各自**的必填面（卡片据它逐动作判「能不能点 / 还缺什么」）。 */
+function requiredFieldsOf(pack, blockTag, offeredActionIds = []) {
+  const { blocks, actions } = readOutputs(pack?.declaration)
+  const block = blocks.find((entry) => String(entry.tag) === String(blockTag))
+  const offered = Array.isArray(offeredActionIds) && offeredActionIds.length
+    ? offeredActionIds.map(String)
+    : (Array.isArray(block?.actions) ? block.actions.map(String) : [])
+  const keys = []
+  for (const id of offered) for (const key of requiredKeysForAction(pack, id)) if (!keys.includes(key)) keys.push(String(key))
+  return keys
+}
+
+/**
+ * 载体接入器：把一条**指令段落实例**（`::<名字>{<引用键>="…"}`）落成卡片或呈现模型。
+ *
+ * `createPackRenderer({ registry, session, loadPayload, now })`：
+ *   - `land({ name, attrs })`：认指令名 → 取引用键 → **自取载荷**（`loadPayload`，注入口）
+ *     → 过 `resolveOutput` → 选原语（卡片／表格）。返回 `{ ok, kind, … }`；
+ *     认不出 / 取不到 / 校验不过 ⇒ `{ ok:false, kind:'refused', reason }`（退回文本，内容不丢）。
+ *   - `cards()`：会话内全部卡片的只读呈现（界面刷新用）。
+ */
+function createPackRenderer({ registry, session, loadPayload = () => null, now = () => Date.now() } = /** @type {any} */ ({})) {
+  async function land({ name = '', attrs = {} } = {}) {
+    const hit = blockForDirective(registry, name)
+    if (!hit) return Object.freeze({ ok: false, kind: 'refused', tag: String(name), reason: 'directive-not-declared' })
+    const { pack, block } = hit
+    const ref = directiveReference(attrs)
+    if (!ref) return Object.freeze({ ok: false, kind: 'refused', tag: String(name), packId: pack.id, reason: 'directive-reference-missing' })
+    // 数据由渲染器**自取**（引用式载荷）：取数口由宿主注入；取不到即不落卡（退回文本）。
+    let payload = null
+    try {
+      payload = await loadPayload(ref, { packId: pack.id, block })
+    } catch {
+      payload = null
+    }
+    if (payload === null || payload === undefined) {
+      return Object.freeze({ ok: false, kind: 'refused', tag: String(name), packId: pack.id, reason: 'payload-unresolved', ref })
+    }
+    const resolved = /** @type {any} */ (resolveOutput(pack, payload))
+    if (!resolved.ok) {
+      return Object.freeze({ ok: false, kind: 'refused', tag: String(name), packId: pack.id, reason: resolved.reason, detail: resolved.detail ?? null, ref })
+    }
+    const shown = presentOutput(resolved.output, { nowMs: now() })
+    if (shown.primitive === 'card') {
+      const draft = session.buildDraft({
+        pack,
+        block: resolved.output.block,
+        record: resolved.output.records[0],
+        title: shown.title,
+        userMessages: [],
+        requiredFields: requiredFieldsOf(pack, resolved.output.block, resolved.output.actions.map((action) => action.id)),
+      })
+      if (!draft.ok) {
+        return Object.freeze({ ok: false, kind: 'refused', tag: String(name), packId: pack.id, reason: draft.reason, detail: draft.key ?? null, ref })
+      }
+      return Object.freeze({ ok: true, kind: 'card', tag: String(name), packId: pack.id, card: draft.card, presentation: shown, output: resolved.output })
+    }
+    return Object.freeze({ ok: true, kind: 'presentation', tag: String(name), packId: pack.id, presentation: shown, output: resolved.output })
+  }
+
+  function cards() {
+    return session.presentations()
+  }
+  function forget() {
+    /* 载体重写后没有「已播报」记忆需要清 —— 卡片由会话存储持有（本函数保留旧端口形状） */
+  }
+
+  return Object.freeze({ land, cards, forget })
+}
+
+/**
+ * 服务端铸发的登录身份（enterprise 构建专属；非企业构建没有 `planktonAuth` ⇒ 返回 null）。
+ * 取不到 ⇒ null ⇒ 上层 fail-closed 拒写（见 W3 `normalizeIdentity`）。
+ */
+async function planktonIdentityAsync() {
+  try {
+    const win = /** @type {any} */ (globalThis).window
+    const auth = win?.hermesDesktop?.planktonAuth
+    if (!auth || typeof auth.status !== 'function') return null
+    const status = await auth.status()
+    return status ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 身份缓存：`planktonAuth.status()` 是**异步**的，而 W3 编排层的 `identityOf` 是**同步**读。
+ * 于是取一次缓存住：`refresh()` 更新，`identityOf()` 同步读（未取到＝null ⇒ fail-closed）。
+ */
+function createIdentityProvider({ read = planktonIdentityAsync } = /** @type {any} */ ({})) {
+  let current = null
+  let loaded = false
+  async function refresh() {
+    try {
+      current = await read()
+    } catch {
+      current = null
+    }
+    loaded = true
+    return current
+  }
+  return {
+    refresh,
+    current: () => current,
+    identityOf: () => (loaded ? current : null),
+  }
+}
+
+/** 动作结果 → 一行可读的如实回报（不把「未知」说成「失败」）。 */
+function describeAction(result) {
+  if (!result || typeof result !== 'object') return '执行未返回结果'
+  if (result.ok === false) return `未写入：${String(result.reason ?? '未知原因')}`
+  const kind = String(result.outcome?.kind ?? '')
+  const ref = result.outcome?.ref ? ` · ${result.outcome.ref}` : ''
+  if (kind === 'ok' && result.readback?.ok === true) return `已写入并读回确认${ref}`
+  if (kind === 'ok') return `已提交，结果待核对${ref}`
+  return `结果未知（${kind || 'no-kind'}）${ref}`
+}
+
+/**
+ * 指令组件（**HTML 优先**）：在插件里画完整 app 权限的富交互卡片 —— 点「确认」弹
+ * `ConfirmDialog`，确认后经 W3 编排层直写；确认人＝服务端铸发身份（无身份则拒）。
+ * 引用解析不出可画的东西时**退化 markdown**（把指令原文交回文本呈现，内容不丢）。
+ */
+function CarrierDirective({ directiveName, attrs, source, renderer, runAction, identityProvider }) {
+  const [model, setModel] = useState(null)
+  const [pending, setPending] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [outcome, setOutcome] = useState('')
+  const attrsKey = JSON.stringify(attrs ?? {})
+
+  useEffect(() => {
+    let alive = true
+    Promise.resolve(renderer.land({ name: directiveName, attrs: attrs ?? {} }))
+      .then((result) => {
+        if (alive) setModel(result)
+      })
+      .catch(() => {
+        if (alive) setModel({ ok: false, kind: 'refused', reason: 'render-failed' })
+      })
+    void identityProvider?.refresh?.()
+    return () => {
+      alive = false
+    }
+  }, [directiveName, attrsKey])
+
+  async function doRun(action) {
+    setBusy(true)
+    setOutcome('')
+    try {
+      // 确认前**重新**取一次服务端铸发身份（拿不到即 fail-closed 拒写）。
+      await identityProvider?.refresh?.()
+      const result = await runAction({ packId: model.packId, cardId: model.card?.id, actionId: action.id })
+      setOutcome(describeAction(result))
+      const refreshed = await renderer.land({ name: directiveName, attrs: attrs ?? {} })
+      setModel(refreshed)
+    } catch {
+      setOutcome('执行失败')
+    } finally {
+      setBusy(false)
+      setPending(null)
+    }
+  }
+
+  if (model === null) {
+    return jsx('div', { 'data-plankton-carrier': directiveName, 'data-state': 'loading', style: S.carrierMuted, children: '正在取回内容…' })
+  }
+  // 不可用 ⇒ **退化 markdown**：把指令原文交回宿主按文本呈现（内容不丢，退回原文显示）。
+  if (!model.ok) {
+    return source
+  }
+
+  const actions = Array.isArray(model.output?.actions) ? model.output.actions : []
+  const confirmer = normalizeIdentity(identityProvider?.current?.() ?? null)
+
+  if (model.kind === 'presentation') {
+    const table = (model.presentation?.components ?? []).find((c) => c.primitive === 'table')
+    const stat = (model.presentation?.components ?? []).find((c) => c.primitive === 'stat-bar')
+    const rows = (table?.rows ?? []).map((row, r) =>
+      jsx('tr', { children: row.map((cell, c) => jsx('td', { key: `c${c}`, style: S.carrierTd, children: cell })) }, `r${r}`),
+    )
+    return jsxs('div', { 'data-plankton-carrier': directiveName, 'data-state': 'presentation', style: S.carrierCard, children: [
+      table ? jsxs('table', { style: S.carrierTable, children: [
+        jsx('thead', { children: jsx('tr', { children: (table.columns ?? []).map((col, i) => jsx('th', { key: `h${i}`, style: S.carrierTh, children: col })) }) }),
+        jsx('tbody', { children: rows }),
+      ] }) : null,
+      stat ? jsx('div', { style: S.carrierStats, children: (stat.items ?? []).map((item, i) => jsx('span', { key: `s${i}`, style: S.carrierStat, children: `${item.label} ${item.value}` })) }) : null,
+      outcome ? jsx('div', { style: S.carrierNote, children: outcome }) : null,
+    ] })
+  }
+
+  // 卡片（HTML 富交互）
+  const fields = Array.isArray(model.card?.fields) ? model.card.fields : []
+  const missing = fields.filter((f) => !String(f.value ?? '').trim()).map((f) => f.label || f.key)
+  return jsxs('div', { 'data-plankton-carrier': directiveName, 'data-state': 'card', style: S.carrierCard, children: [
+    jsx('div', { style: S.carrierTitle, children: model.presentation?.title || '草稿' }),
+    jsx('div', { style: S.carrierFields, children: fields.map((f) =>
+      jsxs('div', { style: S.carrierField, children: [
+        jsx('span', { style: S.carrierLabel, children: f.label || f.key }),
+        jsx('span', { style: S.carrierValue, children: String(f.value ?? '').trim() ? String(f.value) : '（等你给）' }),
+      ] }, f.key),
+    ) }),
+    missing.length ? jsx('div', { style: S.carrierNote, children: `还缺：${missing.join('、')}` }) : null,
+    jsx('div', { style: S.carrierActions, children: actions.map((action) =>
+      jsx(Button, { type: 'button', disabled: busy, onClick: () => { if (action.human === 'confirm') setPending(action); else void doRun(action) }, children: action.label || action.id }, action.id),
+    ) }),
+    confirmer ? null : jsx('div', { style: S.carrierNote, children: '未取到登录身份：确认写动作将被拒绝（fail-closed）。' }),
+    outcome ? jsx('div', { style: S.carrierNote, children: outcome }) : null,
+    pending
+      ? jsx(ConfirmDialog, {
+          open: true,
+          onClose: () => setPending(null),
+          onConfirm: () => Promise.resolve(doRun(pending)),
+          title: pending.label || '确认',
+          description: `确认以「${confirmer || '未知身份'}」执行：${pending.label || pending.id}`,
+          destructive: Boolean(pending.destructive),
+          confirmLabel: '确认',
+          cancelLabel: '取消'
+        })
+      : null,
+  ] })
+}
+
+/**
+ * **载体指令贡献**（W4）：为**每个声明过的块**注册一条 `transcript.directives` 贡献。
+ * 指令名＝块 tag（声明里有什么块就认什么名）；宿主核心不认识任何具体块名（装配点唯一）。
+ */
+function carrierDirectiveContributions({ registry, renderer, runAction, identityProvider } = /** @type {any} */ ({})) {
+  const names = []
+  for (const entry of registry?.list?.() ?? []) {
+    const pack = registry.get(entry.id)
+    if (!pack) continue
+    const { blocks } = readOutputs(pack.declaration)
+    for (const block of blocks) {
+      const tag = String(block.tag)
+      if (isDirectiveName(tag) && !names.includes(tag)) names.push(tag)
+    }
+  }
+  return names.map((name) => Object.freeze({
+    id: `carrier:${name}`,
+    area: CARRIER_AREA,
+    data: Object.freeze({
+      name,
+      render: (props) => jsx(CarrierDirective, { directiveName: name, attrs: props.attrs, source: props.source, renderer, runAction, identityProvider }),
+    }),
+  }))
+}
+
+/**
+ * 引用式载荷的**宿主存储适配**（自取数的默认落点）：键→载荷。
+ * 落在宿主给插件的**命名空间 JSON 存储**（`ctx.storage`）里 —— agent 侧提交载荷是它自己的活
+ * （skill/工具），渲染器只按引用键把它取回。取不到 ⇒ null（退回文本）。
+ */
+function createPayloadStore(storage) {
+  return {
+    keyOf: (ref) => `carrier:${String(ref)}`,
+    load: (ref) => {
+      try {
+        return storage?.get?.(`carrier:${String(ref)}`, null) ?? null
+      } catch {
+        return null
+      }
+    },
+    save: (ref, payload) => {
+      try {
+        storage?.set?.(`carrier:${String(ref)}`, payload)
+        return true
+      } catch {
+        return false
+      }
+    },
+  }
+}
+
+return Object.freeze({
+  CARRIER_AREA,
+  REF_KEY,
+  isDirectiveName,
+  directiveReference,
+  blockForDirective,
+  requiredKeysForAction,
+  requiredFieldsOf,
+  createPackRenderer,
+  planktonIdentityAsync,
+  createIdentityProvider,
+  describeAction,
+  carrierDirectiveContributions,
+  createPayloadStore,
+})
+})()
+
+const {
+  CARRIER_AREA,
+  REF_KEY,
+  isDirectiveName,
+  directiveReference,
+  blockForDirective,
+  createPackRenderer,
+  planktonIdentityAsync,
+  createIdentityProvider,
+  carrierDirectiveContributions,
+  createPayloadStore
+} = packRender
+
 // ─────────────────────────────────────────────────────────────────────────────
 // W2 · the SINGLE assembly point + the baymax pack (plugin face + ONE skill)
 //
@@ -3872,7 +4248,22 @@ const S = {
   pre: { fontFamily: 'var(--font-mono, monospace)', fontSize: '10px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, color: 'var(--ui-text-tertiary)', maxHeight: '140px', overflowY: 'auto' },
   banner: { borderRadius: '6px', padding: '8px 12px', fontSize: '12px', border: '1px solid' },
   actions: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' },
-  hash: { fontFamily: 'var(--font-mono, monospace)', fontSize: '10px', color: 'var(--ui-text-tertiary)' }
+  hash: { fontFamily: 'var(--font-mono, monospace)', fontSize: '10px', color: 'var(--ui-text-tertiary)' },
+  // ── W4 · the carrier directive card (HTML-first; markdown fallback) ──────────
+  carrierMuted: { color: 'var(--ui-text-tertiary)', fontSize: '12px', padding: '4px 0' },
+  carrierCard: { border: '1px solid var(--chrome-border, var(--ui-border))', borderRadius: '6px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '640px' },
+  carrierTitle: { fontSize: '13px', fontWeight: 600 },
+  carrierFields: { display: 'flex', flexDirection: 'column', gap: '4px' },
+  carrierField: { display: 'flex', gap: '8px', alignItems: 'baseline', fontSize: '12px' },
+  carrierLabel: { color: 'var(--ui-text-tertiary)', minWidth: '72px', flexShrink: 0 },
+  carrierValue: { color: 'var(--ui-text-primary)', wordBreak: 'break-word' },
+  carrierNote: { color: 'var(--ui-warning, #d08a00)', fontSize: '11px' },
+  carrierActions: { display: 'flex', gap: '6px', flexWrap: 'wrap' },
+  carrierTable: { borderCollapse: 'collapse', width: '100%', fontSize: '12px' },
+  carrierTh: { textAlign: 'left', borderBottom: '1px solid var(--ui-border)', padding: '3px 6px', color: 'var(--ui-text-tertiary)' },
+  carrierTd: { borderBottom: '1px solid var(--chrome-action-hover, transparent)', padding: '3px 6px' },
+  carrierStats: { display: 'flex', gap: '10px', flexWrap: 'wrap', color: 'var(--ui-text-secondary)', fontSize: '11px' },
+  carrierStat: { padding: '0 6px', borderRadius: '999px', border: '1px solid var(--ui-border)' }
 }
 
 const BANNER_TONE = {
@@ -4463,6 +4854,46 @@ export default {
   description: '企业已审技能市场（安装/卸载/启停/更新 + 版本对照 + 哈希）与本机工具目录（只读）。',
   defaultEnabled: true,
   register(ctx) {
+    // ── W4 · the carrier entry (directive components + reference payload) ──────
+    // ONE assembly point: register the INSTALLED pack(s) into the (pure-logic)
+    // registry, then register ONE transcript directive per declared block. The
+    // host core names no block — the directive name IS the declared block tag
+    // (装配点唯一 / 裁定 3: the plugin carries "what can be drawn / clicked"); a
+    // name no plugin claims stays plain text (fail-open to prose).
+    //
+    // Write path (裁定 4): the confirmer is the server-issued session identity
+    // (`planktonAuth.status()` → whoami) read through `identityProvider`; no
+    // identity ⇒ `not-signed-in`, fail-closed. EVERY write goes through the W3
+    // action layer — this file opens no second write door. The executor's spawner
+    // is host-injected (no spawner ⇒ `spawner-missing`, fail-closed).
+    const carrierRegistry = createPackRegistry()
+    for (const entry of installedPacks()) {
+      const declaration = typeof entry.load === 'function' ? entry.load() : entry.declaration
+      carrierRegistry.register(declaration ?? {})
+    }
+    const carrierSession = createPackSession()
+    const identityProvider = createIdentityProvider()
+    const carrierExecutor = createPackExecutor({ registry: carrierRegistry })
+    const carrierActions = createPackActions({
+      registry: carrierRegistry,
+      executor: carrierExecutor,
+      session: carrierSession,
+      identityOf: identityProvider.identityOf,
+    })
+    // 引用式载荷的自取数落点：宿主给插件的命名空间 JSON 存储（agent 侧提交载荷是它自己的活）。
+    const payloadStore = createPayloadStore(ctx.storage)
+    const carrierRenderer = createPackRenderer({
+      registry: carrierRegistry,
+      session: carrierSession,
+      loadPayload: (ref) => payloadStore.load(ref),
+    })
+    const carrier = carrierDirectiveContributions({
+      registry: carrierRegistry,
+      renderer: carrierRenderer,
+      runAction: (args) => carrierActions.run(args),
+      identityProvider,
+    })
+
     ctx.registerMany([
       {
         id: 'tools-page',
@@ -4491,7 +4922,9 @@ export default {
         area: 'sidebar.nav',
         order: 41,
         data: { codicon: 'extensions', label: '企业技能', path: SKILLS_PATH }
-      }
+      },
+      // W4 · the carrier directives (one per declared block tag).
+      ...carrier
     ])
   }
 }
@@ -4585,5 +5018,17 @@ export {
   createPackExecutor,
   createPackActions,
   verifyReadback,
-  normalizeIdentity
+  normalizeIdentity,
+  // W4 · carrier entry (directive components + reference payload)
+  packRender,
+  CARRIER_AREA,
+  REF_KEY,
+  isDirectiveName,
+  directiveReference,
+  blockForDirective,
+  createPackRenderer,
+  planktonIdentityAsync,
+  createIdentityProvider,
+  carrierDirectiveContributions,
+  createPayloadStore
 }

@@ -214,6 +214,20 @@ export function assertEnterpriseResourcesPresent(
     )
   }
 
+  // W4 (N7 §8): the packaged plugin MUST still register the transcript-directive
+  // carrier (指令式组件 + 引用式载荷). Dropping the carrier entry is a SILENT
+  // capability loss — the cards simply never render — so fail the PACK here,
+  // proven from the artifact's own bytes, not from a unit test.
+  const packagedPlugin = path.join(resources, 'enterprise/plankton-enterprise/desktop/plugin.js')
+  const pluginSource = fs.readFileSync(packagedPlugin, 'utf8')
+  for (const marker of ["transcript.directives", 'carrierDirectiveContributions']) {
+    if (!pluginSource.includes(marker)) {
+      throw new Error(
+        `[after-pack] packaged enterprise plugin.js lost the W4 carrier entry (missing "${marker}"): ${packagedPlugin}`
+      )
+    }
+  }
+
   return expected
 }
 
