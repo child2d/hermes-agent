@@ -3429,6 +3429,12 @@ export {
   packRegistry,
   packSession,
   // W2 · assembly point + the pack (plugin face + one skill)
+  // PACK_CARRIERS is exported ONLY so the node:test suite can read the bridge
+  // table directly and assert it covers all 15 contract items; it is NOT a
+  // consumer-facing value. The module's single read port is `carrierOf(key)`
+  // (unknown key ⇒ null), and nothing inside this module reads the raw object
+  // except `carrierOf` itself. Keep that invariant: route new reads through
+  // `carrierOf`.
   PACK_CARRIERS,
   carrierOf,
   BAYMAX_DECLARATION,

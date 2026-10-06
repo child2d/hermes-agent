@@ -93,6 +93,13 @@ export function assertEnterpriseResourcesPresent(
     'enterprise/plankton-enterprise/dashboard/manifest.json',
     'enterprise/plankton-enterprise/dashboard/plugin_api.py',
     'enterprise/plankton-enterprise/desktop/plugin.js',
+    // The baymax pack's ONE skill — the agent-facing carrier of the domain
+    // command surface / agent instructions / onboarding (W2, N2 §0.1). It is a
+    // first-class enterprise carrier, not an optional extra: __init__.py's
+    // register() is fail-closed on it, so a staged artifact without it loads
+    // green and only dies at plugin load. Enumerated here so its loss turns the
+    // pack RED instead.
+    'enterprise/plankton-enterprise/skills/baymax/SKILL.md',
     cliRelative
   ]
 

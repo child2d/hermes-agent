@@ -84,8 +84,13 @@ echo "[plankton-pack] staged CLI: $CLI_DEST (from $CLI_SRC)"
 
 # The enterprise plugin payload is committed in-repo; assert it is present so a
 # packaging run cannot silently ship without it (after-pack asserts again).
+# Includes the baymax pack's ONE skill (skills/baymax/SKILL.md): the agent-facing
+# carrier of the domain command surface / agent instructions / onboarding (W2,
+# N2 §0.1). __init__.py is fail-closed on it, so a staged artifact without it
+# would ship green and only die at plugin load — enumerate it here so the pack
+# stops before that.
 PLUGIN_PAYLOAD="enterprise/plankton-enterprise"
-for required in plugin.yaml __init__.py dashboard/manifest.json dashboard/plugin_api.py desktop/plugin.js; do
+for required in plugin.yaml __init__.py dashboard/manifest.json dashboard/plugin_api.py desktop/plugin.js skills/baymax/SKILL.md; do
   if [ ! -s "$PLUGIN_PAYLOAD/$required" ]; then
     echo "[plankton-pack] ERROR: enterprise plugin payload incomplete under $PLUGIN_PAYLOAD (missing/empty: $required)" >&2
     exit 1

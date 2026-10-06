@@ -124,6 +124,7 @@ const REQUIRED_ENTERPRISE = [
   'enterprise/plankton-enterprise/dashboard/manifest.json',
   'enterprise/plankton-enterprise/dashboard/plugin_api.py',
   'enterprise/plankton-enterprise/desktop/plugin.js',
+  'enterprise/plankton-enterprise/skills/baymax/SKILL.md',
   'enterprise/cli/darwin-arm64/shaoke-cli'
 ]
 
@@ -228,6 +229,13 @@ it('F6: empty CLI, stripped exec bit, and missing required files each fail the p
     await writeFile(path.join(resources, 'enterprise', 'plankton-enterprise', 'dashboard', 'manifest.json'), 'x')
     await rm(path.join(resources, 'enterprise', 'plankton-enterprise', '__init__.py'))
     expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/__init__\.py/)
+
+    // (5) the baymax pack's ONE skill missing → RED (W2 carrier; __init__.py's
+    // register() is fail-closed on it, so without this an artifact would load
+    // green and only die at plugin load).
+    await writeFile(path.join(resources, 'enterprise', 'plankton-enterprise', '__init__.py'), 'x')
+    await rm(path.join(resources, 'enterprise', 'plankton-enterprise', 'skills', 'baymax', 'SKILL.md'))
+    expect(() => assertEnterpriseResourcesPresent(ctx, appDir)).toThrow(/skills\/baymax\/SKILL\.md/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

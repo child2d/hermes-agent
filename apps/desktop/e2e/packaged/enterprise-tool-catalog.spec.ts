@@ -157,8 +157,23 @@ function assertEnterpriseArtifactIdentity(appPath: string): { cliPath: string } 
 
   const pluginDir = path.join(resources, 'enterprise', 'plankton-enterprise')
 
-  for (const relative of ['plugin.yaml', 'dashboard/manifest.json', 'dashboard/plugin_api.py', 'desktop/plugin.js']) {
+  // The FULL plugin payload, not just the four files the backend/desktop halves
+  // need: `__init__.py` is the agent half and `skills/baymax/SKILL.md` its ONE
+  // skill (W2, N2 §0.1). Both are regressions the pack can no longer ship, so
+  // the artifact-identity check proves they are really in the built app too.
+  for (const relative of [
+    'plugin.yaml',
+    '__init__.py',
+    'dashboard/manifest.json',
+    'dashboard/plugin_api.py',
+    'desktop/plugin.js',
+    'skills/baymax/SKILL.md'
+  ]) {
     expect(fs.existsSync(path.join(pluginDir, relative)), `enterprise plugin payload missing: ${relative}`).toBe(true)
+    expect(
+      fs.statSync(path.join(pluginDir, relative)).size,
+      `enterprise plugin payload is empty: ${relative}`
+    ).toBeGreaterThan(0)
   }
 
   const cliRoot = path.join(resources, 'enterprise', 'cli')
