@@ -202,8 +202,8 @@ test('the confirm payload acknowledges every not-confirmed-clean landing', async
 })
 
 // The write-path self-check must be VISIBLE on the page: a failing verdict
-// (redirected skill root / redirected or non-regular install record) refuses all
-// writes at the backend, so the read page may never render it as silence.
+// (a redirected skill root / a redirect on the path chain) refuses all writes at
+// the backend, so the read page may never render it as silence.
 test('a failing write-path self-check is stated loudly, and a passing one is silent', async () => {
   const { writeGuardNotice } = await loadPlugin()
 
@@ -216,7 +216,7 @@ test('a failing write-path self-check is stated loudly, and a passing one is sil
     ok: false,
     findings: [
       { check: 'symlink-in-path-chain', layer: 'skills-root', path: '/h/skills', message: '技能根目录本身是符号链接，指向 /outside' },
-      { check: 'record-is-symlink', layer: 'install-record', path: '/h/skills/.hub/lock.json', message: '引擎取用记录是一个符号链接' }
+      { check: 'symlink-in-path-chain', layer: 'path-chain', path: '/h', message: '技能路径链上的 /h 是符号链接' }
     ]
   })
 
@@ -226,8 +226,7 @@ test('a failing write-path self-check is stated loudly, and a passing one is sil
   // Every finding is named, with its check id and its layer.
   assert.match(notice, /symlink-in-path-chain/)
   assert.match(notice, /skills-root/)
-  assert.match(notice, /record-is-symlink/)
-  assert.match(notice, /install-record/)
+  assert.match(notice, /path-chain/)
   // A malware-shaped empty findings list must still not read as "fine".
   assert.match(writeGuardNotice({ ok: false, findings: [] }), /拒绝全部写动作/)
 })

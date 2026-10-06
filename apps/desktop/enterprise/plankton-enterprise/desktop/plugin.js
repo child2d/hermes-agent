@@ -78,9 +78,9 @@ const SKILL_FAILURE_COPY = {
   'local-edits': '本地已修改：磁盘内容与引擎取用记录不一致。继续更新会覆盖并丢失这些改动，需你确认覆盖',
   'unreadable-config': '引擎配置读取失败，启停开关已禁用',
   'engine-unavailable': '引擎技能配置模块不可用，无法改启停',
-  // The startup write-path self-check (fail-closed): the store's path chain or
-  // the engine's install record is not the shape a write may be aimed at.
-  'write-guard-failed': '技能写路径自检未通过（技能路径链含符号链接，或引擎取用记录不是可读的常规文件）：已按 fail-closed 拒绝这次写动作'
+  // The startup write-path self-check (fail-closed): the skill store's own
+  // path chain contains a symbolic link, so a write would land OUTSIDE the store.
+  'write-guard-failed': '技能写路径自检未通过（技能路径链含符号链接）：已按 fail-closed 拒绝这次写动作'
 }
 
 /** Display state for one catalog entry (semantic source: backend installState). */
@@ -253,13 +253,13 @@ export function canBatchUpdate(skill) {
 }
 
 /**
- * The read-page notice for the write-path self-check (batch-3 hardening).
+ * The read-page notice for the write-path self-check.
  *
- * `writeGuard` is the backend's fail-closed structural verdict. When it FAILS
- * every write route is refused, so the page must SAY SO loudly (and the action
- * buttons must not pretend otherwise) instead of letting each write fail one by
- * one. Pure and exported so the wording — and the fact that a failing check is
- * VISIBLE, never silent — is asserted directly.
+ * `writeGuard` is the backend's fail-closed verdict on the skill store's path
+ * chain. When it FAILS every write route is refused, so the page must SAY SO
+ * loudly (and the action buttons must not pretend otherwise) instead of letting
+ * each write fail one by one. Pure and exported so the wording — and the fact
+ * that a failing check is VISIBLE, never silent — is asserted directly.
  *
  * Returns `null` when the check passed (or the backend did not report one).
  */

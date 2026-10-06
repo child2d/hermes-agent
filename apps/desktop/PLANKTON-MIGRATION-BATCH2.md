@@ -597,52 +597,81 @@ metadata.shaoke: {"slug":"x","reference":"u/x","name":"x","category":"","version
 
 ## 11. 批 2 加固 · 技能写路径启动自检（fail-closed，2026-10-06）
 
-> 本节**只增不改**：§9.4 登记的两条引擎缺口（**KI-PLANKTON-0072** 引擎不校 `SKILLS_DIR` 根自身符号链接、
-> **KI-PLANKTON-0073** 手改引擎锁条目可让引擎 `rmtree` `skills/` 下任意目录）原文保留；此处登记**我方这一层**
-> 对它们的处置——按 Perry 口径：引擎不肯改的两处，改由企业侧「强制不可变 + 启动自检」堵住，**机器契约优于事后巡检**。
+> 本节只**增删自己**、不改 §9.4 的两条引擎缺口原文（**KI-PLANKTON-0072** 引擎不校 `SKILLS_DIR` 根自身符号链接、
+> **KI-PLANKTON-0073** 手改引擎锁条目可让引擎 `rmtree` `skills/` 下任意目录，两者仍留在 KI 台账）。
 > 不新增第二套落点语义（§9.2 未破），不碰引擎，不改上游四变体。
+>
+> **2026-10-06 瘦身（Perry 裁定）**：「**自检的内容不宜过多，否则未来门禁将远重于功能本身**」。
+> 据此自检收敛为**只保留路径链检查**（唯一真有后果的一类）；其余检查**不采用门禁形式**，
+> 由既有机制如实上报，**代码 / 测试 / 文案一并切除（不留死代码）**。
 
-### 11.1 自检项（逐条）
+### 11.1 自检项（瘦身后：只此一类）
 
 | # | 自检项 | 判据 | 失败时的 `check` 名 | 层 |
 |---|---|---|---|---|
 | ① | 技能根**自身**不是符号链接 | 对 `engine_skills_dir()` 本身 `lstat`, `S_ISLNK` 即拒 | `symlink-in-path-chain`（`layer: skills-root`） | `skills/` |
 | ② | 技能根到企业 home 的**路径链不含符号链接** | 从 `HERMES_HOME` **逐段** `lstat` 到技能根；受信边界 = `HERMES_HOME` 的**父**（边界及以上不查，故 macOS `/var`→`/private/var` 不会误拒） | `symlink-in-path-chain`（`layer: path-chain`） | `HERMES_HOME` |
-| ③ | 取用记录是**常规文件**（非链接 / 非设备 / 非目录 / 非 fifo/socket） | `lstat` + `S_ISREG`；符号链接单独可辨 | `record-is-symlink` / `record-not-regular` | `skills/.hub/lock.json` |
-| ④ | 取用记录**权限合理** | 对同组/其他用户可写（`S_IWGRP|S_IWOTH`）即拒 | `record-too-permissive` | 同上 |
-| ⑤ | 取用记录**内容可读** | `read_bytes()` 成功；内容是否合法 JSON 只**如实上报**（`recordParseable`），不据此拒写 | `record-unreadable` | 同上 |
-| ⑥ | 引擎 home / 技能目录可命名 | 两者任一取不到即拒 | `store-unresolved` | 引擎 home |
+| ③ | 链上某层**检查不了**（`lstat` 抛错） | 不得静默放行，按 fail-closed 拒 | `path-lstat-failed` | 该层 |
+| ④ | 引擎 home / 技能目录可命名 | 两者任一取不到 → 路径链检查无从成立 | `store-unresolved` | 引擎 home |
 
-口径边界（如实）：③④⑤ 是**结构**门。内容是坏 JSON（形状仍对）**不在**此门拒写——理由：既有内容门
-（`local-edits` / `no-record` + 显式 `overwriteLocalEdits` 确认）必须保持可达，否则「记录损坏 + 用户明确确认覆盖」
-这条既有验收路径会被结构门一刀切死。内容语义仍由既有探测（`_probe_lock_file`）与两道内容门负责。
+保留理由：这四条同属**路径链**一类，是唯一有真实后果的检查 —— 技能根/链上是符号链接 ⇒ 引擎会把东西**装到仓外**
+（KI-PLANKTON-0072，已实测证实）。③④ 是这条检查的 **fail-closed 前置**（检查不了/对象定位不了，就不得放行）。
 
-### 11.2 fail-closed 与「响亮」
+### 11.2 瘦身对照（删了哪些、为何删）
+
+| 原检查 | 处置 | 理由 |
+|---|---|---|
+| 技能根/链上符号链接（原 ①②） | **保留为门禁** | 唯一有真实后果：引擎仓外落盘（0072 实测） |
+| 链上某层 `lstat` 失败（新 ③） | **保留为门禁** | 路径链检查的前置 fail-closed；删掉即「检查不了 → 静默放行」 |
+| 引擎 home / 技能目录不可命名（原 ⑥） | **保留为门禁** | 同上（路径链检查的前置） |
+| 取用记录是符号链接 / 非常规文件 / 权限过宽 / 读不出（原 ③④⑤，`check_install_record` 整函数） | **删除**（代码 + 6 条测试 + 前端文案一并切除） | 后果量级不同：记录的问题是「谁来**读**它」，**不是**「引擎会把东西装到仓外」；而记录的真实问题（不可读 / 损坏 / 缺失）**已由既有机制如实上报**——`_probe_lock_file()` → 页面 `lockNote`、`local-edits` / `no-record` + 显式 `overwriteLocalEdits` ack。另造一份结构判定只会与引擎漂移，正是「门禁重于功能」 |
+| 记录内容是否合法 JSON（原 ⑤ 的上报字段 `recordParseable` / `notes`） | **删除** | 同上的内容语义归既有内容门；此字段已无消费方 |
+
+已删除的符号（供 grep 核验，**全仓源码零残留**）：`check_install_record`、`_record_path`、`_file_kind`、
+`record-is-symlink`、`record-not-regular`、`record-too-permissive`、`record-unreadable`、`record-lstat-failed`、
+`recordPath`、`recordExists`、`recordParseable`；`import stat` 亦随之下线。
+
+### 11.3 fail-closed 与「响亮」（性质不变）
 
 - **拒写**：`取用 / 更新 / 卸载 / 启用 / 停用` 五条写路径**全部**经**唯一**执行点 `_require_write_guard(...)`；
-  任一自检项不符即回 `write-guard-failed`，`detail` 逐条给出 `checks` / `findings`（含 `layer` 与 `path`）/ `successPath` /
-  `boundary`，**不静默降级、不半只读**。
+  任一自检项不符即回 `write-guard-failed`，`detail` 逐条给出 `checks` / `findings`（含 `layer` 与 `path`）/
+  `skillsPath` / `boundary`，**不静默降级、不半只读**。
 - **响亮**：自检未通过时 `logger.error` 输出一条含**全部失败项与所在层**的错误行（成功时 `logger.info`）。
-- **界面可见**：读路径保留，`GET /skills` 载荷新增 `writeGuard`（`ok` / `findings` / `recordParseable` / `boundary` …）；
+- **界面可见**：读路径保留，`GET /skills` 载荷带 `writeGuard`（`ok` / `findings` / `boundary` …）；
   前端 `plugin.js` 的 `writeGuardNotice()` 渲染红色横幅列出每条 `check` 与层，并在横幅在场时**不再弹确认框**（写动作在 UI 即被挡）。
 - **顺序**：写路由里自检**在**个人树策略门（`assert_outside_personal_trees`）**之后** —— 指向个人树的符号链接技能根
   仍报更具体的 `blocked-personal-dir`，不被泛化的守门拒绝盖掉。
 
-### 11.3 承重证据（自检移除/短路即变红）
+### 11.4 承重证据（保留项：移除/短路即变红；实测，改后逐条重跑）
 
-| 反证 | 结果 |
+| 反证（对保留项做的一次性突变，跑完即回滚，文件 sha256 逐字复原） | 结果 |
 |---|---|
-| 把 `write_path_guard` 对 `run_startup_self_check` 的取值**短路成恒 `ok`** | 5 条结构反例测试（符号链接根 / 符号链接记录 / 不可读记录 / 记录是目录 / 五写路径计数）**全部变红** |
-| 把 `_install_skill` 里那一处 `_require_write_guard(...)` 调用**删掉** | 探针测试 `test_every_write_route_consults_the_write_guard` 变红（咨询计数 `3 != 5`） |
+| 把 `check_skills_root_chain` 的 `is_symlink` 短路成恒 `False` | `test_symlinked_skills_root_is_refused_with_zero_disk_change` + `test_symlink_in_the_path_chain_above_the_store_is_refused` **2 条变红** |
+| 删掉 `path-lstat-failed` 分支（`except OSError: continue`） | `test_a_chain_component_that_cannot_be_inspected_is_fail_closed` **变红** |
+| 删掉 `store-unresolved` 分支（`if False:`） | `test_store_unresolved_is_fail_closed` **变红** |
+| 删掉 `_uninstall_skill` 里那一处 `_require_write_guard(...)` 调用 | `test_every_write_route_consults_the_write_guard` **变红**（咨询计数 `4 != 5`） |
 
 另有常驻探针：`test_the_guard_is_what_refuses_a_redirected_store`（短路自检后那条拒绝**消失**且真的落到仓外 ⇒ 证明拒绝来自自检本身）；
 `test_the_guard_is_consulted_at_the_single_enforcement_point`（源码级：写入口必须都汇到唯一执行点）。
 
-### 11.4 覆盖与仍拦不住的（如实）
+### 11.5 覆盖与仍拦不住的（如实）
 
-- **拦得住**：技能根自身是链接（0072 的我方路径）、路径链上任何一层是链接、取用记录是链接/目录/设备、记录不可读、记录权限过宽。
+- **拦得住**：技能根自身是链接（0072 的我方路径）、路径链上任何一层是链接。
+- **不再拦（如实，且刻意）**：引擎取用记录的结构异常（是链接 / 目录 / 设备 / 权限过宽 / 读不出）**不再阻止写**。
+  代价与理由见 §11.2：这些不是「引擎会落到仓外」的同量级后果；其可读性/损坏面仍由 `lockNote` 与内容门如实呈现。
 - **仍拦不住**：**格式合法、形状自洽的手改锁条目**（0073 的核心形态）——引擎的 `uninstall_skill` 仍会按那条自洽的
-  `name`+`install_path` `rmtree`。我们**不**自造落点判定去拦（§9.2），只拒结构不可信。
-  残留面与 0073 原文一致：需先对本机企业 home 有写权限。**该条仍留在 KI 台账（0073），未闭合。**
+  `name`+`install_path` `rmtree`。我们**不**自造落点判定去拦（§9.2）。**该条仍留在 KI 台账（0073），未闭合。**
 - 另注：自检**不缓存通过**——「启动自检」= 首次就绪（首次请求）时的求值，此后每次写都重算（几处 `lstat`），
   故启动之后才种下的链接会在下一次写被抓住。
+
+### 11.6 跨仓待改点（批 3 文档，**仅报不改**，避免并行冲突）
+
+批 3 需求载体在**另一仓**：`spec-library/docs/plankton/`（`event-20261006-plankton-session-packs` + 对应 N2/N7；
+见 `PLANKTON-MIGRATION.md` §3「批 3」）。本仓不改它。建议改动点：
+
+1. 若批 3 文档引用了「技能写路径启动自检（6 项 / 含取用记录结构门）」，一律改为**「只保留路径链检查」**，
+   并把理由写为 Perry 口径：「自检内容不宜过多，否则门禁将远重于功能本身」。
+2. 若批 3 文档把「引擎取用记录是符号链接 / 非常规 / 权限过宽」列为**写前门禁**，改述为**如实上报事实**
+   （读路径 `lockNote` 可见），并注明记录结构**不再**阻止写。
+3. 若批 3 文档按旧口径列出 `write-guard-failed` 的触发条件，收敛为：**技能根或路径链上存在符号链接**
+   （外加 fail-closed 前置 `path-lstat-failed` / `store-unresolved`）。

@@ -72,9 +72,12 @@ silently collapsed into "no skills"):
   ``local-edits``.
 
 The startup self-check (see the ``STARTUP SELF-CHECK`` section below) adds ONE
-more kind, ``write-guard-failed``: the skill store's path chain or the engine's
-install record failed a fail-closed structural check, so EVERY write route
-refuses. The read routes keep working and carry the verdict in ``writeGuard``.
+more kind, ``write-guard-failed``: the skill store's OWN path chain — the store
+root, or any component between it and the enterprise home — contains a symbolic
+link, so EVERY write route refuses. That redirect is the one structural defect
+with a real consequence (the engine would otherwise land a bundle OUTSIDE the
+store and answer success). The read routes keep working and carry the verdict in
+``writeGuard``.
   ``local-edits`` is the ONE gate that also covers "cannot decide": the write
   guard lets a landing be replaced only on a CONFIRMED "no local edits"
   (``engine_local_edits`` returning ``False`` — a record whose hash attests the
@@ -106,7 +109,6 @@ import json
 import logging
 import os
 import shutil
-import stat
 import subprocess
 import time
 import urllib.request
@@ -443,31 +445,36 @@ def _enterprise_home_usable(home: Path) -> Tuple[bool, str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STARTUP SELF-CHECK — the enterprise layer's fail-closed answer to the two
-# engine gaps that the engine itself refuses to close
+# STARTUP SELF-CHECK — a MINIMAL, fail-closed path-chain guard
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# WHY THIS EXISTS (Perry 2026-10: 引擎不肯改的两处缺口，改由我们这层
-# “强制不可变 + 启动自检”堵住 — 机器契约优于事后巡检)
+# WHY ONLY THE PATH CHAIN (Perry 2026-10: 门禁不宜重于功能)
 # ---------------------------------------------------------------------------
-# Two defects live BELOW this plugin, inside the engine's own skill-management
-# entry points (registered as KI-PLANKTON-0072 / KI-PLANKTON-0073):
+# ONE defect below this plugin has a real consequence (KI-PLANKTON-0072): the
+# engine's ``tools.skills_hub_install._resolve_lock_install_path`` walks the
+# components BELOW ``SKILLS_DIR`` and never inspects the store root itself
+# (``Path.resolve()`` flattens it). So making ``<HERMES_HOME>/skills`` — or any
+# component between the store and the enterprise home — a symlink to a directory
+# OUTSIDE the store makes the engine land a bundle 仓外 and answer success,
+# through OUR routes, with ``ok: true`` (verified — batch-2 §11 evidence).
 #
-#   1. ``tools.skills_hub_install._resolve_lock_install_path`` walks the
-#      COMPONENTS BELOW ``SKILLS_DIR`` and never inspects the store root itself
-#      (``Path.resolve()`` flattens it). So making ``<HERMES_HOME>/skills`` a
-#      symlink to a directory OUTSIDE the store makes the engine land a bundle
-#      仓外 and answer success — through our routes, with ``ok: true``.
-#   2. The engine's install record (``skills/.hub/lock.json``) is trusted as
-#      written: a hand-edited, self-consistent entry aims the engine's ``rmtree``
-#      at any directory under ``skills/``. A REDIRECTED record (a symlink) is the
-#      same class of tamper at the file level.
+# Every other structural "check" an earlier iteration carried (is the engine's
+# install record a regular / readable / sanely-permissioned file?) has NO
+# comparable consequence and is deliberately NOT a gate any more. Gating it grew
+# a machine-gate far heavier than the feature it guarded ("门禁不宜重于功能"),
+# while the record's real problems — unreadable, corrupt, absent — are ALREADY
+# reported truthfully by the existing engine probe (``_probe_lock_file`` →
+# ``lockNote``) and the existing content gates (``local-edits`` / ``no-record``
+# with the explicit overwrite ack). Those checks were removed outright, not
+# downgraded, so no second drifting opinion of the record survives here.
 #
-# We do not re-implement landing semantics (§9.2: no second implementation to
-# drift from). What we DO own is whether OUR write routes are allowed to run at
-# all against a store/record shaped like that. So this is a STRUCTURAL,
-# fail-closed self-check consulted by every write route, plus a verdict the read
-# page shows — never a silent downgrade.
+# WHAT THIS IS (and is not)
+# ---------------------------------------------------------------------------
+# A STRUCTURAL, fail-closed self-check consulted by every write route, plus a
+# verdict the read page shows — never a silent downgrade. It does NOT re-
+# implement landing semantics (§9.2: no second implementation to drift from);
+# it only decides whether OUR write routes may run against a store whose path
+# chain contains a redirect.
 #
 # TRUST BOUNDARY — why the walk starts at ``HERMES_HOME``'s PARENT
 # -------------------------------------------------------------------
@@ -479,17 +486,12 @@ def _enterprise_home_usable(home: Path) -> Tuple[bool, str]:
 
 SELF_CHECK_KIND = "write-guard-failed"
 
-# Which structural checks exist. Kept as a closed set so the UI/report can never
-# render an unrecognised finding as "fine".
+# The closed set of checks this guard can raise. Closed so the UI/report can
+# never render an unrecognised finding as "fine".
 SELF_CHECK_NAMES = (
-    "symlink-in-path-chain",   # skills root itself, or a component of the chain
+    "symlink-in-path-chain",   # the store root itself, or a component above it
     "path-lstat-failed",       # a chain component could not be inspected
-    "record-is-symlink",       # skills/.hub/lock.json is a redirect
-    "record-not-regular",      # …is a directory / device / fifo / socket
-    "record-too-permissive",   # group- or world-writable
-    "record-unreadable",       # open()/read() failed
-    "record-lstat-failed",     # the record could not be stat'ed
-    "store-unresolved",        # engine home / skills store could not be named
+    "store-unresolved",        # the store/home could not be named (precondition)
 )
 
 
@@ -566,133 +568,11 @@ def check_skills_root_chain(home: Path, skills_path: Path,
     return {"ok": not findings, "findings": findings, "boundary": str(base), "checked": checked}
 
 
-def _record_path(skills_path: Path) -> Path:
-    """The engine's install record — its OWN ``_lock_file()``, else the documented
-    ``<skills>/.hub/lock.json``. Never a path we invent outside the store.
+def run_startup_self_check(home: Optional[Path] = None, skills_path: Optional[Path] = None) -> dict:
+    """The whole verdict: the store's path chain. Pure, never writes.
 
-    The engine resolves ``_lock_file()`` from the PROCESS home, so when the store
-    under inspection is not that home's store (an explicit argument, e.g. a test
-    or a caller passing a different store) the check must stay consistent with
-    the store it is inspecting rather than silently reading someone else's lock.
-    """
-    fallback = Path(skills_path) / ".hub" / "lock.json"
-    engine_path = _engine_lock_path()
-    if engine_path is None:
-        return fallback
-    engine_path = Path(engine_path)
-    try:
-        engine_path.relative_to(_lexical(skills_path))
-    except ValueError:
-        return fallback
-    return engine_path
-
-
-def _file_kind(mode: int) -> str:
-    if stat.S_ISDIR(mode):
-        return "directory"
-    if stat.S_ISCHR(mode):
-        return "character-device"
-    if stat.S_ISBLK(mode):
-        return "block-device"
-    if stat.S_ISFIFO(mode):
-        return "fifo"
-    if stat.S_ISSOCK(mode):
-        return "socket"
-    return "other"
-
-
-def check_install_record(record_path: Path) -> dict:
-    """Assert the engine's install record is a regular, sanely-permissioned,
-    READABLE file — never a redirect, a directory or a device.
-
-    Content SEMANTICS (is it valid JSON? is the shape ``{version, installed}``?)
-    are deliberately NOT fail-closed here: the existing content gates already
-    handle them, and they must stay reachable (a corrupt record still refuses
-    writes with ``local-edits``/``no-record`` unless the user explicitly acks an
-    overwrite — see ``_probe_lock_file``). This check is the STRUCTURAL gate: the
-    file must BE the engine's record and nothing else. Parseability is still
-    reported (``parseable``) so the page can show it.
-    """
-    path = Path(record_path)
-    try:
-        info = path.lstat()
-    except FileNotFoundError:
-        return {"ok": True, "findings": [], "notes": [], "path": str(path),
-                "exists": False, "kind": None, "mode": None, "parseable": None}
-    except OSError as exc:  # noqa: BLE001
-        return {"ok": False, "notes": [], "path": str(path), "exists": False,
-                "kind": None, "mode": None, "parseable": None,
-                "findings": [{
-                    "check": "record-lstat-failed", "layer": "install-record",
-                    "path": str(path), "message": f"引擎取用记录无法检查（{exc}）",
-                }]}
-
-    mode = info.st_mode
-    mode_bits = stat.S_IMODE(mode)
-    findings: list = []
-    notes: list = []
-
-    if stat.S_ISLNK(mode):
-        try:
-            target = os.readlink(path)
-        except OSError:
-            target = "?"
-        findings.append({
-            "check": "record-is-symlink", "layer": "install-record",
-            "path": str(path), "linkTarget": str(target),
-            "message": f"引擎取用记录是一个符号链接，指向 {target}（记录必须是本目录里的常规文件）",
-        })
-        return {"ok": False, "findings": findings, "notes": notes, "path": str(path),
-                "exists": True, "kind": "symlink", "mode": oct(mode_bits),
-                "parseable": None}
-
-    if not stat.S_ISREG(mode):
-        kind = _file_kind(mode)
-        findings.append({
-            "check": "record-not-regular", "layer": "install-record",
-            "path": str(path), "fileKind": kind,
-            "message": f"引擎取用记录不是常规文件（实际是 {kind}）",
-        })
-
-    if mode_bits & (stat.S_IWGRP | stat.S_IWOTH):
-        findings.append({
-            "check": "record-too-permissive", "layer": "install-record",
-            "path": str(path), "mode": oct(mode_bits),
-            "message": f"引擎取用记录权限过宽（{oct(mode_bits)}，对同组/其他用户可写）",
-        })
-
-    parseable: Optional[bool] = None
-    if stat.S_ISREG(mode):
-        try:
-            raw = path.read_bytes()
-        except OSError as exc:  # noqa: BLE001
-            findings.append({
-                "check": "record-unreadable", "layer": "install-record",
-                "path": str(path),
-                "message": f"引擎取用记录读不出来（{exc}）",
-            })
-        else:
-            try:
-                json.loads(raw.decode("utf-8-sig"))
-                parseable = True
-            except (ValueError, TypeError, UnicodeDecodeError):
-                parseable = False
-                notes.append(
-                    "引擎取用记录内容不是合法 JSON：结构自检不据此拒写，既有的"
-                    "「记录损坏」提示与 local-edits / no-record 门仍负责内容语义。"
-                )
-
-    return {"ok": not findings, "findings": findings, "notes": notes, "path": str(path),
-            "exists": True, "kind": _file_kind(mode), "mode": oct(mode_bits),
-            "parseable": parseable}
-
-
-def run_startup_self_check(home: Optional[Path] = None, skills_path: Optional[Path] = None,
-                           record_path: Optional[Path] = None) -> dict:
-    """The whole verdict: path chain + install record. Pure, never writes.
-
-    Returns ``{ok, findings, notes, ...}``. ``ok is False`` means the write
-    routes must refuse (fail-closed); the read routes still answer and carry it.
+    Returns ``{ok, findings, ...}``. ``ok is False`` means the write routes must
+    refuse (fail-closed); the read routes still answer and carry it.
     """
     resolved_home = Path(home) if home is not None else _hermes_home()
     resolved_skills = Path(skills_path) if skills_path is not None else engine_skills_dir()
@@ -704,29 +584,21 @@ def run_startup_self_check(home: Optional[Path] = None, skills_path: Optional[Pa
                 "check": "store-unresolved", "layer": "engine-home",
                 "message": f"无法确定{missing}，写路径自检无法成立（fail-closed）",
             }],
-            "notes": [], "home": None if resolved_home is None else str(resolved_home),
+            "home": None if resolved_home is None else str(resolved_home),
             "skillsPath": None if resolved_skills is None else str(resolved_skills),
-            "recordPath": None, "boundary": None,
+            "boundary": None,
             "checkedAt": int(time.time() * 1000),
         }
 
     chain = check_skills_root_chain(resolved_home, resolved_skills)
-    record = check_install_record(Path(record_path) if record_path is not None
-                                  else _record_path(resolved_skills))
-    findings = list(chain["findings"]) + list(record["findings"])
     return {
-        "ok": not findings,
-        "kind": None if not findings else SELF_CHECK_KIND,
-        "findings": findings,
-        "notes": list(record.get("notes") or []),
+        "ok": not chain["findings"],
+        "kind": None if not chain["findings"] else SELF_CHECK_KIND,
+        "findings": list(chain["findings"]),
         "home": str(resolved_home),
         "skillsPath": str(resolved_skills),
-        "recordPath": record.get("path"),
-        "recordExists": record.get("exists"),
-        "recordParseable": record.get("parseable"),
         "boundary": chain.get("boundary"),
         "pathChain": chain,
-        "record": record,
         "checkedAt": int(time.time() * 1000),
     }
 
@@ -766,8 +638,8 @@ def write_path_guard(home: Optional[Path] = None, skills_path: Optional[Path] = 
         _SELF_CHECK_LOGGED[signature] = True
         if result.get("ok"):
             logger.info(
-                "技能写路径自检通过：技能根 %s（受信边界 %s）· 取用记录 %s",
-                result.get("skillsPath"), result.get("boundary"), result.get("recordPath"),
+                "技能写路径自检通过：技能根 %s（受信边界 %s）",
+                result.get("skillsPath"), result.get("boundary"),
             )
         else:
             logger.error(
@@ -785,7 +657,6 @@ def _write_guard_refusal(guard: dict, **context: Any) -> dict:
         "findings": guard.get("findings") or [],
         "checks": [str(f.get("check")) for f in guard.get("findings") or []],
         "skillsPath": guard.get("skillsPath"),
-        "recordPath": guard.get("recordPath"),
         "boundary": guard.get("boundary"),
     }
     detail.update(context)
@@ -1268,8 +1139,8 @@ def list_skills() -> dict:
         return _failure("engine-unavailable", "引擎未提供技能目录（hermes_constants.get_skills_dir 不可用）", None, "missing")
 
     # The write-path self-check verdict — computed on FIRST READINESS (this
-    # route is the first thing the page calls) and shown, so a store/record a
-    # write would be refused against is never a surprise. The read surface keeps
+    # route is the first thing the page calls) and shown, so a store a write
+    # would be refused against is never a surprise. The read surface keeps
     # working; only the write routes are gated.
     write_guard = write_path_guard(home, skills_path)
 
@@ -1783,9 +1654,9 @@ def _uninstall_skill(data: UninstallRequest) -> dict:
     except ValueError as exc:
         return {"ok": False, "kind": "blocked-personal-dir", "detail": {"message": str(exc), "skillsPath": str(skills_path)}}
 
-    # Fail-closed write-path self-check — a redirected store root or a redirected
-    # record is exactly the shape the engine's `rmtree` must never be aimed at
-    # through our routes (KI-PLANKTON-0072 / 0073).
+    # Fail-closed write-path self-check — a redirected store root (or a redirect
+    # on the chain between it and the enterprise home) is exactly the shape the
+    # engine must never be allowed to land a bundle through (KI-PLANKTON-0072).
     refusal = _require_write_guard(home, skills_path, reference=reference,
                                    installPath=(data.installPath or "").strip())
     if refusal is not None:
