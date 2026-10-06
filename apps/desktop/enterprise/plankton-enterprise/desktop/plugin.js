@@ -1477,15 +1477,6 @@ function readbackValuesMatch(actual, intent, mode) {
  *   - 任一意图字段既不在 `check` 也不在 `unreadable` ⇒ `readback-intent-uncovered`（装载期本应拦下）。
  * 返回 `null` ＝ 通过（调用方随后按意图字段逐条比对 ⇒ 能到那儿就至少有 1 个字段被比中）。
  */
-
-/**
- * **意图判据**（W4 复核 P4 正解）：确认只能来自本次真正要写的字段。
- *   - 意图字段为空 ⇒ 没有可确认的东西（`readback-no-field-checked`）；
- *   - 任一意图字段登记为 `unreadable` ⇒ `readback-intent-unreadable`：这次要写的字段读不回来，
- *     哪怕卡片里另有一个**没改**的字段能比中，也不得算确认（「拿未改字段当担保」就是 P4 的假通路）；
- *   - 任一意图字段既不在 `check` 也不在 `unreadable` ⇒ `readback-intent-uncovered`（装载期本应拦下）。
- * 返回 `null` ＝ 通过（调用方随后按意图字段逐条比对 ⇒ 能到那儿就至少有 1 个字段被比中）。
- */
 function readbackIntentRefusal(intent, checkByField, unreadable) {
   if (intent.length === 0) return { ok: false, reason: 'readback-no-field-checked', checked: [] }
   const blind = intent.filter((field) => unreadable.has(field))
