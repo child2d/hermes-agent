@@ -32,13 +32,17 @@ points, called IN-PROCESS:
   install records   ``tools.skills_hub.HubLockFile`` (``skills/.hub/lock.json``)
 
 Consequence, by construction: **this module contains no landing computation,
-no containment check, no ``rmtree``, no atomic write, no hard-link check, no
-case/Unicode landing key and no ledger of its own.** Those boundaries are the
-engine's; a defect in them is a defect in the engine, not a second
-implementation we can drift from. The deduplication is deliberate — see
-``apps/desktop/PLANKTON-MIGRATION-BATCH2.md`` §8.3 for the responsibility split
-and for the one engine gap this delegation leaves open (a symlinked skills
-ROOT is not refused by ``_resolve_lock_install_path``).
+no containment check, no atomic write, no hard-link check, no case/Unicode
+landing key and no ledger of its own.** The ONLY ``rmtree`` here clears OUR own
+staging input — the quarantine path the engine's ``quarantine_bundle`` returned
+to us — as hygiene on an early return; it is never aimed at a landing. Those
+landing/mutation boundaries are the engine's; a defect in them is a defect in
+the engine, not a second implementation we can drift from. The deduplication is
+deliberate — see ``apps/desktop/PLANKTON-MIGRATION-BATCH2.md`` §9.2 for the
+responsibility split and §9.4 for the two engine gaps this delegation leaves
+open (a symlinked skills ROOT is not refused by ``_resolve_lock_install_path``;
+a hand-edited lock entry can aim the engine's ``rmtree`` at any directory under
+``skills/``).
 
 Where the plugin no longer keeps state: the engine's ``lock.json`` carries
 name / source / identifier / trust_level / scan_verdict / content_hash /
@@ -64,7 +68,8 @@ silently collapsed into "no skills"):
   ``blocked-personal-dir`` / ``enterprise-home-unavailable`` /
   ``engine-unavailable`` / ``engine-refused`` / ``blocked-by-scan`` /
   ``hash-unavailable`` / ``no-record`` / ``remove-failed`` / ``write-failed``
-  / ``essential-skill`` / ``not-effective`` / ``unreadable-config``.
+  / ``essential-skill`` / ``not-effective`` / ``unreadable-config`` /
+  ``local-edits``.
 An EMPTY catalog is a SUCCESS (``{ok: true, catalog: {ok: true, count: 0}}``).
 A catalog capped at the page limit is a SUCCESS that carries ``truncated: true``
 — never silently read as the whole catalog.
@@ -139,6 +144,10 @@ FAILURE_KINDS = (
     "essential-skill",
     "not-effective",
     "unreadable-config",
+    # The overwrite guard: an update/install onto a landing whose on-disk content
+    # no longer matches the engine's recorded hash, without an explicit
+    # acknowledgement. Distinct so the UI can never render it as a generic failure.
+    "local-edits",
 )
 
 # Tokens that mark a CLI failure as an AUTH problem (distinct from a network or
@@ -359,6 +368,11 @@ class InstallRequest(BaseModel):
     # ``confirm`` is the human-confirmation latch: EVERY write route refuses
     # without it (the UI always sends it after its confirmation dialog).
     confirm: bool = False
+    # Explicit acknowledgement that this write may rmtree-replace content the
+    # user edited locally (on-disk hash ≠ the engine's recorded hash). The UI
+    # sends it only after its dialog warns, in plain language, that the local
+    # changes will be lost. Mirrors the engine's own do_update --force choice.
+    overwriteLocalEdits: bool = False
     pickedBy: str = ""
 
 
@@ -432,26 +446,40 @@ def engine_content_hash(target: Path) -> Optional[str]:
 
 
 def plan_install_path(name: str, category: str) -> Optional[str]:
-    """The landing the ENGINE will compute for ``(name, category)``.
+    """The landing the ENGINE will compute for ``(name, category)``, or ``None``.
+
+    Thin wrapper over :func:`plan_install_path_ex` that drops the failure kind.
+    Display/comparison ONLY: nothing here is ever handed to a write. The write
+    target is decided by the engine inside ``install_from_quarantine``.
+    """
+    return plan_install_path_ex(name, category)[0]
+
+
+def plan_install_path_ex(name: str, category: str) -> Tuple[Optional[str], Optional[str]]:
+    """``(planned, engine_error_kind)`` for ``(name, category)``.
+
+    ``engine_error_kind`` is ``"engine-unavailable"`` when the engine's own
+    validation module cannot be imported (a MISSING ENGINE, not a bad name), so
+    the caller reports ``engine-unavailable`` instead of mislabelling it
+    ``bad-input``. For a name/category the engine's rules reject, the kind is
+    ``None`` (a genuine ``bad-input``).
 
     Calls the engine's own ``_validate_skill_name`` / ``_validate_install_parent_path``
     — the exact pair ``tools.skills_hub_install.install_from_quarantine`` uses to
-    build ``install_rel_path``. Returns ``None`` when the engine's rules reject
-    the pair, so a caller reports ``bad-input`` instead of guessing a landing.
-
-    Display/comparison ONLY: nothing here is ever handed to a write. The write
-    target is decided by the engine inside ``install_from_quarantine``.
+    build ``install_rel_path``.
     """
     try:
         from tools.skills_hub_models import (  # type: ignore
             _validate_install_parent_path, _validate_skill_name)
-
+    except Exception:  # noqa: BLE001 - the engine's validation module is absent
+        return None, "engine-unavailable"
+    try:
         safe_name = _validate_skill_name(str(name or ""))
         raw_category = str(category or "").strip()
         safe_category = _validate_install_parent_path(raw_category) if raw_category else ""
-    except Exception:
-        return None
-    return f"{safe_category}/{safe_name}" if safe_category else safe_name
+    except Exception:  # noqa: BLE001 - the engine's rules rejected the pair
+        return None, None
+    return (f"{safe_category}/{safe_name}" if safe_category else safe_name), None
 
 
 def read_engine_installations() -> Tuple[list, Optional[str]]:
@@ -459,16 +487,41 @@ def read_engine_installations() -> Tuple[list, Optional[str]]:
 
     This replaces the plugin's former private ledger (see the module docstring):
     the engine's lock file is the single source of truth for "what is installed,
-    where, and with what content hash". Returns ``(entries, note)``; a missing or
-    unreadable lock is reported as an empty list PLUS a note — never silently
-    treated as "nothing was ever installed without saying so".
+    where, and with what content hash".
+
+    The engine's ``_JsonStateFile._read`` SILENTLY substitutes its empty shape
+    when the file is corrupt, so from the engine's side alone a corrupt lock and
+    a never-used lock look identical. This function PROBES the file FIRST, so an
+    unreadable/corrupt lock yields an empty list PLUS a note naming the problem —
+    never a bare "0 records" that reads as "you never installed anything".
     """
+    note = _probe_lock_file()
     try:
         from tools.skills_hub import HubLockFile  # type: ignore
 
-        return list(HubLockFile().list_installed()), None
-    except Exception as exc:
-        return [], f"引擎技能锁文件读取失败，按空处理：{exc}"
+        return list(HubLockFile().list_installed()), note
+    except Exception as exc:  # noqa: BLE001
+        return [], note or f"引擎技能锁文件读取失败，按空处理：{exc}"
+
+
+def _probe_lock_file() -> Optional[str]:
+    """A note when the engine's lock file exists but is not a readable,
+    expected-shape lock; ``None`` when it is absent (never installed) or valid."""
+    path = _engine_lock_path()
+    if path is None or not path.exists():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        return f"引擎取用记录无法读取（文件不可读）：{exc}"
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError) as exc:
+        return ("引擎取用记录已损坏（不是合法 JSON）：本页的「0 条」是「读不到记录」，"
+                f"不是「从未装过」；卸载会报 no-record。{exc}")
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("installed", {}), dict):
+        return "引擎取用记录形状异常（不是预期的 {version, installed} 结构）：本页的「0 条」不可信。"
+    return None
 
 
 def _shaoke_meta(entry: dict) -> dict:
@@ -500,6 +553,44 @@ def _hash_state(recorded: Any, current: Optional[str]) -> str:
     return "match" if rec == current else "mismatch"
 
 
+def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
+    """True when the on-disk skill no longer matches the engine's recorded hash.
+
+    Uses the ENGINE's OWN predicate ``hermes_cli.skills_hub._has_local_edits`` —
+    the very gate ``hermes_cli.skills_hub.do_update`` applies so an update never
+    silently destroys the user's work. Falls back to comparing the engine's
+    recorded ``content_hash`` against the current on-disk hash (the same 逐字
+    comparison ``_hash_state`` names).
+
+    Returns ``False`` when there is no record or the content still matches,
+    ``True`` when it drifted, ``None`` when neither test can decide. ``None`` is
+    never treated as "no edits".
+    """
+    try:
+        from tools.skills_hub import HubLockFile  # type: ignore
+
+        entry = HubLockFile().get_installed(str(name))
+    except Exception:  # noqa: BLE001 - an unreadable lock means "cannot decide"
+        return None
+    if not entry:
+        return False
+    try:
+        from hermes_cli.skills_hub import _has_local_edits  # type: ignore
+
+        return bool(_has_local_edits(entry))
+    except Exception:  # noqa: BLE001 - fall through to our own comparison
+        pass
+    skills_path = engine_skills_dir()
+    target = (skills_path / install_rel) if (skills_path and install_rel) else None
+    current = engine_content_hash(target) if (target is not None and target.is_dir()) else None
+    state = _hash_state(entry.get("content_hash"), current)
+    if state == "match":
+        return False
+    if state == "mismatch":
+        return True
+    return None
+
+
 def _lock_entry_view(entry: dict, skills_path: Optional[Path], disabled_set: set) -> dict:
     """One engine lock entry, rendered for the page (engine facts only)."""
     install_path = str(entry.get("install_path") or "")
@@ -527,6 +618,9 @@ def _lock_entry_view(entry: dict, skills_path: Optional[Path], disabled_set: set
         "onDisk": on_disk,
         "localHash": current,
         "hashState": _hash_state(entry.get("content_hash"), current),
+        # The engine's own local-change signal (recorded ≠ on-disk). Drives the
+        # update overwrite warning; `mismatch` is the same fact `hashState` names.
+        "localEdits": _hash_state(entry.get("content_hash"), current) == "mismatch",
         "disabled": (name in disabled_set) if disabled_set is not None else None,
     }
 
@@ -562,6 +656,30 @@ def _classify_cli_failure(returncode: int, stdout: str, stderr: str) -> Tuple[st
     return "cli-failed", f"shaoke-cli 退出码 {returncode}"
 
 
+def _envelope_error_kind(parsed: dict) -> Optional[str]:
+    """Classify an ERROR that rides a JSON envelope on a rc=0 exit.
+
+    Some CLI paths exit 0 yet put the error INSIDE the envelope (``ok:false`` or
+    an ``error`` object). Reading that as an ordinary payload would surface a
+    bogus ``shape-mismatch`` ("missing data.items") for what is really an
+    unauthorized / network failure. Returns ``unauthorized`` / ``network-failed``
+    when the envelope's own words name them, else ``None`` (leave it to the
+    shape checks). A well-formed ``ok:true`` payload never matches.
+    """
+    if not isinstance(parsed, dict):
+        return None
+    if parsed.get("ok") is not False and "error" not in parsed:
+        return None
+    blob = json.dumps(parsed, ensure_ascii=False).lower()
+    for token in _UNAUTH_TOKENS:
+        if token in blob:
+            return "unauthorized"
+    for token in _NETWORK_TOKENS:
+        if token in blob:
+            return "network-failed"
+    return None
+
+
 def _run_cli_json(cli_path: str, args: list, timeout_s: int = SKILL_CLI_TIMEOUT_S) -> dict:
     """Run a CLI command and parse its JSON envelope.
 
@@ -587,6 +705,15 @@ def _run_cli_json(cli_path: str, args: list, timeout_s: int = SKILL_CLI_TIMEOUT_
         return {"ok": False, "kind": "not-json", "detail": {"raw": _excerpt(stdout)}}
     if not isinstance(parsed, dict):
         return {"ok": False, "kind": "shape-mismatch", "detail": {"raw": _excerpt(stdout)}}
+    # rc=0 but the envelope itself carries the error → classify it, don't let the
+    # missing data.items turn an auth/network failure into a "shape-mismatch".
+    envelope_kind = _envelope_error_kind(parsed)
+    if envelope_kind:
+        return {
+            "ok": False,
+            "kind": envelope_kind,
+            "detail": {"message": f"CLI 以退出码 0 返回了错误信封（{envelope_kind}）", "raw": _excerpt(stdout)},
+        }
     return {"ok": True, "parsed": parsed}
 
 
@@ -740,9 +867,17 @@ def list_skills() -> dict:
     disabled_names = set(disabled_info.get("names") or []) if disabled_info.get("ok") else set()
 
     installed: list = [
-        _lock_entry_view(entry, skills_path, disabled_names)
-        for entry in sorted(lock_entries, key=lambda e: str(e.get("name") or ""))
-        if entry.get("managedByApp", True) is not False
+        view
+        for view in (
+            _lock_entry_view(entry, skills_path, disabled_names)
+            for entry in sorted(lock_entries, key=lambda e: str(e.get("name") or ""))
+        )
+        # Filter on the COMPUTED view: the raw engine entry has no `managedByApp`
+        # key, so testing it there was dead code that never excluded anything. The
+        # panel is scoped to skills THIS app handed the engine (source ==
+        # ENGINE_SOURCE); engine-hub installs the user made themselves are not
+        # enterprise pickups.
+        if view.get("managedByApp") is not False
     ]
 
     # Catalog — may fail; the failure is surfaced, never hidden.
@@ -799,6 +934,7 @@ def list_skills() -> dict:
                 "recordedVersion": str(_shaoke_meta(effective_entry).get("version") or "") if effective_entry else "",
                 "localHash": current,
                 "hashState": _hash_state(entry.get("content_hash"), current) if entry else None,
+                "localEdits": bool(entry) and on_disk and _hash_state(entry.get("content_hash"), current) == "mismatch",
                 "disabled": disabled_flag,
                 # Engine facts the UI uses to warn before an overwrite: the slot
                 # exists on disk but no engine record of ours claims it.
@@ -961,8 +1097,16 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
     if not slug:
         return {"ok": False, "kind": "bad-input", "detail": {"reason": "slug 为空"}}
     reference = (data.reference or "").strip() or slug
-    planned = plan_install_path(data.name, data.category)
+    planned, plan_error = plan_install_path_ex(data.name, data.category)
     if not planned:
+        if plan_error == "engine-unavailable":
+            # A MISSING engine validation module is not a bad name: report the
+            # engine as unavailable rather than mislabelling it bad-input.
+            return {
+                "ok": False,
+                "kind": "engine-unavailable",
+                "detail": {"reason": "引擎的落点校验模块不可用（tools.skills_hub_models 导入失败），无法判定落点"},
+            }
         return {
             "ok": False,
             "kind": "bad-input",
@@ -990,6 +1134,25 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
         assert_outside_personal_trees(skills_path)
     except ValueError as exc:
         return {"ok": False, "kind": "blocked-personal-dir", "detail": {"message": str(exc), "skillsPath": str(skills_path)}}
+
+    # Q1 overwrite guard — the ENGINE's own local-change criterion
+    # (``hermes_cli.skills_hub._has_local_edits``, the gate ``do_update`` applies).
+    # Replacing a landing whose on-disk content no longer matches the engine's
+    # recorded hash would rmtree-destroy the user's edits, so it must be an
+    # EXPLICIT, separately-acknowledged choice — a bare ``confirm`` is not enough.
+    if not data.overwriteLocalEdits:
+        edits = engine_local_edits(str(data.name), planned)
+        if edits is True:
+            return {
+                "ok": False,
+                "kind": "local-edits",
+                "detail": {
+                    "reason": "本地已修改：磁盘内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些改动；"
+                              "确认覆盖需显式带 overwriteLocalEdits:true。",
+                    "name": str(data.name),
+                    "installPath": planned,
+                },
+            }
 
     cli_path, cli_source = resolve_cli()
     if cli_path is None:
@@ -1250,38 +1413,46 @@ def _set_skill_enabled(name: str, enabled: bool) -> dict:
     return {"ok": True, "name": skill_name, "enabled": bool(enabled), "disabled": sorted(persisted)}
 
 
+# ── HTTP route handlers ──────────────────────────────────────────────────────
+# Named with a ``route_`` prefix on purpose (Q9): the engine has its own
+# ``uninstall_skill`` (tools.skills_hub_install) and a reader could otherwise
+# mis-reference the wrong one. The path/route id is the contract; the symbol
+# name is only there to keep OUR handler distinct from the engine's.
+
 @router.post("/skills/install")
-def install_skill(data: InstallRequest) -> dict:
+def route_install_skill(data: InstallRequest) -> dict:
     """Install one skill into the engine's skills store (via the engine).
 
     Installing writes files, so the backend REQUIRES ``confirm:true`` — the UI
     always sends it after its confirmation dialog, and a direct call without it
-    is refused rather than silently writing.
+    is refused rather than silently writing. An install whose landing already
+    holds locally-edited content ALSO requires ``overwriteLocalEdits:true``.
     """
     return _install_skill(data, require_confirm=True)
 
 
 @router.post("/skills/update")
-def update_skill(data: InstallRequest) -> dict:
+def route_update_skill(data: InstallRequest) -> dict:
     """Update = hand the ENGINE a freshly downloaded bundle for the same landing.
 
     The engine's own update CHECK (``check_for_skill_updates``) resolves through
     its hub adapters and can never match our ``shaoke-skillhub`` source (it
     reports such an entry as ``unavailable``), so an update is an engine install
     of fresh bytes. It overwrites the landing by definition, so it REQUIRES
-    ``confirm:true``.
+    ``confirm:true``; when the landing holds locally-edited content it ALSO
+    requires ``overwriteLocalEdits:true`` (the engine's own local-change rule).
     """
     return _install_skill(data, require_confirm=True)
 
 
 @router.post("/skills/uninstall")
-def uninstall_skill(data: UninstallRequest) -> dict:
+def route_uninstall_skill(data: UninstallRequest) -> dict:
     """Uninstall through the engine's own entry; the engine drops its record too."""
     return _uninstall_skill(data)
 
 
 @router.post("/skills/enable")
-def enable_skill(data: ToggleRequest) -> dict:
+def route_enable_skill(data: ToggleRequest) -> dict:
     """Re-enable a skill through the engine's own enable state."""
     if not data.confirm:
         return {"ok": False, "kind": "needs-confirm", "detail": {"reason": "启用会写引擎配置，必须带 confirm:true", "name": data.name}}
@@ -1289,7 +1460,7 @@ def enable_skill(data: ToggleRequest) -> dict:
 
 
 @router.post("/skills/disable")
-def disable_skill(data: ToggleRequest) -> dict:
+def route_disable_skill(data: ToggleRequest) -> dict:
     """Disable a skill through the engine's own enable state."""
     if not data.confirm:
         return {"ok": False, "kind": "needs-confirm", "detail": {"reason": "停用会写引擎配置，必须带 confirm:true", "name": data.name}}

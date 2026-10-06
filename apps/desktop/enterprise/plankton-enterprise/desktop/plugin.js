@@ -74,7 +74,8 @@ const SKILL_FAILURE_COPY = {
   'essential-skill': '这是引擎的必备技能（essential），无法停用',
   'not-effective': '写入未生效：引擎持久化的状态未变成请求的状态',
   'request-failed': '请求失败（网络或后端异常）',
-  'no-record': '引擎的取用记录里没有这条技能，本页只卸载引擎记录在案的技能',
+  'no-record': '引擎的取用记录里没有这条技能，本页只卸载引擎记录在案的技能（若记录文件损坏，请见页面顶部的读取失败提示）',
+  'local-edits': '本地已修改：磁盘内容与引擎取用记录不一致。继续更新会覆盖并丢失这些改动，需你确认覆盖',
   'unreadable-config': '引擎配置读取失败，启停开关已禁用',
   'engine-unavailable': '引擎技能配置模块不可用，无法改启停'
 }
@@ -299,6 +300,33 @@ export function summarizeBatchUpdate(results) {
   }
 }
 
+/**
+ * The confirmation COPY for an install / update (F: a write never fires on the
+ * first click; and when the landing holds local edits the dialog names the loss
+ * in plain language, never just a hash marker). Exported so the wording — and
+ * the destructive flag — can be asserted directly.
+ *
+ * `localEdits` is the backend's engine-derived fact; `hashState: 'mismatch'` is
+ * the same signal computed on the page, so either one turns on the warning.
+ */
+export function writeConfirmCopy(action, skill) {
+  const localEdits = Boolean(skill.localEdits || skill.hashState === 'mismatch')
+  return {
+    localEdits,
+    title: action === 'update' ? `更新技能「${skill.name}」？` : `取用技能「${skill.name}」？`,
+    description:
+      (localEdits
+        ? `⚠ 本地已修改：磁盘上的内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些本地改动。`
+        : '') +
+      `将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：${skill.installPath}。` +
+      (skill.onDisk && !skill.ownedByEngine
+        ? `注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。`
+        : '') +
+      `企业侧技能目录之外的任何内容都不会被改动。`,
+    destructive: localEdits
+  }
+}
+
 function SkillMarketPage({ ctx }) {
   const [state, setState] = useState({ phase: 'loading' })
   const [query, setQuery] = useState('')
@@ -317,10 +345,14 @@ function SkillMarketPage({ ctx }) {
 
   const call = (path, body) => ctx.rest(path, { method: 'POST', body })
 
+  // A failed write reports its typed reason; when the engine's install record
+  // could not be read, that note rides along so a "no-record" is never read as
+  // "you never installed anything".
   const describeResult = (kind, result) => {
     if (result && result.ok) return null
     const k = (result && result.kind) || kind
-    return `${SKILL_FAILURE_COPY[k] || '操作失败'} — ${k}`
+    const note = result && result.detail && result.detail.lockNote
+    return `${SKILL_FAILURE_COPY[k] || '操作失败'} — ${k}${note ? `（引擎取用记录读取失败：${note}）` : ''}`
   }
 
   // Every write funnels through here AFTER a confirmation dialog.
@@ -331,7 +363,11 @@ function SkillMarketPage({ ctx }) {
       name: skill.name || '',
       category: skill.category || '',
       version: skill.version || '',
-      confirm: true
+      confirm: true,
+      // The dialog above warns in plain language when local edits exist; this is
+      // the explicit acknowledgement the backend requires before it overwrites
+      // them (it refuses with `local-edits` otherwise).
+      overwriteLocalEdits: Boolean(skill.localEdits || skill.hashState === 'mismatch')
     }
     const endpoint = action === 'install' ? '/skills/install' : action === 'update' ? '/skills/update' : null
     if (endpoint) {
@@ -382,15 +418,11 @@ function SkillMarketPage({ ctx }) {
       })
       return
     }
+    const copy = writeConfirmCopy(action, skill)
     setConfirm({
-      title: action === 'update' ? `更新技能「${skill.name}」？` : `取用技能「${skill.name}」？`,
-      description:
-        `将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：${skill.installPath}。` +
-        (skill.onDisk && !skill.ownedByEngine
-          ? `注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。`
-          : '') +
-        `企业侧技能目录之外的任何内容都不会被改动。`,
-      destructive: false,
+      title: copy.title,
+      description: copy.description,
+      destructive: copy.destructive,
       run: () => perform(action, skill)
     })
   }
@@ -454,6 +486,10 @@ function SkillMarketPage({ ctx }) {
   const installedLedger = Array.isArray(data.installed) ? data.installed : []
   const catalog = data.catalog || { ok: false, kind: 'unknown' }
   const disabledNotice = data.disabled && data.disabled.ok === false ? data.disabled : null
+  // The engine's own lock swallows a corrupt read into its empty shape, so the
+  // backend PROBES the file and hands us a note. Rendered explicitly: without
+  // it, a corrupt record would read as "0 条" = "you never installed anything".
+  const lockNote = typeof data.lockNote === 'string' && data.lockNote ? data.lockNote : null
   const q = query.trim().toLowerCase()
   const skills = q
     ? all.filter(s => `${s.name} ${s.slug} ${s.category} ${s.description} ${(s.tags || []).join(' ')}`.toLowerCase().includes(q))
@@ -464,11 +500,20 @@ function SkillMarketPage({ ctx }) {
   return jsxs('div', { style: S.page, children: [
     jsx('h1', { style: S.title, children: '企业技能市场' }),
     jsxs('div', { style: S.meta, children: [
-      `来源：企业 SkillHub（经 shaoke-cli skillhub）· 已审技能 ${catalog.ok ? catalog.count : '—'} 条 · 引擎取用记录 ${installedLedger.length} 条`,
+      `来源：企业 SkillHub（经 shaoke-cli skillhub）· 已审技能 ${catalog.ok ? catalog.count : '—'} 条 · 引擎取用记录 ${lockNote ? '读取失败（见下方提示，非“从未装过”）' : `${installedLedger.length} 条`}`,
       jsx('br', {}),
       `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 技能落点 ${data.skillsPath || '未知'}${when ? ` · ${when}` : ''}`
     ] }),
     jsx(Banner, { banner }),
+
+    // A corrupt/unreadable engine record is INDEPENDENTLY visible and never
+    // collapsed into the empty list ("0 条"). Uninstall also surfaces it.
+    lockNote
+      ? jsxs('div', { style: { ...S.notice, borderColor: 'var(--ui-error, #d05a5a)' }, children: [
+          jsx('div', { children: '引擎取用记录读取失败/已损坏：下方「本机已取用」显示为 0 条，是「读不到记录」，不是「从未装过」；此时卸载会报“记录里没有”。' }),
+          jsx('div', { style: S.meta, children: lockNote })
+        ] })
+      : null,
 
     // Catalog failure is INDEPENDENT of the local install facts: it is shown
     // here and never collapses the page into "no skills".

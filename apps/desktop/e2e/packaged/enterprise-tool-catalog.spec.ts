@@ -296,11 +296,28 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     expect(marketText, 'the skill market must not render a minified React error').not.toContain('Minified React error')
     expect(marketText).toContain('企业技能市场')
 
-    // The catalog is EITHER listed OR a distinguishable failure — never a silent
-    // empty page (PLK-REQ-0018: "取不到" ≠ "没有").
+    // The catalog must be in one of exactly TWO valid states — never a silent
+    // empty page (PLK-REQ-0018: "取不到" ≠ "没有") and never a collapsed REST
+    // failure ("读取技能市场失败" would mean the plugin backend itself is broken,
+    // which this lane must not accept).
     const catalogReady = marketText.includes('企业已审技能目录已就绪')
     const catalogFailed = marketText.includes('这是「取不到目录」，不是「目录为空」')
-    expect(catalogReady || catalogFailed, 'catalog must be listed or show a distinguishable failure').toBe(true)
+    expect(
+      catalogReady || catalogFailed,
+      'the catalog must be either READY or a TYPED "cannot fetch ≠ empty" failure'
+    ).toBe(true)
+    expect(marketText, 'the plugin backend must answer GET /skills (not a request failure)').not.toContain(
+      '读取技能市场失败'
+    )
+    if (catalogReady) {
+      // A ready banner must carry the real, numeric count — not just the word.
+      expect(marketText, 'a ready catalog must report a numeric approved-skill count').toMatch(/已审技能\s*\d+\s*条/)
+    } else {
+      // A typed failure must NAME its cause (auth / network / format / missing CLI).
+      expect(marketText, 'the categorical failure must name a failure class').toMatch(
+        /未授权|网络不可达|不是 JSON|结构不符|找不到企业副本|no-bundle|download-failed|extract-failed/
+      )
+    }
 
     // The seeded local install is visible with its engine-computed hash, and the
     // deliberately-bogus recorded hash shows the hash-mismatch class distinctly.
@@ -317,10 +334,16 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     expect(pageHash, `page hash ${pageHash} must equal engine content_hash ${oracleHash}`).toBe(oracleHash)
 
     // HUMAN CONFIRMATION: a 取用 (install) action must open a confirmation
-    // dialog — a write never fires on the first click.
-    const pickup = page.getByRole('button', { name: '取用' }).first()
-    if (await pickup.count()) {
-      await pickup.click()
+    // dialog — a write never fires on the first click. This assertion is HARD:
+    // it is never silently skipped. When the catalog is ready a 取用 button MUST
+    // exist and MUST open the dialog; when it is not, there is no write
+    // affordance at all and that absence is asserted too.
+    const pickup = page.getByRole('button', { name: '取用' })
+    if (!catalogReady) {
+      expect(await pickup.count(), 'no catalog → no 取用 button may be offered').toBe(0)
+    } else {
+      await expect(pickup.first(), 'a ready catalog must offer a 取用 action').toBeVisible({ timeout: 10_000 })
+      await pickup.first().click()
       await expect(page.getByText('取用技能', { exact: false }).first()).toBeVisible({ timeout: 10_000 })
       await page.keyboard.press('Escape')
     }

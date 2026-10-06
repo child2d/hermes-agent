@@ -79,3 +79,27 @@ test('a fully successful batch still reports success', async () => {
   assert.equal(summary.tone, 'ok')
   assert.match(summary.text, /批量更新完成（2 条）/)
 })
+
+// Q1: the update confirmation must SAY the local edits will be lost — a hash
+// marker alone is not enough — and must flag the dialog destructive.
+
+test('an update over local edits warns in plain language and is destructive', async () => {
+  const { writeConfirmCopy } = await loadPlugin()
+  const copy = writeConfirmCopy('update', { name: 'x', installPath: 'cat/x', hashState: 'mismatch' })
+  assert.equal(copy.title, '更新技能「x」？')
+  assert.equal(copy.destructive, true)
+  assert.match(copy.description, /本地已修改/)
+  assert.match(copy.description, /会覆盖并丢失这些本地改动/)
+})
+
+test('the backend localEdits fact alone also turns the warning on', async () => {
+  const { writeConfirmCopy } = await loadPlugin()
+  assert.equal(writeConfirmCopy('update', { name: 'x', localEdits: true }).destructive, true)
+})
+
+test('an untouched update carries no overwrite warning', async () => {
+  const { writeConfirmCopy } = await loadPlugin()
+  const copy = writeConfirmCopy('update', { name: 'x', installPath: 'x', hashState: 'match' })
+  assert.equal(copy.destructive, false)
+  assert.doesNotMatch(copy.description, /本地已修改/)
+})

@@ -413,7 +413,9 @@
 （`_normalize_lock_install_path` 只校验形状与尾段名）。
 
 - 这两条**已不是我方代码面**：我方不含任何落点/根路径判定（§9.2 的删除清单即为证据）。
-- 处置：按 Perry 口径**不自造第二套实现**；作为**对上游的诉求**（候选 KI）登记，待引擎收口。
+- 处置：按 Perry 口径**不自造第二套实现**；两条已正式登记为 **KI-PLANKTON-0072**（引擎不校 `SKILLS_DIR` 根自身是否为
+  符号链接）与 **KI-PLANKTON-0073**（手改引擎锁条目可让引擎 `rmtree` `skills/` 下任意目录），真源
+  `spec-library/docs/plankton/governance/known-issues.yaml`；待引擎收口（复验 trigger 见该两条）。
 - 影响面：都需要**对本机企业 home 有写权限**才能先种下那个符号链接 / 改那个锁文件；该信任级别本身已可直写技能目录。
 
 ### 9.5 本轮验收证据
@@ -427,3 +429,27 @@
 - 委托本身：`test_install_actually_calls_the_engine_entry_point` / `test_uninstall_actually_calls_the_engine_entry_point`
   （打断引擎入口 → 路由必须失败）、`test_engine_unavailable_is_reported_never_faked`。
 - 打包产物 lane：`e2e/packaged/enterprise-tool-catalog.spec.ts`（仓外产物；页面哈希 == 独立进程的引擎 `content_hash`）。
+
+### 9.6 收尾批 2 第二步 · 复核整改（Q1–Q9）
+
+- **Q1 更新静默覆盖本地改动**：更新走的是**安装入口**，引擎 `do_update` 的 `_has_local_edits` 保护结构上不适用。整改：
+  ① 后端 `_install_skill` 用**引擎自己的本地改动判据**（`hermes_cli.skills_hub._has_local_edits`，回退到「记录哈希 vs 落点现值」
+  逐字比对）守门——有本地改动且未带 `overwriteLocalEdits:true` 即拒，回 `local-edits`（新增失败类）；② 确认框在
+  `hashState==='mismatch'`（或后端 `localEdits`）时用大白话写明「本地已修改…继续会覆盖并丢失这些本地改动」，并标 destructive；
+  ③ UI 才随确认发送 `overwriteLocalEdits:true`。**不满足于一个哈希徒标。**
+- **Q2 引擎取用记录损坏显示「0 条」**：引擎 `_JsonStateFile._read` 把 `JSONDecodeError` 吞成空形状，损坏与「从未装过」不可辨。
+  整改：选**自己前置探测**——`read_engine_installations` 先探锁文件（不存在=无 note；存在但非合法 JSON/非 `{version,installed}` 形状=
+  给 note），页面把 `lockNote` 显式渲染为红色提示（「0 条是读不到记录，不是从未装过」），卸载的 `no-record` 也随附该 note。
+- **Q3 两条引擎缺口登记**：KI-PLANKTON-0072（引擎不校 `SKILLS_DIR` 根自身符号链接）、KI-PLANKTON-0073（手改锁条目可让引擎
+  `rmtree` `skills/` 下任意目录），真源 `spec-library/docs/plankton/governance/known-issues.yaml`；§9.4 已回链。
+- **Q4**：`plan_install_path_ex` 把「引擎校验模块缺失」与「名字非法」分开，前者回 `engine-unavailable`（不再误译 `bad-input`）。
+- **Q5**：`_envelope_error_kind` 识别 **rc=0 但信封内含错误**（`ok:false`/`error` + 未授权/网络 token），回 `unauthorized`/
+  `network-failed`，不再坍成 `shape-mismatch`。
+- **Q6**：`installed` 面板的过滤改在**计算后的 view** 上做（raw 锁条目没有 `managedByApp` 键，旧写法是恒真的死代码）。
+- **Q7**：模块 docstring 更正（唯一 `rmtree` 是清我方 quarantine 暂存输入）。
+- **Q8**：打包 e2e 两处弱断言改硬（catalog 二态 + 必带类名 + 禁「读取技能市场失败」；取用按钮存在性/确认框不再静默跳过）。
+- **Q9**：路由处理函数加 `route_` 前缀，避免与引擎同名函数误引。
+- 反例与回归：`test_update_onto_local_edits_requires_explicit_acknowledgement`、
+  `test_corrupt_engine_lock_is_visible_not_reported_as_zero`、`test_missing_engine_validation_module_is_not_bad_input`、
+  `test_rc0_error_envelope_is_classified_not_shape_mismatch`、`test_installed_panel_scopes_to_app_managed_entries`，
+  以及上一轮五类失败/确认闩/真引擎委托等**重跑仍绿**。

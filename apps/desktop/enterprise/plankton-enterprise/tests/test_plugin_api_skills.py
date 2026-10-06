@@ -202,7 +202,7 @@ def test_uninstall_actually_calls_the_engine_entry_point(api, monkeypatch):
 
     monkeypatch.setattr(skills_hub_install, "uninstall_skill", boom)
 
-    result = api.uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
+    result = api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
 
     assert calls == ["x"], "the plugin must reach the engine's uninstall entry point"
     assert result["ok"] is False
@@ -228,7 +228,7 @@ def test_engine_unavailable_is_reported_never_faked(api, monkeypatch):
     assert result["ok"] is False
     assert result["kind"] == "engine-unavailable"
 
-    result = api.uninstall_skill(api.UninstallRequest(reference="u/x", confirm=True))
+    result = api.route_uninstall_skill(api.UninstallRequest(reference="u/x", confirm=True))
     assert result["kind"] == "engine-unavailable"
 
 
@@ -270,6 +270,7 @@ def test_hash_mismatch_is_its_own_kind_and_visible(api):
     result = api.list_skills()
     assert result["installed"][0]["hashState"] == "mismatch"
     assert result["installed"][0]["managedByApp"] is True
+    assert result["installed"][0]["localEdits"] is True
 
 
 def test_empty_catalog_is_a_success_not_a_failure(api):
@@ -559,12 +560,12 @@ def test_uninstall_requires_confirm_then_removes(api):
     target = _seed_skill(home, "x")
     _seed_engine_lock(home, content_hash=api.engine_content_hash(target))
 
-    denied = api.uninstall_skill(api.UninstallRequest(reference="e2e/owner-x"))
+    denied = api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x"))
     assert denied["ok"] is False
     assert denied["kind"] == "needs-confirm"
     assert target.is_dir(), "no confirm → nothing deleted"
 
-    ok = api.uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
+    ok = api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
     assert ok["ok"] is True, ok
     assert ok["engine"] == "uninstall_skill"
     assert ok["removed"] is True
@@ -579,7 +580,7 @@ def test_uninstall_requires_confirm_then_removes(api):
 def test_uninstall_refuses_a_skill_with_no_engine_record(api):
     home = api._TEST_HOME
     stranger = _seed_skill(home, "other/x")
-    result = api.uninstall_skill(api.UninstallRequest(reference="u/nope", confirm=True))
+    result = api.route_uninstall_skill(api.UninstallRequest(reference="u/nope", confirm=True))
     assert result["kind"] == "no-record"
     assert (stranger / "SKILL.md").exists()
 
@@ -599,7 +600,7 @@ def test_uninstall_of_an_unsafe_lock_entry_is_the_engine_refusing(api, tmp_path)
     (outside / "SKILL.md").write_text("must survive", encoding="utf-8")
     _seed_engine_lock(home, name="x", install_path="../../outside/x")
 
-    result = api.uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
+    result = api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
 
     assert result["ok"] is False
     assert result["kind"] == "remove-failed"
@@ -616,7 +617,7 @@ def test_uninstall_reports_the_engine_error(api, monkeypatch):
 
     monkeypatch.setattr(skills_hub_install, "uninstall_skill", lambda name: (False, "engine says no"))
 
-    result = api.uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
+    result = api.route_uninstall_skill(api.UninstallRequest(reference="e2e/owner-x", confirm=True))
     assert result["ok"] is False
     assert result["kind"] == "remove-failed"
     assert "engine says no" in result["detail"]["message"]
@@ -744,26 +745,193 @@ def test_toggle_with_a_missing_symbol_never_degrades_to_engine_unavailable(api, 
 
 
 def test_install_route_requires_confirm(api):
-    result = api.install_skill(api.InstallRequest(slug="x", reference="u/x", name="x", category=""))
+    result = api.route_install_skill(api.InstallRequest(slug="x", reference="u/x", name="x", category=""))
     assert result["ok"] is False
     assert result["kind"] == "needs-confirm"
     assert not (api._TEST_HOME / "skills").exists(), "a refused write touches nothing"
 
 
 def test_update_requires_confirm(api):
-    result = api.update_skill(api.InstallRequest(slug="x", reference="u/x", name="x", category=""))
+    result = api.route_update_skill(api.InstallRequest(slug="x", reference="u/x", name="x", category=""))
     assert result["ok"] is False
     assert result["kind"] == "needs-confirm"
 
 
 def test_uninstall_route_requires_confirm(api):
-    result = api.uninstall_skill(api.UninstallRequest(reference="u/x"))
+    result = api.route_uninstall_skill(api.UninstallRequest(reference="u/x"))
     assert result["kind"] == "needs-confirm"
 
 
 def test_toggle_routes_require_confirm(api):
-    assert api.enable_skill(api.ToggleRequest(name="s"))["kind"] == "needs-confirm"
-    assert api.disable_skill(api.ToggleRequest(name="s"))["kind"] == "needs-confirm"
+    assert api.route_enable_skill(api.ToggleRequest(name="s"))["kind"] == "needs-confirm"
+    assert api.route_disable_skill(api.ToggleRequest(name="s"))["kind"] == "needs-confirm"
     # With the latch the route reaches the engine's own writer.
-    assert api.disable_skill(api.ToggleRequest(name="s", confirm=True))["ok"] is True
-    assert api.enable_skill(api.ToggleRequest(name="s", confirm=True))["ok"] is True
+    assert api.route_disable_skill(api.ToggleRequest(name="s", confirm=True))["ok"] is True
+    assert api.route_enable_skill(api.ToggleRequest(name="s", confirm=True))["ok"] is True
+
+
+# ── Q1: an update must not SILENTLY overwrite local edits ───────────────────
+# The engine protects its own do_update with _has_local_edits; this plugin walks
+# the install entry, so the same criterion is applied HERE as an explicit gate,
+# and the UI dialog warns in plain language before the acknowledgement is sent.
+
+
+def test_update_onto_local_edits_requires_explicit_acknowledgement(api):
+    home = api._TEST_HOME
+    first = _install_with_bundle(api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", confirm=True)
+    assert first["ok"] is True, first
+
+    # The user edits the installed skill locally.
+    (home / "skills" / "x" / "SKILL.md").write_text("user edit", encoding="utf-8")
+
+    from tools.skills_guard import content_hash
+    from tools.skills_hub import HubLockFile
+
+    entry = HubLockFile().get_installed("x")
+    assert entry is not None
+    recorded = entry["content_hash"]
+    assert content_hash(home / "skills" / "x") != recorded
+    # The ENGINE's own predicate agrees there are local edits.
+    assert api.engine_local_edits("x", "x") is True
+
+    # A plain confirm is NOT enough: the update is refused, nothing is replaced.
+    denied = api.route_update_skill(
+        api.InstallRequest(slug="x", reference="u/x", name="x", category="", confirm=True)
+    )
+    assert denied["ok"] is False, denied
+    assert denied["kind"] == "local-edits"
+    assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "user edit"
+
+    # Only the explicit acknowledgement lets the engine replace it.
+    acked = _install_with_bundle(
+        api, _skill_zip("v2"), slug="x", reference="u/x", name="x", category="",
+        confirm=True, overwriteLocalEdits=True,
+    )
+    assert acked["ok"] is True, acked
+    assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "v2"
+
+
+def test_update_without_local_edits_needs_no_overwrite_ack(api):
+    """The guard is narrow: an untouched install updates through a plain confirm."""
+    home = api._TEST_HOME
+    assert _install_with_bundle(api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", confirm=True)["ok"]
+    # No local edit → hash matches → the update proceeds without the extra ack.
+    assert api.engine_local_edits("x", "x") is False
+    result = _install_with_bundle(api, _skill_zip("v2"), slug="x", reference="u/x", name="x", category="", confirm=True)
+    assert result["ok"] is True, result
+    assert (home / "skills" / "x" / "SKILL.md").read_text(encoding="utf-8") == "v2"
+
+
+# ── Q2: a corrupt engine record is DISTINGUISHABLE from "never installed" ────
+# The engine's _JsonStateFile._read swallows a JSONDecodeError into its empty
+# shape, so the backend probes the file itself and reports a note the page shows.
+
+
+def test_corrupt_engine_lock_is_visible_not_reported_as_zero(api):
+    home = api._TEST_HOME
+    _seed_skill(home, "x")
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("{ this is not json", encoding="utf-8")
+    _fake_exec(api, rc=0, out=_list_page([]), err="")
+
+    result = api.list_skills()
+    assert result["ok"] is True
+    assert result["installed"] == []
+    assert result["lockNote"], "a corrupt lock must be distinguishable, never a silent 0"
+    assert "读取" in result["lockNote"] or "损坏" in result["lockNote"]
+
+    # A well-formed but EMPTY lock is not corruption: no note (the two states differ).
+    lock.write_text(json.dumps({"version": 1, "installed": {}}), encoding="utf-8")
+    assert api.list_skills()["lockNote"] is None
+
+    # …and uninstall says WHY it found nothing instead of a bare "no record".
+    lock.write_text("{ broken again", encoding="utf-8")
+    denied = api.route_uninstall_skill(api.UninstallRequest(reference="u/x", confirm=True))
+    assert denied["kind"] == "no-record"
+    assert denied["detail"]["lockNote"], "a corrupt record must be named on uninstall too"
+
+
+def test_absent_lock_file_is_not_reported_as_corrupt(api):
+    _fake_exec(api, rc=0, out=_list_page([]), err="")
+    result = api.list_skills()
+    assert result["ok"] is True
+    assert result["lockNote"] is None, "an absent lock is 'never installed', not 'corrupt'"
+
+
+# ── Q4: a MISSING engine validation module is engine-unavailable, not bad-input
+
+
+def test_missing_engine_validation_module_is_not_bad_input(api, monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def guarded(name, *args, **kwargs):
+        if name.startswith("tools.skills_hub_models"):
+            raise ImportError("no models here")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded)
+
+    result = api._install_skill(api.InstallRequest(slug="x", reference="u/x", name="x", confirm=True))
+    assert result["ok"] is False
+    assert result["kind"] == "engine-unavailable", result
+
+
+# ── Q5: a rc=0 error envelope is classified, not reported as shape-mismatch ──
+
+
+def test_rc0_error_envelope_is_classified_not_shape_mismatch(api):
+    _fake_exec(api, rc=0, out=json.dumps({"ok": False, "error": {"code": 401, "message": "unauthorized"}}), err="")
+    result = api.list_skills()
+    assert result["catalog"]["ok"] is False
+    assert result["catalog"]["kind"] == "unauthorized", result["catalog"]
+
+    _fake_exec(api, rc=0, out=json.dumps({"ok": False, "error": {"message": "dial tcp: connection refused"}}), err="")
+    assert api.list_skills()["catalog"]["kind"] == "network-failed"
+
+    # A non-error rc=0 envelope still reads as a shape-mismatch of the payload.
+    _fake_exec(api, rc=0, out=json.dumps({"data": {"items": "nope"}}), err="")
+    assert api.list_skills()["catalog"]["kind"] == "shape-mismatch"
+
+
+# ── Q6: the installed panel filters on the COMPUTED view (was dead code) ─────
+
+
+def test_installed_panel_scopes_to_app_managed_entries(api):
+    home = api._TEST_HOME
+    _seed_skill(home, "ours")
+    _seed_skill(home, "theirs")
+    lock = home / "skills" / ".hub" / "lock.json"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "installed": {
+                    "ours": {
+                        "source": "shaoke-skillhub",
+                        "identifier": "u/ours",
+                        "install_path": "ours",
+                        "content_hash": "sha256:0000000000000000",
+                        "metadata": {"shaoke": {"slug": "ours", "name": "ours", "category": "", "version": "1.0.0"}},
+                    },
+                    "theirs": {
+                        "source": "official",
+                        "identifier": "official/theirs",
+                        "install_path": "theirs",
+                        "content_hash": "sha256:1111111111111111",
+                        "metadata": {},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    _fake_exec(api, rc=0, out=_list_page([]), err="")
+
+    result = api.list_skills()
+    names = [item["name"] for item in result["installed"]]
+    assert names == ["ours"], "the panel is scoped to THIS app's pickups"
+    assert result["installed"][0]["managedByApp"] is True
