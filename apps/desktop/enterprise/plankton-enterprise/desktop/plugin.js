@@ -3459,6 +3459,99 @@ function createHostReadBridge(rest, path = '/packs/read') {
   }
 }
 
+// ── 提案口（批 3 · 新建草稿卡的提案入口；Perry 2026-10-07 裁定「要」）───────────────
+//
+// 「新建」块的记录**没有台账对象可读**：它的内容是 **agent 交上来的草稿提案**
+// （经插件的那一个提案工具落进插件出件箱、返回**引用键**）。所以这块的引用键**不是
+// 读地址**，而是一个**具名提案的键**；渲染器按它到**提案口**（`/packs/proposal`）解析。
+//
+// 三条口径（与只读读路径并列，**都不写台账**）：
+//   · **只解析已声明的提案块**（块声明 `source.proposals === true`）；别的块一律不从这个口取，
+//     于是「用提案键去画一条读块」走不通（取不到 ⇒ 退化文本）；
+//   · **命名空间＝包**：引用键形如 `<packId>:<token>`，键里的包必须与**指令所在包**一致，
+//     不一致 ⇒ 取不到（多会话/多提案不串）；
+//   · **取不到 ⇒ null**（上层退化文本，内容不丢）；本模块自己不 spawn、不读盘、不写任何东西。
+// 写路径**一点没动**：草稿卡上的「确认」仍走 W3 编排层（`packActions.run` → 身份闸 + 确认），
+// 所以「不点确认 ⇒ 零写入」照旧成立。
+
+/** 引用键的**提案地址**：`<packId>:<token>`（token＝uuid hex；包名与指令名同约束的保守 slug）。 */
+const PROPOSAL_REF_RE = /^([a-z][a-z0-9-]*):([0-9a-f]{8,32})$/
+
+/** 这个块是不是**提案块**（声明驱动：`source.proposals === true`）。 */
+function isProposalBlock(block) {
+  return isPlainObject(block) && isPlainObject(block.source) && block.source.proposals === true
+}
+
+function parseProposalReference(ref) {
+  const text = typeof ref === 'string' ? ref.trim() : ''
+  const match = PROPOSAL_REF_RE.exec(text)
+  if (!match) return null
+  return Object.freeze({ packId: match[1], token: match[2] })
+}
+
+/**
+ * 提案记录 → **协议载荷**（`resolveOutput` 的输入）。
+ *
+ * 只做「换形」：记录本身就是 `{字段键: 值}` 的对象，直接交给 `resolveOutput` 逐层校验
+ * （未声明的字段键 ⇒ 整块拒 ⇒ 退化文本；取值形态不无损 ⇒ 拒）。**不在这里猜、不在这里补**。
+ */
+function payloadFromProposal(block, proposal) {
+  if (!isPlainObject(block) || !isPlainObject(proposal)) return null
+  const record = isPlainObject(proposal.record) ? proposal.record : null
+  if (!record || !Object.keys(record).length) return null
+  const declared = asArray(block.actions).map(String)
+  const actions = asArray(proposal.actions).map(String)
+  return Object.freeze({
+    block: String(block.tag),
+    record: Object.freeze({ ...record }),
+    actions: Object.freeze(actions.length ? actions : declared),
+  })
+}
+
+/**
+ * **提案加载器**：把提案块的引用键解析成协议载荷（喂同一个 `resolveOutput`）。
+ *
+ * `createProposalLoader({ registry, fetchProposal })`：
+ *   - `load(ref, { packId, block })`：只认**提案块**；引用键的**命名空间**必须与 `packId` 一致；
+ *     经**注入的提案口**取回条目；取不到 / 不是这个包 ⇒ `null`（退化文本）。
+ *   - `fetchProposal` 由宿主**注入**：生产链上是**主机桥**（`ctx.rest`）→ 插件出件箱；本模块
+ *     自己不 spawn、不读盘、不写任何东西。
+ */
+function createProposalLoader({ registry, fetchProposal } = /** @type {any} */ ({})) {
+  async function load(ref, { packId = '', block = null } = /** @type {any} */ ({})) {
+    if (!isProposalBlock(block)) return null
+    const address = parseProposalReference(ref)
+    if (!address) return null
+    // **命名空间**：引用键里的包必须与指令所在包一致（多提案不串）。
+    if (String(packId) !== address.packId) return null
+    const pack = registry?.get?.(String(packId)) ?? null
+    if (!pack) return null
+    if (typeof fetchProposal !== 'function') return null
+    let result = null
+    try {
+      result = await fetchProposal({ packId: String(packId), ref: String(ref).trim() })
+    } catch {
+      return null
+    }
+    if (!isPlainObject(result) || result.kind !== 'ok') return null
+    return payloadFromProposal(block, result.proposal)
+  }
+  return Object.freeze({ load })
+}
+
+/** 生产链上的提案桥：渲染器 → **主机桥**（`ctx.rest`）→ 插件出件箱（只读解析）。 */
+function createHostProposalBridge(rest, path = '/packs/proposal') {
+  return async function fetchProposal({ packId, ref }) {
+    if (typeof rest !== 'function') return null
+    try {
+      const result = await rest(path, { method: 'POST', body: { packId, ref } })
+      return isPlainObject(result) ? result : null
+    } catch {
+      return null
+    }
+  }
+}
+
 return Object.freeze({
   CARRIER_AREA,
   REF_KEY,
@@ -3476,6 +3569,12 @@ return Object.freeze({
   createHostReadBridge,
   parseReadReference,
   payloadFromRead,
+  // 批 3 · 提案入口
+  isProposalBlock,
+  parseProposalReference,
+  payloadFromProposal,
+  createProposalLoader,
+  createHostProposalBridge,
 })
 })()
 
@@ -3492,7 +3591,13 @@ const {
   createReadPathLoader,
   createHostReadBridge,
   parseReadReference,
-  payloadFromRead
+  payloadFromRead,
+  // 批 3 · 提案入口（新建草稿卡）
+  isProposalBlock,
+  parseProposalReference,
+  payloadFromProposal,
+  createProposalLoader,
+  createHostProposalBridge
 } = packRender
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3991,6 +4096,12 @@ const BAYMAX_PLUGIN_FACE = {
       {
         tag: 'plankton-baymax-new',
         record: 'single',
+        // **提案入口（批 3 · Perry 2026-10-07 裁定「要」）**：新建卡的记录**没有台账对象可读**
+        // —— 它的内容是 **agent 自己交上来的草稿提案**（经 `plankton_propose_draft` 工具落进
+        // 插件出件箱、返回引用键）。所以本块不声明 `source.template`（读路径），而声明
+        // `source.proposals` ⇒ 渲染器按引用键到**提案口**解析（`/packs/proposal`），与只读读路径
+        // 并列、**都不写台账**：写仍只经 W3 身份闸 + 确认（见 `packActions.run`）。
+        source: { proposals: true },
         fields: [
           'project-id',
           'type-id',
@@ -5027,10 +5138,18 @@ export default {
     // 文本。**不引入自建存储/生产者**（旧的 `ctx.storage` 载荷仓已删除）；写模板在此口走不通。
     const runRead = createHostReadBridge((path, init) => ctx.rest(path, init))
     const readPath = createReadPathLoader({ registry: carrierRegistry, runRead })
+    // **提案口**（批 3 · 新建草稿卡）：新建块的记录没有台账对象可读，它的内容是 agent 交上来的
+    // **草稿提案**（经 `plankton_propose_draft` 工具落进插件出件箱）。渲染器按引用键到这里解析
+    // —— 与只读读路径并列、**都不写台账**；写仍只经 W3（身份闸 + 确认），本口不开第二写口。
+    const fetchProposal = createHostProposalBridge((path, init) => ctx.rest(path, init))
+    const proposalPath = createProposalLoader({ registry: carrierRegistry, fetchProposal })
     const carrierRenderer = createPackRenderer({
       registry: carrierRegistry,
       session: carrierSession,
-      loadPayload: (ref, context) => readPath.load(ref, context),
+      // **声明驱动的分流**：声明为**提案块**（`source.proposals`）的块走提案口；其余走只读读路径。
+      // 分流只在这**一处**（装配点唯一）；渲染器本身不认识任何具体块名。
+      loadPayload: (ref, context) =>
+        isProposalBlock(context?.block) ? proposalPath.load(ref, context) : readPath.load(ref, context),
     })
     const carrier = carrierDirectiveContributions({
       registry: carrierRegistry,
@@ -5178,5 +5297,11 @@ export {
   createReadPathLoader,
   createHostReadBridge,
   parseReadReference,
-  payloadFromRead
+  payloadFromRead,
+  // 批 3 · 提案入口（新建草稿卡）：提案块 + 提案口（与只读读路径并列，都不写台账）
+  isProposalBlock,
+  parseProposalReference,
+  payloadFromProposal,
+  createProposalLoader,
+  createHostProposalBridge
 }

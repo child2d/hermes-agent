@@ -104,6 +104,7 @@ old JS ``hashTree`` risked is impossible by construction.
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import logging
@@ -111,6 +112,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 import urllib.request
 import zipfile
@@ -543,6 +545,71 @@ def pack_read(req: PackReadRequest) -> dict:
     if envelope.get("ok") is not True:
         return {"kind": "rejected", "rc": completed.returncode, "note": "read-failed"}
     return {"kind": "ok", "rc": completed.returncode, "envelope": envelope}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /packs/proposal — the agent's DRAFT-PROPOSAL outbox read (批 3)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Design: docs/plankton/N7-technical-design/N7-20261006-plankton-session-packs.md
+# §0 / §8 (批 3 · 新建草稿卡的提案入口, Perry 2026-10-07 裁定「要」). The
+# `plankton-baymax-new` block has NO ledger object to read — its content is the
+# agent's own draft, handed to the plugin through the ONE agent tool
+# (`proposals.py`). So the renderer resolves THAT block's reference key here
+# instead of at `/packs/read`.
+#
+# READ-ONLY for the ledger: this route never spawns shaoke-cli, never writes and
+# never consults a confirmation. It only looks the ref up in the outbox; an
+# unknown / expired / wrong-namespace ref answers `kind:"rejected"`, which the
+# renderer degrades to text (content kept). The write path is untouched: it stays
+# the W3 action layer behind the session identity + the human confirm.
+PACK_PROPOSAL_PACKS = ("baymax",)
+_PROPOSALS_MODULE_NAME = "plankton_enterprise_proposals"
+_PROPOSALS_PATH = Path(__file__).resolve().parent.parent / "proposals.py"
+
+
+def _proposals_module():
+    """Import the outbox module by absolute path under a FIXED name.
+
+    The dashboard loader imports THIS file as a standalone module (no package
+    context), so a relative import is not available; the fixed name still makes
+    ``__init__.py`` and this backend share ONE instance per process.
+    """
+    module = sys.modules.get(_PROPOSALS_MODULE_NAME)
+    if module is not None:
+        return module
+    spec = importlib.util.spec_from_file_location(_PROPOSALS_MODULE_NAME, _PROPOSALS_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover - artifact defect
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_PROPOSALS_MODULE_NAME] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+class PackProposalRequest(BaseModel):
+    packId: str = ""
+    ref: str = ""
+
+
+@router.post("/packs/proposal")
+def pack_proposal(req: PackProposalRequest) -> dict:
+    """Resolve ONE draft-proposal reference key (the new-draft block's 取数口).
+
+    Read-only; never spawns; never writes the ledger. A refusal is typed so the
+    renderer can degrade to text with the reason visible.
+    """
+    if req.packId not in PACK_PROPOSAL_PACKS:
+        return {"kind": "rejected", "note": "pack-not-declared"}
+    proposals = _proposals_module()
+    if proposals is None:  # pragma: no cover - artifact defect
+        return {"kind": "rejected", "note": "proposal-store-unavailable"}
+    entry = proposals.get_proposal(req.ref, pack_id=req.packId)
+    if entry is None:
+        # Malformed / unknown / expired / another pack's ref — all the same
+        # answer on purpose: a dead reference must not yield a half-card.
+        return {"kind": "rejected", "note": "proposal-unresolved"}
+    return {"kind": "ok", "proposal": entry}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

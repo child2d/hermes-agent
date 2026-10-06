@@ -90,6 +90,11 @@ export function assertEnterpriseResourcesPresent(
     'enterprise/model-seed.json',
     'enterprise/plankton-enterprise/plugin.yaml',
     'enterprise/plankton-enterprise/__init__.py',
+    // 批 3 · 新建草稿卡的提案入口：the agent's draft outbox + its ONE tool. A
+    // missing proposals.py turns the proposal block unusable (it would degrade
+    // to text) — enumerate it so the loss is RED at pack time, not a silent
+    // capability loss at runtime.
+    'enterprise/plankton-enterprise/proposals.py',
     'enterprise/plankton-enterprise/dashboard/manifest.json',
     'enterprise/plankton-enterprise/dashboard/plugin_api.py',
     'enterprise/plankton-enterprise/desktop/plugin.js',
@@ -225,6 +230,27 @@ export function assertEnterpriseResourcesPresent(
       throw new Error(
         `[after-pack] packaged enterprise plugin.js lost the W4 carrier entry (missing "${marker}"): ${packagedPlugin}`
       )
+    }
+  }
+
+  // 批 3 (新建草稿卡的提案入口): the packaged plugin MUST still carry the PROPOSAL
+  // port (proposal blocks + the proposal loader) — dropping it silently makes
+  // the new-draft card degrade to text. Proven from the artifact's own bytes.
+  for (const marker of ['createProposalLoader', '/packs/proposal', 'isProposalBlock']) {
+    if (!pluginSource.includes(marker)) {
+      throw new Error(
+        `[after-pack] packaged enterprise plugin.js lost the draft-proposal entry (missing "${marker}"): ${packagedPlugin}`
+      )
+    }
+  }
+  const packagedApi = fs.readFileSync(path.join(resources, 'enterprise/plankton-enterprise/dashboard/plugin_api.py'), 'utf8')
+  if (!packagedApi.includes('@router.post("/packs/proposal")')) {
+    throw new Error('[after-pack] packaged enterprise plugin_api.py lost the /packs/proposal route')
+  }
+  const packagedProposals = fs.readFileSync(path.join(resources, 'enterprise/plankton-enterprise/proposals.py'), 'utf8')
+  for (const marker of ['field-tier-not-agent-draftable', 'AGENT_DRAFTABLE_FIELDS', 'plankton_propose_draft']) {
+    if (!packagedProposals.includes(marker)) {
+      throw new Error(`[after-pack] packaged enterprise proposals.py lost the human-field gate / tool (missing "${marker}")`)
     }
   }
 

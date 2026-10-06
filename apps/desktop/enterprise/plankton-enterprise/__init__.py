@@ -15,12 +15,23 @@ No agent tools, hooks or middleware are registered: the backend REST surface
 lives in ``dashboard/plugin_api.py`` and the desktop half ships through the
 standalone desktop-plugin door.
 
+> **UPDATE (批 3 · 新建草稿卡的提案入口, 2026-10-07)** — one exception to the
+> paragraph above: this half now ALSO registers **one** agent tool,
+> ``plankton_propose_draft`` (see ``proposals.py``). The tool only stores the
+> agent's **draft proposal** in the plugin's own outbox and hands back a
+> reference key; it opens no ledger write path (the single write door remains the
+> W3 action layer, gated by the server-issued identity + human confirm) and it
+> cannot fill the fields only a person may supply. Registration itself still
+> writes nothing — the outbox is touched only when the agent calls the tool.
+
 Everything the plugin does is variant-independent and reads nothing secret.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +48,29 @@ SKILL_DESCRIPTION = (
     "在对话里把工作沉淀成 Baymax 工单——本域的命令面、agent 能发的指令与接入一个新域的纪律"
     "（plankton 企业包 baymax）。"
 )
+
+#: The proposal outbox module (批 3 · 新建草稿卡的提案入口): the agent's draft
+#: proposals + the ONE agent tool. Loaded by ABSOLUTE PATH under a fixed module
+#: name so it resolves identically whether this half is imported as
+#: ``hermes_plugins.<slug>`` (engine loader) or standalone (unit tests, which
+#: import ``__init__.py`` as a top-level module with no package context — a
+#: relative import would fail there).
+_PROPOSALS_MODULE_NAME = "plankton_enterprise_proposals"
+_PROPOSALS_PATH = Path(__file__).resolve().parent / "proposals.py"
+
+
+def _load_proposals() -> Any:
+    """Import ``proposals.py`` once per process (fixed name ⇒ shared instance)."""
+    module = sys.modules.get(_PROPOSALS_MODULE_NAME)
+    if module is not None:
+        return module
+    spec = importlib.util.spec_from_file_location(_PROPOSALS_MODULE_NAME, _PROPOSALS_PATH)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"plankton-enterprise: cannot load the proposal outbox at {_PROPOSALS_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_PROPOSALS_MODULE_NAME] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def register(ctx: Any) -> None:  # noqa: ARG001 - the manifest contract requires the parameter
@@ -61,7 +95,12 @@ def register(ctx: Any) -> None:  # noqa: ARG001 - the manifest contract requires
             SKILL_NAME,
             SKILL_PATH,
         )
-        return None
+    else:
+        register_skill(SKILL_NAME, SKILL_PATH, description=SKILL_DESCRIPTION)
 
-    register_skill(SKILL_NAME, SKILL_PATH, description=SKILL_DESCRIPTION)
+    # 批 3 · 新建草稿卡的提案入口：ONE agent tool, the draft outbox door. Loading
+    # the module is a read; nothing is written here (see proposals.py header for
+    # why this is not a second write door and cannot fill human-only fields).
+    proposals = _load_proposals()
+    proposals.register_tools(ctx)
     return None
