@@ -311,7 +311,7 @@ test('产物真实渲染器：profileId 稳定 + 会话单元组装（人方空�
  *
  * 观测点＝真渲染器 → 主机桥 → 只读 `/audit/wiring`（与带外注入无关：这是引擎进程加载插件时的裁决）。
  */
-test('产物 fail-closed：HERMES_HOME 落进个人 ~/.hermes ⇒ 自检不过、不进入可用状态', async () => {
+test('产物：HERMES_HOME 落进个人 ~/.hermes ⇒ 自检报 usable:false（裁决层面）+ 可行动提示 + 默认无传输；注：本引擎无会话闸门，应用仍起（裁决≠执行，见 KI-PLANKTON-0082）', async () => {
   const appPath = resolvePackagedApp()
   assertEnterpriseArtifactIdentity(appPath)
 
@@ -355,6 +355,11 @@ test('产物 fail-closed：HERMES_HOME 落进个人 ~/.hermes ⇒ 自检不过�
     // 只读落点自检也报同一事实。
     const landing = await pluginGet(page, `${B}/audit/landing-check`)
     expect(landing.ok, '落点自检必须报不通过').toBe(false)
+
+    // **裁决 ≠ 执行**（批 4 验收实测，KI-PLANKTON-0082）：尽管 startup.usable=false，**本应用确实起来了**
+    // （窗口在、本只读面可达）——引擎无会话闸门、宿主无准入闸，落点自检只「报」不「拦」，故此用例只断言
+    // 「报出的裁决」，不声称「应用被拦在可用状态之外」。两钩子仍真挂上（Observer 合同，无拒绝通道）。
+    expect(wiring.hooks, '两钩子真挂上（Observer，无拒绝通道）').toEqual(['on_session_start', 'on_session_finalize'])
 
     // 默认无传输：即便落点不成立，也绝不会把数据发出去。
     expect((wiring.transport as Record<string, unknown>).mode).toBe('no-transport')
