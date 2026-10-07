@@ -61,6 +61,23 @@ export const $activeProfile = atom<string>('default')
 const NO_PROFILES: ProfileInfo[] = []
 export const $profiles = atom<ProfileInfo[]>(NO_PROFILES)
 
+// The one place that owns $profiles writes. $profiles is read unconditionally
+// by the app shell — the plugin install modal runs `profiles.find(...)` on
+// EVERY render — so a single non-array write (a backend response that omitted
+// `profiles`, or a malformed cache entry) used to throw
+// `TypeError: Cannot read properties of undefined (reading 'find')` from the
+// modal and take the whole renderer down right after login. Normalizing at the
+// single write point makes "the array store is never handed a non-array" one
+// invariant; a healthy array passes through with the same identity, so the
+// success path is untouched.
+function asProfileList(next: null | ProfileInfo[] | undefined): ProfileInfo[] {
+  return Array.isArray(next) ? next : NO_PROFILES
+}
+
+function publishProfiles(next: null | ProfileInfo[] | undefined): void {
+  $profiles.set(asProfileList(next))
+}
+
 // Successful lists belong to their source, not whichever gateway is active
 // when a rail renders. A re-home repaints from this cache until the incoming
 // source serves its own list, so a failed incoming read can neither borrow the
@@ -125,10 +142,13 @@ export function refreshProfiles(): Promise<ProfileInfo[]> {
         if (epoch === profileListEpoch) {
           batch(() => {
             if (source !== null) {
-              $profilesByConnection.set(new Map($profilesByConnection.get()).set(source, profiles))
+              // A value here is read as an array by other stores (desktop-metrics
+              // sums `list.length`), so normalize the same way $profiles is —
+              // a missing-`profiles` response must not seed an `undefined` value.
+              $profilesByConnection.set(new Map($profilesByConnection.get()).set(source, asProfileList(profiles)))
             }
 
-            $profiles.set(profiles)
+            publishProfiles(profiles)
           })
         }
 
@@ -190,7 +210,7 @@ $connection.subscribe(connection => {
   }
 
   invalidateProfileListFetches()
-  $profiles.set($profilesByConnection.get().get(source) ?? NO_PROFILES)
+  publishProfiles($profilesByConnection.get().get(source))
 })
 
 // ── Rail order ─────────────────────────────────────────────────────────────

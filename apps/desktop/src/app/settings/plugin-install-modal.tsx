@@ -61,7 +61,11 @@ export function PluginInstallModal() {
   const onSettings = location.pathname.startsWith(SETTINGS_ROUTE)
   const connection = useStore($connection)
   const activeProfile = useStore($activeGatewayProfile)
-  const profiles = useStore($profiles)
+  // Read-side 兜底: $profiles is guarded at its write point, but this modal is
+  // mounted on the app root shell and does `profiles.find(...)` on every render
+  // — so never trust the value here. One `undefined` write took down the whole
+  // renderer right after login (TypeError: … reading 'find').
+  const profiles = useStore($profiles) ?? []
   const profileScope = useStore($profileScope)
 
   const [repoInput, setRepoInput] = useState('')

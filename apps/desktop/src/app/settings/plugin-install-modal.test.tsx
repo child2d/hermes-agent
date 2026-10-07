@@ -15,16 +15,17 @@ vi.mock('@/app/gateway/hooks/use-gateway-request', () => ({
 }))
 vi.mock('@/hermes', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getProfiles: async () => ({ profiles: [] })
+  getProfiles: vi.fn(async () => ({ profiles: [] }))
 }))
 
+import { getProfiles } from '@/hermes'
 import { queryClient } from '@/lib/query-client'
 import {
   $pluginInstallRequest,
   closePluginInstallRequest,
   openPluginInstallRequest
 } from '@/store/plugin-install-request'
-import { $activeGatewayProfile, $profiles } from '@/store/profile'
+import { $activeGatewayProfile, $profiles, refreshProfiles } from '@/store/profile'
 import { $connection, $gatewayState } from '@/store/session'
 
 import { PluginsTab } from '../capabilities/plugins/plugins-tab'
@@ -245,5 +246,42 @@ describe('Unified package desktop half on a local backend', () => {
     expect(status.textContent).toContain('may still be installing')
     expect(installDesktopPlugin).not.toHaveBeenCalled()
     expect((screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+// Regression for the post-login renderer crash. The profile list is pulled
+// right after a successful login (before the local backend is allowed to
+// spawn), and that response can come back WITHOUT the `profiles` field. This
+// modal is mounted unconditionally on the app root shell and runs
+// `profiles.find(...)` on EVERY render (line ~179, before any early return), so
+// a single `undefined` write to $profiles took the whole renderer down with
+// `TypeError: Cannot read properties of undefined (reading 'find')`.
+describe('a profiles fetch that omits the profiles field (post-login crash)', () => {
+  const renderModal = () =>
+    render(
+      <MemoryRouter initialEntries={['/capabilities?tab=plugins']}>
+        <QueryClientProvider client={queryClient}>
+          <PluginInstallModal />
+        </QueryClientProvider>
+      </MemoryRouter>
+    )
+
+  it('keeps the store an array and renders the modal without throwing', async () => {
+    $connection.set(null)
+    vi.mocked(getProfiles).mockResolvedValueOnce({} as never)
+
+    await refreshProfiles()
+
+    // Write-site guard: no `profiles` field → still an array, never undefined.
+    expect(Array.isArray($profiles.get())).toBe(true)
+
+    // Read-site guard: the exact crashing frame (profiles.find) must survive.
+    expect(() => renderModal()).not.toThrow()
+  })
+
+  it('renders the modal even when the store was already poisoned (defense in depth)', () => {
+    // Simulate a non-array write reaching the store by some other path.
+    $profiles.set(undefined as never)
+    expect(() => renderModal()).not.toThrow()
   })
 })
