@@ -122,6 +122,7 @@ const REQUIRED_ENTERPRISE = [
   'enterprise/plankton-enterprise/plugin.yaml',
   'enterprise/plankton-enterprise/__init__.py',
   'enterprise/plankton-enterprise/proposals.py',
+  'enterprise/plankton-enterprise/audit_unit.py',
   'enterprise/plankton-enterprise/dashboard/manifest.json',
   'enterprise/plankton-enterprise/dashboard/plugin_api.py',
   'enterprise/plankton-enterprise/desktop/plugin.js',

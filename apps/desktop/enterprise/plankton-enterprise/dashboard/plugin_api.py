@@ -648,6 +648,104 @@ class ToggleRequest(BaseModel):
     confirm: bool = False
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 批 4 · W1 — 会话级审计单元生产者（只读预览；**不上传**）
+#
+# N7 §8 W1 / §2 / §9.0：本段只落「单元生产者」与「应用发稳定 profileId」两件事，
+# **不实现上传**（W2 才落接收端点）。两条路由都**只读**：`/audit/unit` 以 `mode=ro` 读引擎
+# 会话事实库 `state.db`；`/audit/profile-id` 只在**企业 home**内首次纳管时落一份台账。
+# 没有凭据、没有上传、没有对台账/会话库的写入（读写台账是「发号」本身的持久化，非审计上传）。
+# ─────────────────────────────────────────────────────────────────────────────
+
+_AUDIT_MODULE_NAME = "plankton_enterprise_audit_unit"
+_AUDIT_PATH = Path(__file__).resolve().parent.parent / "audit_unit.py"
+
+
+def _audit_module():
+    """按绝对路径、固定名导入审计单元模块（与 _proposals_module 同法，保证一进程一实例）。"""
+    module = sys.modules.get(_AUDIT_MODULE_NAME)
+    if module is not None:
+        return module
+    spec = importlib.util.spec_from_file_location(_AUDIT_MODULE_NAME, _AUDIT_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover - artifact defect
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_AUDIT_MODULE_NAME] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@router.get("/audit/profile-id")
+def audit_profile_id(profile: str = "", name: str = "", aliases: str = "") -> dict:
+    """应用发**稳定 `profileId`**（企业 home 首次纳管生成并持久化；PLK-REQ-0049）。
+
+    `profile` 是 profile 的**稳定身份**（其 home 目录），**不是**名字：名字变/重名不影响 ID。
+    只读语义：除首次纳管把 ID 落到企业 home 台账外，什么都不写、不上传。
+    """
+    audit = _audit_module()
+    if audit is None:  # pragma: no cover - artifact defect
+        return {"kind": "rejected", "note": "audit-module-unavailable"}
+    home = _hermes_home()
+    if home is None:
+        return {"kind": "rejected", "note": "enterprise-home-unavailable"}
+    alias_list = [a for a in (aliases or "").split(",") if a.strip()]
+    try:
+        return audit.resolve_profile_id(profile or "default", profile_name=name, aliases=alias_list, home=home)
+    except audit.AuditUnitRefused as exc:
+        return {"kind": "rejected", "note": exc.note}
+
+
+@router.get("/audit/unit")
+def audit_unit(
+    session: str = "",
+    profile: str = "",
+    name: str = "",
+    db: str = "",
+    variant: str = "plankton",
+    engineVersion: str = "",
+    appVersion: str = "",
+    project: str = "",
+) -> dict:
+    """组出该会话的**审计单元（客户端上送段）**——只读预览，**不发送**（N7 §8 W1）。
+
+    素材只读取自会话事实库（默认 `HERMES_HOME/state.db`；可指向企业 home 内的另一只读库，供夹具/
+    素材读取点注入）。人这一方恒为空（服务端盖章），agent 这一方全 self-reported；组完过密钥/键
+    卫生扫描，命中即拒（不产）。**任何路径都必须落在企业 home 内**——越界即拒（不读企业 home 外的库）。
+    """
+    audit = _audit_module()
+    if audit is None:  # pragma: no cover - artifact defect
+        return {"kind": "rejected", "note": "audit-module-unavailable"}
+    home = _hermes_home()
+    if home is None:
+        return {"kind": "rejected", "note": "enterprise-home-unavailable"}
+    # 会话素材读取点：默认引擎事实库；显式 `db` 必须落在企业 home 内（只读、越界拒）。
+    db_path = Path(os.path.expanduser(db)) if db.strip() else (home / "state.db")
+    try:
+        home_real = Path(home).expanduser().resolve()
+        db_real = db_path.resolve()
+        if str(db_real) != str(home_real) and home_real not in db_real.parents:
+            return {"kind": "rejected", "note": "session-db-outside-enterprise-home"}
+    except OSError:  # pragma: no cover - 环境相关
+        return {"kind": "rejected", "note": "session-db-unresolvable"}
+    try:
+        messages = audit.read_session_chat(db_real, session)
+        resolved = audit.resolve_profile_id(profile or "default", profile_name=name, home=home)
+        unit = audit.assemble_audit_unit(
+            engine_session_id=session,
+            messages=messages,
+            profile_name=name,
+            profile_id=resolved["profileId"],
+            variant=variant,
+            engine_version=engineVersion,
+            project=project,
+            client=audit.AUDIT_CLIENT_ID,
+            app_version=appVersion,
+        )
+    except audit.AuditUnitRefused as exc:
+        return {"kind": "rejected", "note": exc.note}
+    return {"kind": "ok", "unit": unit}
+
+
 def assert_outside_personal_trees(directory: Path, personal_home: Optional[Path] = None) -> None:
     """POLICY gate: refuse an engine store that resolves inside a personal tree.
 

@@ -95,6 +95,9 @@ export function assertEnterpriseResourcesPresent(
     // to text) — enumerate it so the loss is RED at pack time, not a silent
     // capability loss at runtime.
     'enterprise/plankton-enterprise/proposals.py',
+    // 批 4 · W1：会话级审计单元生产者（确定性幂等键 / 两方字段 / profile 稳定 ID 发号）。
+    // 丢失它 ⇒ 审计单元无法组装（且 profileId 无处发号）——枚举出来让丢失在打包期变红。
+    'enterprise/plankton-enterprise/audit_unit.py',
     'enterprise/plankton-enterprise/dashboard/manifest.json',
     'enterprise/plankton-enterprise/dashboard/plugin_api.py',
     'enterprise/plankton-enterprise/desktop/plugin.js',
@@ -252,6 +255,17 @@ export function assertEnterpriseResourcesPresent(
     if (!packagedProposals.includes(marker)) {
       throw new Error(`[after-pack] packaged enterprise proposals.py lost the human-field gate / tool (missing "${marker}")`)
     }
+  }
+  // 批 4 · W1：审计单元生产者必须**真的在产物字节里**（不是源码里）——确定性幂等键 + 人方空值闸 +
+  // agent 侧 self-reported + profile 稳定 ID 台账。任一丢失 ⇒ 审计成立性受损，打包期即红。
+  const packagedAudit = fs.readFileSync(path.join(resources, 'enterprise/plankton-enterprise/audit_unit.py'), 'utf8')
+  for (const marker of ['derive_session_audit_id', 'audit_hygiene_problem', 'resolve_profile_id', 'self-reported']) {
+    if (!packagedAudit.includes(marker)) {
+      throw new Error(`[after-pack] packaged enterprise audit_unit.py lost the audit-unit producer (missing "${marker}")`)
+    }
+  }
+  if (!packagedApi.includes('@router.get("/audit/profile-id")') || !packagedApi.includes('@router.get("/audit/unit")')) {
+    throw new Error('[after-pack] packaged enterprise plugin_api.py lost the W1 audit routes')
   }
 
   return expected
