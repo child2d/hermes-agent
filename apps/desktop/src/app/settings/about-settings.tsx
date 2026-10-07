@@ -8,6 +8,7 @@ import { RefreshCw } from '@/lib/icons'
 import { $connection } from '@/store/session'
 import { $desktopVersion, checkBackendUpdates, refreshDesktopVersion } from '@/store/updates'
 
+import { PlanktonAccountSection } from './plankton-account-section'
 import { SectionHeading, SettingsContent } from './primitives'
 import { SETTING_IDS, settingElementId } from './settings-manifest'
 import { UninstallSection } from './uninstall-section'
@@ -54,6 +55,9 @@ function AppUpdatesSettings({ includeUninstall }: AppUpdatesSettingsProps): Reac
     <SettingsContent>
       <VersionHero version={version} />
       <div className="mx-auto mt-4 w-full max-w-2xl">
+        {/* Enterprise (Plankton) SSO account + sign-out. Renders nothing on
+            every upstream variant. */}
+        <PlanktonAccountSection />
         <SectionHeading icon={RefreshCw} title={t.settings.about.updates} />
         <div className="grid gap-3" id={settingElementId(SETTING_IDS.about.updates)}>
           <UpdateStatusCard target="client" />

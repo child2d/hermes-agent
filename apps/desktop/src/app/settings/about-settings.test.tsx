@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DesktopUpdateStatus, DesktopVersionInfo, HermesConnection } from '@/global'
 import { en } from '@/i18n/en'
+import { $enterpriseEnabled } from '@/store/enterprise-flag'
 import type * as SessionStore from '@/store/session'
 import { $connection } from '@/store/session'
 import {
@@ -15,6 +16,8 @@ import {
   startActiveUpdate,
   type UpdateApplyState
 } from '@/store/updates'
+
+import { PlanktonAuthGate } from '../plankton-auth-gate'
 
 import { AboutSettings } from './about-settings'
 
@@ -86,6 +89,8 @@ describe('AboutSettings', (): void => {
 
   afterEach((): void => {
     cleanup()
+    $enterpriseEnabled.set(false)
+    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
   })
 
   it('shows shared version details and refreshes each remote gateway independently', (): void => {
@@ -149,5 +154,39 @@ describe('AboutSettings', (): void => {
       expect(checkBackendUpdates).toHaveBeenCalledWith({ force: true })
     })
     expect(checkUpdates).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the enterprise account + sign-out entry, and nothing on upstream', async (): Promise<void> => {
+    // Upstream: the account block is absent.
+    render(<AboutSettings />)
+    expect(screen.queryByRole('button', { name: '退出登录' })).toBeNull()
+    cleanup()
+
+    $enterpriseEnabled.set(true)
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+      planktonAuthRequired: true,
+      enterpriseEnabled: true,
+      planktonAuth: {
+        status: vi.fn().mockResolvedValue({
+          ok: true,
+          loginReady: true,
+          loginBlockedReason: null,
+          loggedIn: true,
+          whoami: { subject: 'subject-1', displayName: '张三' }
+        }),
+        login: vi.fn(),
+        logout: vi.fn()
+      }
+    }
+
+    render(
+      <PlanktonAuthGate>
+        <AboutSettings />
+      </PlanktonAuthGate>
+    )
+
+    // The signed-in gate mounts About, which carries the account entry.
+    expect(await screen.findByRole('button', { name: '退出登录' })).toBeTruthy()
+    expect(screen.getByText('张三')).toBeTruthy()
   })
 })
