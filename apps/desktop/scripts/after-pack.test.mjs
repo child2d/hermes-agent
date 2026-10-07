@@ -123,6 +123,11 @@ const REQUIRED_ENTERPRISE = [
   'enterprise/plankton-enterprise/__init__.py',
   'enterprise/plankton-enterprise/proposals.py',
   'enterprise/plankton-enterprise/audit_unit.py',
+  // 批 4 · W5/W6 审计出口 + W7 客户端接线（接线模块与可配置传输）——after-pack 的期望清单里
+  // 有它们，故这个「完整树」夹具也必须给它们，否则 R1 会误报。
+  'enterprise/plankton-enterprise/audit_egress.py',
+  'enterprise/plankton-enterprise/audit_wiring.py',
+  'enterprise/plankton-enterprise/audit_transport.py',
   'enterprise/plankton-enterprise/dashboard/manifest.json',
   'enterprise/plankton-enterprise/dashboard/plugin_api.py',
   'enterprise/plankton-enterprise/desktop/plugin.js',
