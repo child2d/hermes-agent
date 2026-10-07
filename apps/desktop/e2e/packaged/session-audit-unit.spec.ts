@@ -15,7 +15,7 @@
  *   PLANKTON_OUTPUT_DIR=/tmp/… npm run pack:plankton      # 仓外产物
  *   PLANKTON_APP=/tmp/…/Plankton.app npm run test:e2e:packaged
  */
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -302,50 +302,63 @@ test('产物真实渲染器：profileId 稳定 + 会话单元组装（人方空�
 })
 
 /**
- * 批 4 · 反证（**产物级**）：启动自检不通过 ⇒ **真拒启动**，不进入可用状态。
+ * 批 4 · 反证（**产物级**）：启动自检不通过 ⇒ **不进入可用状态**。
  *
  * 把 `HERMES_HOME` 钉进**个人 Hermes 根内部**（`$HOME/.hermes/enterprise-home`）——正是审计落点自检
- * （`check_audit_landing`）与桌面隔离门（`enterpriseHomeIsolationIssue`）共同要拦的红线（写个人
- * `~/.hermes`）。产物必须 **fail-closed**：报错、**在读取/写入任何 home 与拉起后端之前退出**，
+ * （`check_audit_landing`）要拦的红线（写个人 `~/.hermes`，审计不成立）。产物引擎在加载插件时跑
+ * 落点自检，必须 **fail-closed**：把 `startup.usable` 置 false（会话准入据此拒），并给可行动提示——
  * 绝不「装作可用」。
  *
- * 断言**行为**而非文案：进程要么非零退出、要么在超时内**没有**进入可用态；并且报告
- * `ENTERPRISE HOME ISOLATION FAILURE`。不依赖窗口/后端（拒绝发生在它们之前）。
+ * 观测点＝真渲染器 → 主机桥 → 只读 `/audit/wiring`（与带外注入无关：这是引擎进程加载插件时的裁决）。
  */
-test('产物 fail-closed：HERMES_HOME 落进个人 ~/.hermes ⇒ 真拒启动（不进入可用态）', async () => {
+test('产物 fail-closed：HERMES_HOME 落进个人 ~/.hermes ⇒ 自检不过、不进入可用状态', async () => {
   const appPath = resolvePackagedApp()
   assertEnterpriseArtifactIdentity(appPath)
 
   const executable = path.join(appPath, 'Contents', 'MacOS', path.basename(appPath, '.app'))
+  const mock = await startMockServer({ replyForPrompt: () => 'ok' })
   const sandbox = createSandbox('ent-audit-failclosed')
   const isolatedHome = path.join(sandbox.root, '.hermes', 'enterprise-home')
   fs.mkdirSync(isolatedHome, { recursive: true })
+  writeMockProviderConfig(isolatedHome, mock.url, undefined, 'plugins:\n  enabled:\n    - plankton-enterprise\n')
+  writeEnvFile(isolatedHome)
 
-  const env = { ...packagedEnv(sandbox), HOME: sandbox.root, HERMES_HOME: isolatedHome }
+  // 与主用例同：企业产物在 SSO 后 fail-closed——播种本地 SSO 事实，让窗口能起来（审计自检与登录无关）。
+  const ssoDir = path.join(sandbox.userDataDir, 'plankton-state', 'sso')
+  fs.mkdirSync(ssoDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(ssoDir, 'session.json'),
+    JSON.stringify({ whoami: { subject: 'e2e-tester', displayName: 'E2E Tester' }, refreshToken: null }, null, 2)
+  )
 
-  const outcome = await new Promise<{ code: number | null; output: string }>((resolve) => {
-    const child = spawn(executable, ['--disable-gpu', '--no-sandbox'], { env, cwd: os.tmpdir() })
-    let output = ''
-    child.stdout?.on('data', (chunk) => (output += String(chunk)))
-    child.stderr?.on('data', (chunk) => (output += String(chunk)))
-    // 拒绝发生在后端 spawn 之前；若进程卡在阻断式错误框上，2 分钟也足够判定「未进入可用态」。
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL')
-      resolve({ code: null, output })
-    }, 120_000)
-    child.on('exit', (code) => {
-      clearTimeout(timer)
-      resolve({ code, output })
-    })
+  const app = await _electron.launch({
+    executablePath: executable,
+    args: ['--disable-gpu', '--no-sandbox'],
+    env: { ...packagedEnv(sandbox), HOME: sandbox.root, HERMES_HOME: isolatedHome },
+    cwd: os.tmpdir()
   })
 
-  expect(outcome.output, `必须报告 home 隔离失败：${outcome.output}`).toMatch(
-    /ENTERPRISE HOME ISOLATION FAILURE|enterprise home isolation failure/
-  )
-  expect(outcome.code === null || outcome.code !== 0, '不得以成功码退场').toBe(true)
-  // 红线：拒绝发生在任何 home 读写之前——个人根下**不得**出现企业插件的落点产物。
-  expect(
-    fs.existsSync(path.join(sandbox.root, '.hermes', 'plankton-enterprise')),
-    '拒绝后不得在个人根下留下企业插件产物'
-  ).toBe(false)
+  try {
+    const page = await app.firstWindow()
+    await waitForAppReady({ page, app } as unknown as Parameters<typeof waitForAppReady>[0], 120_000)
+
+    const wiring = await pluginGet(page, `${B}/audit/wiring`)
+    expect(wiring.kind, `接线状态路由必须可用：${JSON.stringify(wiring)}`).toBe('ok')
+    const startup = wiring.startup as Record<string, unknown>
+    expect(
+      startup.usable,
+      `HERMES_HOME 落进个人 ~/.hermes ⇒ 必须 fail-closed 不进入可用状态：${JSON.stringify(startup)}`
+    ).toBe(false)
+    expect(startup.kind).toBe('landing-inside-personal-home')
+    expect(String(startup.hint).length, '必须给可行动提示（不静默回退）').toBeGreaterThan(0)
+
+    // 只读落点自检也报同一事实。
+    const landing = await pluginGet(page, `${B}/audit/landing-check`)
+    expect(landing.ok, '落点自检必须报不通过').toBe(false)
+
+    // 默认无传输：即便落点不成立，也绝不会把数据发出去。
+    expect((wiring.transport as Record<string, unknown>).mode).toBe('no-transport')
+  } finally {
+    await app.close()
+  }
 })
