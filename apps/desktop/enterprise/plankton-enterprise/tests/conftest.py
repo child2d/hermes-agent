@@ -21,6 +21,11 @@ def _isolate_hermes_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "isolated-hermes-home"))
     monkeypatch.delenv("PLANKTON_AUDIT_BUFFER_DIR", raising=False)
     monkeypatch.delenv("PLANKTON_PROFILE_IDS_FILE", raising=False)
+    # 凭据解析会读 **CLI token 存储**（`~/.shaoke/tokens.json`，不是 ~/.hermes）；测试**绝不**
+    # 依赖真实机器上的凭据 ⇒ 一律钉到本用例的临时（不存在）路径。
+    monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(tmp_path / "no-such-tokens.json"))
+    monkeypatch.delenv("PLANKTON_AUDIT_EGRESS_CREDENTIAL", raising=False)
+    monkeypatch.delenv("PLANKTON_AUDIT_EGRESS_CLI", raising=False)
     yield
 
 

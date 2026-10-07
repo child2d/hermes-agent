@@ -125,7 +125,12 @@ def test_wiring_route_reports_wiring_and_no_transport(api, home):
     assert isinstance(status["hooks"], list)
     assert status["startup"]["usable"] is True
     assert status["transport"]["mode"] == "no-transport", "默认无传输（安全态）"
-    assert "credential" not in json.dumps(status["transport"]).replace("credentialConfigured", "")
+    # 只读面**只**允许出现**类别键**（credentialConfigured / credentialSource），**绝不**回显凭据原值。
+    payload = json.dumps(status["transport"]).replace("credentialConfigured", "").replace("credentialSource", "")
+    assert "credential" not in payload
+    assert status["transport"]["credentialSource"] in (None, "cli-token-store", "config", "env")
+    # 本批：无凭据时如实报「不可用」（fail-closed），不得假装已配置。
+    assert status["transport"]["credentialConfigured"] is False
 
 
 def test_wiring_route_reflects_a_bad_landing(api, tmp_path, monkeypatch):

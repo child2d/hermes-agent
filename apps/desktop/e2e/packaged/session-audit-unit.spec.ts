@@ -119,7 +119,18 @@ function assertEnterpriseArtifactIdentity(appPath: string): void {
   }
 
   const transport = fs.readFileSync(path.join(pluginDir, 'audit_transport.py'), 'utf8')
-  for (const marker of ['build_transport', 'load_transport_config', 'describe_transport', 'no-transport']) {
+  for (const marker of [
+    'build_transport',
+    'load_transport_config',
+    'describe_transport',
+    'no-transport',
+    // 凭据**运行时解析 + 过期刷新**的承载必须**真的在产物字节里**（否则又是「模块在、能力不在」）。
+    'read_cli_token',
+    'refresh_cli_token',
+    'credential_provider',
+    'resolve_credential',
+    '.shaoke'
+  ]) {
     expect(transport, `产物 audit_transport.py 必须带传输承载（缺 ${marker}）`).toContain(marker)
   }
   // 传输不得写死端点（端点只来自企业 home 配置）。
