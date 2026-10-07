@@ -9,8 +9,9 @@
   * **端点只来自企业 home 配置**：源码**不得**出现真实 URL 字面量；配置坏了**回落关闭**
     （绝不能变成偷偷启用）；
   * **凭据在发送时解析、来源可多处**：环境变量 → 配置 `credential` → **运行时读 CLI token 存储**
-    （`~/.shaoke/tokens.json`；**不是** `~/.hermes`）。**不缓存过期值**；过期走 **CLI 自带刷新**
-    后**至多重试一次**；读不到 ⇒ **fail-closed（绝不发匿名请求）+ 可重试**（**不是** permanent）；
+    （`~/.shaoke/tokens.json` 的 **`modules.baymax.token`**（捎客自签 JWT）；**不是** `~/.hermes`）。
+    **不缓存过期值**；过期走 **CLI 自带刷新**后**至多重试一次**；读不到 ⇒
+    **fail-closed（绝不发匿名请求）+ 可重试**（**不是** permanent）；
   * **凭据/端点不外泄**：`describe_transport` 只回 `*Configured: bool`/`credentialSource`（类别），
     **不回原值**；日志/返回文案不回显凭据；
   * **HTTP 状态 → 传输语义**的映射逐条核对（2xx ok / **401**·408·425·429·5xx retryable / 其余 4xx permanent）；
@@ -19,9 +20,11 @@
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -103,6 +106,15 @@ def test_source_has_no_hardcoded_endpoint():
     for scheme in ('"http://', '"https://', "'http://", "'https://"):
         assert scheme not in code, f"传输源码不得写死端点（{scheme}）"
     assert "cli_usage_log" not in code and "common_auth" not in code, "不复用 CLI 用量表"
+
+
+def test_refresh_command_is_minimal_baymax_read(transport):
+    """刷新命令＝**最小 baymax 只读命令** `baymax +whoami`（CLI 在取客户端前先 `Ensure(SystemBaymax)`）。
+
+    这条钉住「刷新走 **CLI 自带**路径」而非自实现 OAuth；也不得再退回 kd/飞书路径
+    （飞书 token 已被接收端拒绝）。
+    """
+    assert tuple(transport.REFRESH_COMMAND) == ("baymax", "+whoami")
 
 
 # ── 启用后：HTTP 语义映射 ─────────────────────────────────────────────────────
@@ -218,18 +230,37 @@ def test_endpoint_env_override_is_supported_but_still_opt_in(transport, home, mo
 # 反证基线（改前行为）：配置没有 credential ⇒ 无 Authorization ⇒ 服务端 401 ⇒ `_classify_status`
 # 归 **permanent** ⇒ 不重试、上传恒失败。以下用例把「发送时解析 + 过期刷新 + 无凭据 fail-closed
 # 且归**可重试**」逐条钉住。
+#
+# 本批（凭据源修正）：运行时读的**不是** `auth.access_token`（飞书 token，接收端已拒），而是
+# `modules.baymax.token`（捎客**自签 JWT**）。据此补充「不回退」反证。
 
 _ENDPOINT = "https://central.example.invalid/plankton/audit"
 _UNIT = {"session_audit_id": "plankton:s", "human": {"auth_user_id": None}}
 
+#: 假 JWT 的 `exp`（只用于过期判定；**不是**真签名）。
+_EXP_PAST = 1_000_000_000      # 2001 —— 已过期
+_EXP_FUTURE = 4_000_000_000    # 2096 —— 未过期
 
-def _write_token_store(path: Path, *, access_token, expires_at=None, refresh_token="rt") -> None:
-    """造一份 CLI token 存储（形状同 `~/.shaoke/tokens.json` 的 `auth` 段）。"""
+
+def _b64url(obj: dict) -> str:
+    raw = json.dumps(obj, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _mint_baymax_jwt(exp_epoch: int, *, tag: str = "tok") -> str:
+    """造一个形状同**捎客自签 JWT**的假 token（三段；payload 含 `exp`）。仅用于本地解析。"""
+    header = _b64url({"alg": "HS256", "typ": "JWT"})
+    payload = _b64url({"account": "u@shaoke.com", "id": "1", "tag": tag, "exp": int(exp_epoch)})
+    return f"{header}.{payload}.local-test-signature"
+
+
+def _write_token_store(path: Path, *, token: Optional[str], extra_modules: Optional[dict] = None) -> None:
+    """造一份 CLI token 存储（形状同 `~/.shaoke/tokens.json` 的 `modules.baymax` 段）。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    auth = {"access_token": access_token, "refresh_token": refresh_token}
-    if expires_at is not None:
-        auth["expires_at"] = expires_at
-    path.write_text(json.dumps({"auth": auth}), encoding="utf-8")
+    modules = {"baymax": {"token": token or "", "role": "", "email": "u@shaoke.com"}}
+    if extra_modules:
+        modules.update(extra_modules)
+    path.write_text(json.dumps({"modules": modules}), encoding="utf-8")
 
 
 def test_token_store_default_path_is_shaoke_not_hermes(transport, monkeypatch):
@@ -240,10 +271,41 @@ def test_token_store_default_path_is_shaoke_not_hermes(transport, monkeypatch):
     assert ".hermes" not in path
 
 
-def test_credential_resolved_from_cli_token_store_at_send_time(transport, home, monkeypatch, tmp_path):
-    """配置**不含** credential ⇒ 发送时从 CLI token 存储解析凭据并带上；诊断只回类别不回值。"""
+def test_jwt_expiry_reads_exp_and_rejects_non_jwt(transport):
+    """`exp` 从**自签 JWT** payload 解出；非 JWT/缺 exp/坏 ⇒ `None`（不据此判过期）。"""
+    tok = _mint_baymax_jwt(_EXP_FUTURE)
+    assert transport._jwt_expiry(tok) == float(_EXP_FUTURE)
+    assert transport._jwt_expiry("not-a-jwt") is None
+    assert transport._jwt_expiry("a.b") is None
+    assert transport._jwt_expiry(_b64url({"alg": "HS256"}) + "." + _b64url({"sub": "x"}) + ".s") is None
+
+
+def test_read_cli_token_reads_modules_baymax_only(transport, monkeypatch, tmp_path):
+    """`read_cli_token` **只**读 `modules.baymax.token`；`auth.access_token`/`skillhub` 一律不碰。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="store-token-value", expires_at="2999-01-01T00:00:00+08:00")
+    tok = _mint_baymax_jwt(_EXP_FUTURE)
+    _write_token_store(
+        store,
+        token=tok,
+        extra_modules={"skillhub": {"token": "skillhub-jwt", "role": "", "email": ""}},
+    )
+    # 顺带塞入一份飞书 auth 段（接收端已拒）——必须**不被**采用。
+    data = json.loads(store.read_text())
+    data["auth"] = {"access_token": "feishu-token", "expires_at": "2999-01-01T00:00:00+08:00"}
+    store.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
+
+    got = transport.read_cli_token()
+    assert got["token"] == tok
+    assert got["expiresAt"] == float(_EXP_FUTURE)
+
+
+def test_credential_resolved_from_cli_token_store_at_send_time(transport, home, monkeypatch, tmp_path):
+    """配置**不含** credential ⇒ 发送时从 CLI token 存储（`modules.baymax.token`）解析并带上；
+    诊断只回类别不回值。"""
+    store = tmp_path / "tokens.json"
+    tok = _mint_baymax_jwt(_EXP_FUTURE)
+    _write_token_store(store, token=tok)
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
     _write_config(home, {"enabled": True, "endpoint": _ENDPOINT})
     built = transport.build_transport(home)
@@ -256,19 +318,46 @@ def test_credential_resolved_from_cli_token_store_at_send_time(transport, home, 
 
     monkeypatch.setattr(transport, "_urlopen", fake_urlopen)
     assert built(_UNIT) == {"ok": True}
-    assert seen["headers"]["Authorization"] == "Bearer store-token-value"
+    assert seen["headers"]["Authorization"] == f"Bearer {tok}"
 
     described = transport.describe_transport(home)
     assert described["credentialConfigured"] is True
     assert described["credentialSource"] == "cli-token-store"
-    assert "store-token-value" not in json.dumps(described)
+    assert tok not in json.dumps(described)
     assert _ENDPOINT not in json.dumps(described)
+
+
+def test_no_fallback_to_feishu_or_skillhub_token(transport, home, monkeypatch, tmp_path):
+    """**反证**：存储里**只有** `auth.access_token`（飞书）＋ `modules.skillhub.token`（另一把密钥），
+    没有 `modules.baymax.token` ⇒ 视为**无凭据** ⇒ fail-closed、**零出网**（不得回退到它们）。"""
+    store = tmp_path / "tokens.json"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text(
+        json.dumps({
+            "auth": {"access_token": "feishu-token", "expires_at": "2999-01-01T00:00:00+08:00"},
+            "modules": {"skillhub": {"token": "skillhub-jwt", "role": "", "email": ""}},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
+    poisoned = {"called": False}
+
+    def boom(url, data, headers, timeout):
+        poisoned["called"] = True
+        raise AssertionError("不得回退到飞书/skillhub token 外发")
+
+    monkeypatch.setattr(transport, "_urlopen", boom)
+    _write_config(home, {"enabled": True, "endpoint": _ENDPOINT})
+    result = transport.build_transport(home)(_UNIT)
+    assert poisoned["called"] is False, "无 baymax 令牌必须 fail-closed，绝不外发"
+    assert result["ok"] is False and result["retryable"] is True
+    assert result["note"] == "no-credential:no-cli-token"
 
 
 def test_source_order_env_beats_config_beats_store(transport, home, monkeypatch, tmp_path):
     """来源顺序：环境变量 → 配置 `credential` → CLI token 存储（逐级回落）。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="store-token", expires_at="2999-01-01T00:00:00+08:00")
+    _write_token_store(store, token=_mint_baymax_jwt(_EXP_FUTURE))
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
     _write_config(home, {"enabled": True, "endpoint": _ENDPOINT})
     assert transport.resolve_credential(home)["source"] == "cli-token-store"
@@ -283,16 +372,17 @@ def test_source_order_env_beats_config_beats_store(transport, home, monkeypatch,
 
 
 def test_expired_store_token_is_refreshed_via_cli_then_sent(transport, home, monkeypatch, tmp_path):
-    """token 存储里已是**过期** token ⇒ 走 CLI 自带刷新（不自实现），刷新后重读并成功发送。"""
+    """token 存储里已是**过期** JWT ⇒ 走 CLI 自带刷新（不自实现），刷新后重读并成功发送。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="expired-token", expires_at="2000-01-01T00:00:00+08:00")
+    _write_token_store(store, token=_mint_baymax_jwt(_EXP_PAST))
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
     calls = {"refresh": 0}
+    fresh = _mint_baymax_jwt(_EXP_FUTURE, tag="fresh")
 
     def fake_refresh():
         calls["refresh"] += 1
-        # 模拟 CLI 刷新后**回写** token 存储（这正是 `shaoke-cli` 的 TryRefreshToken 行为）。
-        _write_token_store(store, access_token="fresh-token", expires_at="2999-01-01T00:00:00+08:00")
+        # 模拟 CLI 刷新后**回写** token 存储（正是 `Ensure(SystemBaymax)` 的行为）。
+        _write_token_store(store, token=fresh)
         return True
 
     monkeypatch.setattr(transport, "refresh_cli_token", fake_refresh)
@@ -306,7 +396,7 @@ def test_expired_store_token_is_refreshed_via_cli_then_sent(transport, home, mon
     monkeypatch.setattr(transport, "_urlopen", fake_urlopen)
     assert transport.build_transport(home)(_UNIT) == {"ok": True}
     assert calls["refresh"] == 1
-    assert seen["headers"]["Authorization"] == "Bearer fresh-token"
+    assert seen["headers"]["Authorization"] == f"Bearer {fresh}"
 
 
 def test_no_token_fails_closed_never_sends_anonymous_and_is_retryable(transport, home, monkeypatch, tmp_path):
@@ -330,7 +420,7 @@ def test_no_token_fails_closed_never_sends_anonymous_and_is_retryable(transport,
 def test_refresh_failure_is_retryable_not_permanent_and_sends_nothing(transport, home, monkeypatch, tmp_path):
     """刷新不可用/失败 ⇒ 归**可重试**（**不再** permanent），且**不丢单元**（不发送、保留）。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="expired-token", expires_at="2000-01-01T00:00:00+08:00")
+    _write_token_store(store, token=_mint_baymax_jwt(_EXP_PAST))
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
     monkeypatch.setattr(transport, "refresh_cli_token", lambda: True)  # 触发但没写回 ⇒ 刷新失败
 
@@ -347,11 +437,13 @@ def test_refresh_failure_is_retryable_not_permanent_and_sends_nothing(transport,
 def test_401_triggers_refresh_and_retries_once_then_ok(transport, home, monkeypatch, tmp_path):
     """发送遇 401（凭据被拒）⇒ 刷新后**重试一次**并成功（服务端第二次收下）。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="stale-token", expires_at="2999-01-01T00:00:00+08:00")
+    stale = _mint_baymax_jwt(_EXP_FUTURE, tag="stale")
+    fresh = _mint_baymax_jwt(_EXP_FUTURE, tag="fresh")
+    _write_token_store(store, token=stale)
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
 
     def fake_refresh():
-        _write_token_store(store, access_token="fresh-token", expires_at="2999-01-01T00:00:00+08:00")
+        _write_token_store(store, token=fresh)
         return True
 
     monkeypatch.setattr(transport, "refresh_cli_token", fake_refresh)
@@ -364,19 +456,19 @@ def test_401_triggers_refresh_and_retries_once_then_ok(transport, home, monkeypa
 
     monkeypatch.setattr(transport, "_urlopen", fake_urlopen)
     assert transport.build_transport(home)(_UNIT) == {"ok": True}
-    assert seen == ["Bearer stale-token", "Bearer fresh-token"], "至多重试一次、且用新凭据"
+    assert seen == [f"Bearer {stale}", f"Bearer {fresh}"], "至多重试一次、且用新凭据"
 
 
 def test_401_refresh_at_most_one_retry(transport, home, monkeypatch, tmp_path):
     """持续 401 ⇒ **至多重试一次**（两次请求封顶），且最终归**可重试**（不循环、不 permanent）。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="t1", expires_at="2999-01-01T00:00:00+08:00")
+    _write_token_store(store, token=_mint_baymax_jwt(_EXP_FUTURE, tag="t1"))
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
     calls = {"refresh": 0}
 
     def fake_refresh():
         calls["refresh"] += 1
-        _write_token_store(store, access_token=f"t{calls['refresh'] + 1}", expires_at="2999-01-01T00:00:00+08:00")
+        _write_token_store(store, token=_mint_baymax_jwt(_EXP_FUTURE, tag=f"t{calls['refresh'] + 1}"))
         return True
 
     monkeypatch.setattr(transport, "refresh_cli_token", fake_refresh)
@@ -396,7 +488,8 @@ def test_401_refresh_at_most_one_retry(transport, home, monkeypatch, tmp_path):
 def test_describe_transport_never_refreshes(transport, home, monkeypatch, tmp_path):
     """只读诊断面**绝不**触发刷新（读路径无副作用）；过期 token 时只报不可用类别。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="expired-token", expires_at="2000-01-01T00:00:00+08:00")
+    expired = _mint_baymax_jwt(_EXP_PAST, tag="expired-token")
+    _write_token_store(store, token=expired)
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
     monkeypatch.setattr(
         transport, "refresh_cli_token",
@@ -405,7 +498,7 @@ def test_describe_transport_never_refreshes(transport, home, monkeypatch, tmp_pa
     _write_config(home, {"enabled": True, "endpoint": _ENDPOINT})
     described = transport.describe_transport(home)
     assert described["credentialConfigured"] is False
-    assert "expired-token" not in json.dumps(described)
+    assert expired not in json.dumps(described)
 
 
 # ── 真实客户端的非 2xx：`HTTPError` 必须解出状态码，否则口径表是死码 ──────────────────
@@ -440,12 +533,13 @@ def test_real_http_error_status_reaches_classification(transport, home, monkeypa
 def test_real_http_error_401_refreshes_and_retries_once(transport, home, monkeypatch, tmp_path):
     """生产路径（`HTTPError` 401）同样触发刷新 + 至多重试一次 ⇒ 服务端第二次 200 即成功。"""
     store = tmp_path / "tokens.json"
-    _write_token_store(store, access_token="stale-token", expires_at="2999-01-01T00:00:00+08:00")
+    stale = _mint_baymax_jwt(_EXP_FUTURE, tag="stale")
+    _write_token_store(store, token=stale)
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(store))
     calls = {"n": 0}
 
     def fake_refresh():
-        _write_token_store(store, access_token="fresh-token", expires_at="2999-01-01T00:00:00+08:00")
+        _write_token_store(store, token=_mint_baymax_jwt(_EXP_FUTURE, tag="fresh"))
         return True
 
     monkeypatch.setattr(transport, "refresh_cli_token", fake_refresh)
@@ -460,5 +554,3 @@ def test_real_http_error_401_refreshes_and_retries_once(transport, home, monkeyp
     monkeypatch.setattr(transport, "_urlopen", fake_urlopen)
     assert transport.build_transport(home)(_UNIT) == {"ok": True}
     assert calls["n"] == 2, "401（真实 HTTPError）应触发刷新后重试一次"
-
-

@@ -28,10 +28,13 @@
 
   ① 环境变量 `PLANKTON_AUDIT_EGRESS_CREDENTIAL`（一次性本地验证/CI 的最高优先覆盖）；
   ② 配置 `credential`（企业 home 内配置；保留作**测试/逃逸口**）；
-  ③ **运行时**读 CLI token 存储 `~/.shaoke/tokens.json` 的 `auth.access_token`
-     （与 `/cli/audit` 同款飞书用户 token，**有 TTL**）。已过期 ⇒ 触发 CLI 自带刷新路径
-     （`shaoke-cli` 的 `internal/auth.TryRefreshToken`，借一条需凭据的命令触发并回写 token 存储），
-     刷新后**重读**；仍不可用 ⇒ 无凭据（fail-closed、可重试）。
+  ③ **运行时**读 CLI token 存储 `~/.shaoke/tokens.json` 的 **`modules.baymax.token`**
+     （捎客**自签 JWT**，含 `iat`/`exp`，`exp − iat = 24h`；接收端本地 HS256 验签，**不调飞书**）。
+     它的 `exp` 已过 ⇒ 触发 **CLI 自带刷新**：跑一条最小 baymax 命令，CLI 的
+     `auth.TokenManager.Ensure(SystemBaymax)` 会先刷新飞书 token、再 `ExchangeBaymaxToken`
+     回写 `modules.baymax.token`；刷新后**重读**；仍不可用 ⇒ 无凭据（fail-closed、可重试）。
+     **不回退** `auth.access_token`（飞书 token，接收端已拒）、**不回退** `modules.skillhub.token`
+     （**另一把密钥**签的，验签必败）。
 
 配置形状（`audit-egress.json`，全部可选）：
 
@@ -46,12 +49,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import subprocess
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -76,10 +79,12 @@ TOKEN_STORE_ENV = "PLANKTON_AUDIT_EGRESS_TOKEN_STORE"
 #: 触发 **CLI 自带刷新**的可执行文件名/路径（覆盖便于测试；缺省取 PATH 上的 `shaoke-cli`）。
 CLI_BIN_ENV = "PLANKTON_AUDIT_EGRESS_CLI"
 DEFAULT_CLI_BIN = "shaoke-cli"
-#: 触发刷新的命令：任何**需要凭据**的 CLI 命令在令牌过期时都会走 `auth.TryRefreshToken`
-#: 并回写 token 存储；`--dry-run` 保证不真正执行该命令的业务请求（只借它触发刷新）。
-#: **不自实现 OAuth**（红线）：刷新口径完全归 CLI。
-REFRESH_COMMAND = ("kd", "+health", "--dry-run")
+#: 触发刷新的命令。改为**一条最小 baymax 命令**：任何 baymax 命令在取客户端前都会走
+#: `auth.TokenManager.Ensure(SystemBaymax)` —— 模块 JWT 的 `exp` 已过时，它会先
+#: `ensureFeishu()`（必要时刷新飞书 token）再 `ExchangeBaymaxToken` 并 `SaveBaymaxToken`
+#: **回写 `modules.baymax.token`**。`baymax +whoami` 是最小的**只读** baymax 命令，
+#: 在发起业务请求前即完成刷新（只读、无副作用）。**不自实现 OAuth**（红线）：刷新口径全归 CLI。
+REFRESH_COMMAND = ("baymax", "+whoami")
 #: 刷新子进程超时（秒）。超时/失败 ⇒ 如实归可重试（不丢单元）。
 REFRESH_TIMEOUT_SECONDS = 20.0
 
@@ -200,37 +205,50 @@ def token_store_path() -> Path:
     return Path(os.path.expanduser("~")) / ".shaoke" / "tokens.json"
 
 
-def _parse_expiry(raw: Any) -> Optional[float]:
-    """把 `expires_at`（ISO8601）解析成 epoch 秒；缺/坏 ⇒ `None`（**不**据此判过期）。"""
-    if not isinstance(raw, str) or not raw.strip():
+def _jwt_expiry(token: str) -> Optional[float]:
+    """从捎客**自签 JWT** 的 payload 解 `exp`（epoch 秒）；非 JWT/缺 `exp`/坏 ⇒ `None`（**不**据此判过期）。
+
+    **只**解 `exp` 这一个声明；`account`/`id`/`name`/`roles`/`status` 等一律**不读、不回显**。
+    全程按 `str`/JSON 就地解析，**绝不**回显 token 值。
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
         return None
-    text = raw.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
     try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
+        claims = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
+    except (ValueError, TypeError):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.timestamp()
+    if not isinstance(claims, dict):
+        return None
+    exp = claims.get("exp")
+    try:
+        return float(exp) if exp is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def read_cli_token() -> dict:
-    """**只读** CLI token 存储（**永不抛**）。返回 `{"token": str|None, "expiresAt": float|None}`。
+    """**只读** CLI token 存储里的**捎客自签 JWT**（`modules.baymax.token`，**永不抛**）。
 
+    返回 `{"token": str|None, "expiresAt": float|None}`；`expiresAt` 取 JWT 的 `exp` 声明。
     **绝不**回显 token 值；读不到/读坏/形状不对 ⇒ `{"token": None, "expiresAt": None}`。
+
+    **只**读 `modules.baymax.token` —— **不**回退到 `auth.access_token`（飞书 token，接收端已拒），
+    也**不**回退到 `modules.skillhub.token`（**另一把密钥**签的，本地验签必败）。
     """
     path = token_store_path()
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"token": None, "expiresAt": None}
-    auth = data.get("auth") if isinstance(data, dict) else None
-    if not isinstance(auth, dict):
+    modules = data.get("modules") if isinstance(data, dict) else None
+    baymax = modules.get("baymax") if isinstance(modules, dict) else None
+    if not isinstance(baymax, dict):
         return {"token": None, "expiresAt": None}
-    token = str(auth.get("access_token") or "").strip()
-    return {"token": token or None, "expiresAt": _parse_expiry(auth.get("expires_at"))}
+    token = str(baymax.get("token") or "").strip()
+    return {"token": token or None, "expiresAt": _jwt_expiry(token) if token else None}
 
 
 def _token_expired(expires_at: Optional[float], now: Optional[float] = None) -> bool:
