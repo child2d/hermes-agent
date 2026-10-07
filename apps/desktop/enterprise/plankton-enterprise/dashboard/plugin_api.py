@@ -655,6 +655,10 @@ class ToggleRequest(BaseModel):
 # **不实现上传**（W2 才落接收端点）。两条路由都**只读**：`/audit/unit` 以 `mode=ro` 读引擎
 # 会话事实库 `state.db`；`/audit/profile-id` 只在**企业 home**内首次纳管时落一份台账。
 # 没有凭据、没有上传、没有对台账/会话库的写入（读写台账是「发号」本身的持久化，非审计上传）。
+#
+# ⚠ 查询参数取名 `profileKey`，**不是** `profile`：桌面端主机桥把 URL 的 `profile` 查询参数
+# 当作**profile 路由选择器**（值须是合法 profile 名 slug），插件路由若占用该名会被桥层拒掉
+# （实测：`?profile=/profiles/alpha` ⇒ 400 「not a valid profile name」）。故用 `profileKey`。
 # ─────────────────────────────────────────────────────────────────────────────
 
 _AUDIT_MODULE_NAME = "plankton_enterprise_audit_unit"
@@ -676,7 +680,7 @@ def _audit_module():
 
 
 @router.get("/audit/profile-id")
-def audit_profile_id(profile: str = "", name: str = "", aliases: str = "") -> dict:
+def audit_profile_id(profileKey: str = "", name: str = "", aliases: str = "") -> dict:
     """应用发**稳定 `profileId`**（企业 home 首次纳管生成并持久化；PLK-REQ-0049）。
 
     `profile` 是 profile 的**稳定身份**（其 home 目录），**不是**名字：名字变/重名不影响 ID。
@@ -690,7 +694,7 @@ def audit_profile_id(profile: str = "", name: str = "", aliases: str = "") -> di
         return {"kind": "rejected", "note": "enterprise-home-unavailable"}
     alias_list = [a for a in (aliases or "").split(",") if a.strip()]
     try:
-        return audit.resolve_profile_id(profile or "default", profile_name=name, aliases=alias_list, home=home)
+        return audit.resolve_profile_id(profileKey or "default", profile_name=name, aliases=alias_list, home=home)
     except audit.AuditUnitRefused as exc:
         return {"kind": "rejected", "note": exc.note}
 
@@ -698,7 +702,7 @@ def audit_profile_id(profile: str = "", name: str = "", aliases: str = "") -> di
 @router.get("/audit/unit")
 def audit_unit(
     session: str = "",
-    profile: str = "",
+    profileKey: str = "",
     name: str = "",
     db: str = "",
     variant: str = "plankton",
@@ -729,7 +733,7 @@ def audit_unit(
         return {"kind": "rejected", "note": "session-db-unresolvable"}
     try:
         messages = audit.read_session_chat(db_real, session)
-        resolved = audit.resolve_profile_id(profile or "default", profile_name=name, home=home)
+        resolved = audit.resolve_profile_id(profileKey or "default", profile_name=name, home=home)
         unit = audit.assemble_audit_unit(
             engine_session_id=session,
             messages=messages,

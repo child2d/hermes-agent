@@ -171,15 +171,15 @@ test('产物真实渲染器：profileId 稳定 + 会话单元组装（人方空�
     ).toBe(true)
 
     // ── profileId：首次纳管发号并持久化；改名不改 ID ─────────────────────────
-    const first = await pluginGet(page, `${B}/audit/profile-id?profile=/profiles/alpha&name=Alpha`)
+    const first = await pluginGet(page, `${B}/audit/profile-id?profileKey=alpha&name=Alpha`)
     expect(first.kind, `profile-id 路由必须可用：${JSON.stringify(first)}`).toBe('ok')
     const id = String(first.profileId)
     expect(id.startsWith('pid_'), 'profileId 必须是应用发的稳定 ID（pid_ 前缀）').toBe(true)
 
-    const renamed = await pluginGet(page, `${B}/audit/profile-id?profile=/profiles/alpha&name=Alpha%20Renamed`)
+    const renamed = await pluginGet(page, `${B}/audit/profile-id?profileKey=alpha&name=Alpha%20Renamed`)
     expect(renamed.profileId, '同一 profile 改名必须复用同一 profileId').toBe(id)
 
-    const other = await pluginGet(page, `${B}/audit/profile-id?profile=/profiles/beta&name=Alpha`)
+    const other = await pluginGet(page, `${B}/audit/profile-id?profileKey=beta&name=Alpha`)
     expect(other.profileId, '不同 profile（即便重名）必须得到不同 ID').not.toBe(id)
 
     const store = path.join(home, 'plankton-enterprise', 'profile-ids.json')
@@ -189,7 +189,7 @@ test('产物真实渲染器：profileId 稳定 + 会话单元组装（人方空�
     // ── 单元组装：全部聊天记录 / 人方空值 / agent 非权威 / 无密钥 ─────────────
     const unitResp = await pluginGet(
       page,
-      `${B}/audit/unit?session=sess-e2e&profile=/profiles/alpha&name=Alpha&db=${encodeURIComponent(fixtureDb)}`
+      `${B}/audit/unit?session=sess-e2e&profileKey=alpha&name=Alpha&db=${encodeURIComponent(fixtureDb)}`
     )
     expect(unitResp.kind, `unit 路由必须可用：${JSON.stringify(unitResp)}`).toBe('ok')
     const unit = unitResp.unit as Record<string, unknown>

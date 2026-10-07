@@ -389,6 +389,9 @@ def test_plugin_backend_w1_routes_are_read_only():
     api = PLUGIN_API.read_text(encoding="utf-8")
     assert '@router.get("/audit/profile-id")' in api
     assert '@router.get("/audit/unit")' in api
+    # 路由**不得**用 `profile` 查询参数——桌面端主机桥把它当 profile 路由选择器（实测 400）。
+    assert 'profileKey' in api and 'def audit_profile_id(profile:' not in api
+    assert 'profile: str = ""' not in api.split('# 批 4 · W1')[1].split("def assert_outside_personal_trees")[0]
     # W1 段（两条 audit 路由之间的实现）不得出现网络/上传动词。
     block = api.split('@router.get("/audit/profile-id")', 1)[1].split("def assert_outside_personal_trees", 1)[0]
     for forbidden in ("requests.post", "httpx", "urlopen(", "subprocess", "socket"):
@@ -417,15 +420,15 @@ def test_backend_w1_routes_real_behaviour(monkeypatch, tmp_path):
     monkeypatch.delenv("PLANKTON_PROFILE_IDS_FILE", raising=False)
 
     # 发号：同 profile（键＝稳定身份）改名 → 同 ID；且台账落在企业 home。
-    first = api.audit_profile_id(profile="/profiles/alpha", name="Alpha")
+    first = api.audit_profile_id(profileKey="/profiles/alpha", name="Alpha")
     assert first["kind"] == "ok" and first["profileId"].startswith("pid_")
-    renamed = api.audit_profile_id(profile="/profiles/alpha", name="Alpha Renamed")
+    renamed = api.audit_profile_id(profileKey="/profiles/alpha", name="Alpha Renamed")
     assert renamed["profileId"] == first["profileId"]
     assert (home / "plankton-enterprise" / "profile-ids.json").is_file()
 
     # 组装：从企业 home 内的只读夹具库读全部聊天记录，人方恒空，agent 非权威。
     db = _sqlite_session(home / "fixture.db", "s1", [("user", "q"), ("assistant", "a")])
-    out = api.audit_unit(session="s1", profile="/profiles/alpha", name="Alpha", db=str(db))
+    out = api.audit_unit(session="s1", profileKey="/profiles/alpha", name="Alpha", db=str(db))
     assert out["kind"] == "ok"
     assert out["unit"]["human"] == {"auth_user_id": None}
     assert out["unit"]["agent"]["authoritative"] is False
