@@ -103,4 +103,41 @@ def register(ctx: Any) -> None:  # noqa: ARG001 - the manifest contract requires
     # why this is not a second write door and cannot fill human-only fields).
     proposals = _load_proposals()
     proposals.register_tools(ctx)
+
+    # 批 4 · 客户端接线（线 ①②③）：把审计出口挂到引擎会话生命周期上——会话入口准入
+    # （admit_conversation）、会话收尾（record_and_flush）、启动期落点自检
+    # （check_audit_landing，fail-closed）。传输默认关闭（no-transport 安全态）。
+    # 见 audit_wiring.py 的模块头（接线依据＝引擎既有钩子面，不改上游）。
+    _wire_audit(ctx)
     return None
+
+
+#: 审计接线模块（批 4 · 客户端接线）。按绝对路径、固定名导入（与 proposals/audit_unit 同法）。
+_AUDIT_WIRING_MODULE_NAME = "plankton_enterprise_audit_wiring"
+_AUDIT_WIRING_PATH = Path(__file__).resolve().parent / "audit_wiring.py"
+
+
+def _load_audit_wiring() -> Any:
+    """Import ``audit_wiring.py`` once per process (fixed name ⇒ shared instance)."""
+    module = sys.modules.get(_AUDIT_WIRING_MODULE_NAME)
+    if module is not None:
+        return module
+    spec = importlib.util.spec_from_file_location(_AUDIT_WIRING_MODULE_NAME, _AUDIT_WIRING_PATH)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"plankton-enterprise: cannot load the audit wiring at {_AUDIT_WIRING_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_AUDIT_WIRING_MODULE_NAME] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _wire_audit(ctx: Any) -> None:
+    """接线审计出口（线 ①②③）。**审计不成立不得静默**：一律 error 级日志，绝不吞。
+
+    A host whose engine exposes no ``ctx.register_hook`` is a capability gap — logged
+    loudly by the wiring itself (see ``SessionAuditHost.register``). A defect in OUR
+    wiring payload (import error) is re-raised: unlike the optional skill, a plugin that
+    promises audit and silently drops the hook would be a silent audit hole.
+    """
+    wiring = _load_audit_wiring()
+    wiring.register_audit_wiring(ctx)

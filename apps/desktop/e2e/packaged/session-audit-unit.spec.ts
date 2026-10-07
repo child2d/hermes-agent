@@ -15,7 +15,7 @@
  *   PLANKTON_OUTPUT_DIR=/tmp/… npm run pack:plankton      # 仓外产物
  *   PLANKTON_APP=/tmp/…/Plankton.app npm run test:e2e:packaged
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -60,7 +60,16 @@ function assertEnterpriseArtifactIdentity(appPath: string): void {
   expect(stamp.identityVariant, '产物身份戳必须命名 plankton 变体').toBe('plankton')
 
   const pluginDir = path.join(resources, 'enterprise', 'plankton-enterprise')
-  for (const relative of ['audit_unit.py', 'audit_egress.py', 'dashboard/plugin_api.py', '__init__.py', 'plugin.yaml']) {
+  for (const relative of [
+    'audit_unit.py',
+    'audit_egress.py',
+    // 批 4 · 客户端接线：审计出口的接线模块与可配置传输，都必须在产物字节里。
+    'audit_wiring.py',
+    'audit_transport.py',
+    'dashboard/plugin_api.py',
+    '__init__.py',
+    'plugin.yaml'
+  ]) {
     const file = path.join(pluginDir, relative)
     expect(fs.existsSync(file), `企业插件 payload 缺失：${relative}`).toBe(true)
     expect(fs.statSync(file).size, `企业插件 payload 为空：${relative}`).toBeGreaterThan(0)
@@ -87,8 +96,34 @@ function assertEnterpriseArtifactIdentity(appPath: string): void {
   expect(api, '产物后端必须带只读 unit 路由').toContain('@router.get("/audit/unit")')
   expect(api, '产物后端必须带只读缓冲健康路由').toContain('@router.get("/audit/buffer")')
   expect(api, '产物后端必须带只读落点自检路由').toContain('@router.get("/audit/landing-check")')
+  // 批 4 · 客户端接线：只读的接线状态面也必须真在产物里。
+  expect(api, '产物后端必须带只读接线状态路由').toContain('@router.get("/audit/wiring")')
   // 本批不新增产品写口：后端不得出现任何 /audit 写路由。
   expect(api, 'W5/W6 不得带 /audit 写路由').not.toMatch(/@router\.(post|put|patch|delete)\(\s*"\/audit/)
+
+  // 批 4 · 客户端接线（线 ①②③④）的承载必须**真的在产物字节里**——否则又是「模块在、0 调用方」。
+  const init = fs.readFileSync(path.join(pluginDir, '__init__.py'), 'utf8')
+  expect(init, '产物插件入口必须接线审计出口（register → _wire_audit）').toContain('_wire_audit(ctx)')
+  expect(init, '产物插件入口必须落到 register_audit_wiring').toContain('register_audit_wiring(ctx)')
+
+  const wiring = fs.readFileSync(path.join(pluginDir, 'audit_wiring.py'), 'utf8')
+  for (const marker of [
+    'record_and_flush', // 线 ①：会话收尾先入缓冲再上传
+    'check_audit_landing', // 线 ②：启动期落点自检
+    'admit_conversation', // 线 ③：会话入口准入
+    'on_session_finalize', // 会话边界钩子（不是每轮）
+    'register_hook', // 只经引擎既有钩子面
+    'no-transport' // 默认安全态
+  ]) {
+    expect(wiring, `产物 audit_wiring.py 必须带接线承载（缺 ${marker}）`).toContain(marker)
+  }
+
+  const transport = fs.readFileSync(path.join(pluginDir, 'audit_transport.py'), 'utf8')
+  for (const marker of ['build_transport', 'load_transport_config', 'describe_transport', 'no-transport']) {
+    expect(transport, `产物 audit_transport.py 必须带传输承载（缺 ${marker}）`).toContain(marker)
+  }
+  // 传输不得写死端点（端点只来自企业 home 配置）。
+  expect(transport, '产物传输不得写死 http(s) 端点').not.toMatch(/["']https?:\/\//)
 }
 
 function packagedEnv(sandbox: Sandbox): Record<string, string> {
@@ -231,6 +266,20 @@ test('产物真实渲染器：profileId 稳定 + 会话单元组装（人方空�
     expect(landing.ok, `正常企业 home 的落点自检必须通过：${JSON.stringify(landing)}`).toBe(true)
     expect(landing.findings).toEqual([])
 
+    // ── 批 4 · 客户端接线（线 ①②③④）：真渲染器 → 主机桥 → 后端的**只读接线状态** ─
+    // 证明接线**真的挂上了**（不是「模块在、0 调用方」）：产物引擎在加载插件时跑了
+    // register(ctx) → register_hook，把会话入口/收尾两根钩子挂上；且**默认无传输**（安全态）。
+    const wiring = await pluginGet(page, `${B}/audit/wiring`)
+    expect(wiring.kind, `接线状态路由必须可用：${JSON.stringify(wiring)}`).toBe('ok')
+    expect(wiring.wired, '审计出口的会话钩子必须**真的挂上**（接线承重）').toBe(true)
+    expect(wiring.hooks).toEqual(['on_session_start', 'on_session_finalize'])
+    expect((wiring.startup as Record<string, unknown>).usable, '正常企业 home ⇒ 允许进入可用状态').toBe(true)
+    const transport = wiring.transport as Record<string, unknown>
+    expect(transport.mode, '默认无传输：产物不带端点配置 ⇒ 一个字节都不外发').toBe('no-transport')
+    expect(transport.endpointConfigured, '默认未配置端点').toBe(false)
+    expect(transport.credentialConfigured, '默认无凭据').toBe(false)
+    expect(JSON.stringify(wiring), '接线状态面不得回显任何端点/凭据原值').not.toMatch(/https?:\/\//)
+
     // ── 反例：未知会话、企业 home 外的库 ⇒ fail-closed，且不产单元 ─────────────
     const unknown = await pluginGet(page, `${B}/audit/unit?session=does-not-exist&db=${encodeURIComponent(fixtureDb)}`)
     expect(unknown).toEqual({ kind: 'rejected', note: 'no-session' })
@@ -250,4 +299,53 @@ test('产物真实渲染器：profileId 稳定 + 会话单元组装（人方空�
   } finally {
     await app.close()
   }
+})
+
+/**
+ * 批 4 · 反证（**产物级**）：启动自检不通过 ⇒ **真拒启动**，不进入可用状态。
+ *
+ * 把 `HERMES_HOME` 钉进**个人 Hermes 根内部**（`$HOME/.hermes/enterprise-home`）——正是审计落点自检
+ * （`check_audit_landing`）与桌面隔离门（`enterpriseHomeIsolationIssue`）共同要拦的红线（写个人
+ * `~/.hermes`）。产物必须 **fail-closed**：报错、**在读取/写入任何 home 与拉起后端之前退出**，
+ * 绝不「装作可用」。
+ *
+ * 断言**行为**而非文案：进程要么非零退出、要么在超时内**没有**进入可用态；并且报告
+ * `ENTERPRISE HOME ISOLATION FAILURE`。不依赖窗口/后端（拒绝发生在它们之前）。
+ */
+test('产物 fail-closed：HERMES_HOME 落进个人 ~/.hermes ⇒ 真拒启动（不进入可用态）', async () => {
+  const appPath = resolvePackagedApp()
+  assertEnterpriseArtifactIdentity(appPath)
+
+  const executable = path.join(appPath, 'Contents', 'MacOS', path.basename(appPath, '.app'))
+  const sandbox = createSandbox('ent-audit-failclosed')
+  const isolatedHome = path.join(sandbox.root, '.hermes', 'enterprise-home')
+  fs.mkdirSync(isolatedHome, { recursive: true })
+
+  const env = { ...packagedEnv(sandbox), HOME: sandbox.root, HERMES_HOME: isolatedHome }
+
+  const outcome = await new Promise<{ code: number | null; output: string }>((resolve) => {
+    const child = spawn(executable, ['--disable-gpu', '--no-sandbox'], { env, cwd: os.tmpdir() })
+    let output = ''
+    child.stdout?.on('data', (chunk) => (output += String(chunk)))
+    child.stderr?.on('data', (chunk) => (output += String(chunk)))
+    // 拒绝发生在后端 spawn 之前；若进程卡在阻断式错误框上，2 分钟也足够判定「未进入可用态」。
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      resolve({ code: null, output })
+    }, 120_000)
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      resolve({ code, output })
+    })
+  })
+
+  expect(outcome.output, `必须报告 home 隔离失败：${outcome.output}`).toMatch(
+    /ENTERPRISE HOME ISOLATION FAILURE|enterprise home isolation failure/
+  )
+  expect(outcome.code === null || outcome.code !== 0, '不得以成功码退场').toBe(true)
+  // 红线：拒绝发生在任何 home 读写之前——个人根下**不得**出现企业插件的落点产物。
+  expect(
+    fs.existsSync(path.join(sandbox.root, '.hermes', 'plankton-enterprise')),
+    '拒绝后不得在个人根下留下企业插件产物'
+  ).toBe(false)
 })

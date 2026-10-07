@@ -114,3 +114,27 @@ def test_backend_adds_no_audit_write_route():
     # 只读路由确实存在。
     assert '@router.get("/audit/buffer")' in PLUGIN_API_SRC
     assert '@router.get("/audit/landing-check")' in PLUGIN_API_SRC
+    # 批 4 · 客户端接线：只读的接线状态面（钩子/启动裁决/传输模式）。
+    assert '@router.get("/audit/wiring")' in PLUGIN_API_SRC
+
+
+def test_wiring_route_reports_wiring_and_no_transport(api, home):
+    """`GET /audit/wiring`（只读）：报钩子/启动裁决/传输模式；默认可传输为 `no-transport`。"""
+    status = api.audit_wiring_status()
+    assert status["kind"] == "ok"
+    assert isinstance(status["hooks"], list)
+    assert status["startup"]["usable"] is True
+    assert status["transport"]["mode"] == "no-transport", "默认无传输（安全态）"
+    assert "credential" not in json.dumps(status["transport"]).replace("credentialConfigured", "")
+
+
+def test_wiring_route_reflects_a_bad_landing(api, tmp_path, monkeypatch):
+    """落点进个人 `~/.hermes` ⇒ 只读接线状态报 `usable:false`（fail-closed，不静默）。"""
+    personal = tmp_path / "me"
+    bad = personal / ".hermes" / "enterprise-home"
+    bad.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(personal))
+    monkeypatch.setenv("HERMES_HOME", str(bad))
+    status = api.audit_wiring_status()
+    assert status["kind"] == "ok"
+    assert status["startup"]["usable"] is False

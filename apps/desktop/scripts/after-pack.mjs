@@ -98,6 +98,13 @@ export function assertEnterpriseResourcesPresent(
     // 批 4 · W1：会话级审计单元生产者（确定性幂等键 / 两方字段 / profile 稳定 ID 发号）。
     // 丢失它 ⇒ 审计单元无法组装（且 profileId 无处发号）——枚举出来让丢失在打包期变红。
     'enterprise/plankton-enterprise/audit_unit.py',
+    // 批 4 · W5/W6：审计出口（断网缓冲 / 失败态 / 落点自检 / 边界护栏）——出口模块本身。
+    // 丢失它 ⇒ 缓冲与自检皆无（审计主路径空转）——枚举出来让丢失在打包期变红。
+    'enterprise/plankton-enterprise/audit_egress.py',
+    // 批 4 · 客户端接线：把审计出口挂到引擎会话生命周期（会话入口准入 / 会话收尾 / 启动自检）
+    // + 可配置的中心端点传输（默认关闭）。丢失任一个 ⇒ 审计仍空转（0 调用方，正是本批要修的病）。
+    'enterprise/plankton-enterprise/audit_wiring.py',
+    'enterprise/plankton-enterprise/audit_transport.py',
     'enterprise/plankton-enterprise/dashboard/manifest.json',
     'enterprise/plankton-enterprise/dashboard/plugin_api.py',
     'enterprise/plankton-enterprise/desktop/plugin.js',

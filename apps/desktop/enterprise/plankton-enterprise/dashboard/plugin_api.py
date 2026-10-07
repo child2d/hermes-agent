@@ -810,6 +810,43 @@ def audit_landing_check() -> dict:
     return egress.check_audit_landing(_hermes_home())
 
 
+# 批 4 · 客户端接线（线 ①②③）的**只读接线状态**：钩子是否已挂、启动期落点裁决、传输模式
+# （默认 `no-transport`）。**只读**：不触发任何会话/上传；不含凭据、不含端点原值。
+_AUDIT_WIRING_MODULE_NAME = "plankton_enterprise_audit_wiring"
+_AUDIT_WIRING_PATH = Path(__file__).resolve().parent.parent / "audit_wiring.py"
+
+
+def _wiring_module():
+    """按绝对路径、固定名导入接线模块（与 `_egress_module` 同法，一进程一实例）。"""
+    module = sys.modules.get(_AUDIT_WIRING_MODULE_NAME)
+    if module is not None:
+        return module
+    spec = importlib.util.spec_from_file_location(_AUDIT_WIRING_MODULE_NAME, _AUDIT_WIRING_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover - artifact defect
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_AUDIT_WIRING_MODULE_NAME] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@router.get("/audit/wiring")
+def audit_wiring_status() -> dict:
+    """审计出口的**接线状态**（只读；批 4 客户端接线 线 ①②③）。
+
+    回：已挂的会话钩子（`hooks`）、启动期落点裁决（`startup`）、传输模式（`transport`，默认无传输）。
+    **只读**：不触发会话、不上传、不读令牌。
+    """
+    wiring = _wiring_module()
+    if wiring is None:  # pragma: no cover - artifact defect
+        return {"kind": "rejected", "note": "audit-wiring-module-unavailable"}
+    try:
+        return wiring.wiring_status(home=_hermes_home())
+    except Exception:  # pragma: no cover - 环境相关
+        logger.warning("plankton-enterprise: audit wiring status failed", exc_info=True)
+        return {"kind": "rejected", "note": "audit-wiring-status-failed"}
+
+
 def assert_outside_personal_trees(directory: Path, personal_home: Optional[Path] = None) -> None:
     """POLICY gate: refuse an engine store that resolves inside a personal tree.
 
