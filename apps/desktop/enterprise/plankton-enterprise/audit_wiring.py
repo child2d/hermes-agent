@@ -14,11 +14,19 @@ PLK-REQ-0041（会话级、含全部聊天记录、中心化上传）／0043（�
        **不丢**）。组素材只读自引擎会话事实库（`state.db`，`audit_unit.read_session_chat`），
        人方恒空（服务端盖章）、agent 全 self-reported。transport **可注入**，默认由
        `audit_transport.build_transport` 给（默认 `None`＝`no-transport` 安全态）。
-  线 ② **启动期 ⇒ `check_audit_landing` 并据此拒绝进入可用状态**：`register(ctx)` 期跑落点自检；
-       不通过 ⇒ **不进入可用状态**（不是一个 log line：会话准入被 fail-closed 拒）+ **可行动提示**，
-       **不静默回退**。
-  线 ③ **会话入口 ⇒ `admit_conversation`**：会话入口先问准入（缓冲**可写且未满**）；缓冲
-       **不可写/满** ⇒ **拒绝对话** + `CONVERSATION_REFUSAL_NOTE`（文案**不**声称拦截单次工具调用）。
+  线 ② **启动期 ⇒ `check_audit_landing` 并据此**尝试**拒绝进入可用状态（**同样受机制缺口影响**）**：
+       `register(ctx)` 期跑落点自检；不通过 ⇒ 记 error + 广播 `audit.landing.refused` + 让
+       `admit()` 返回拒绝 + **可行动提示**，**不静默回退**。**但「不进入可用状态」同样没有执行者**：
+       无宿主消费该裁决（桌面宿主无订阅者、无准入闸；引擎无会话闸门）——⇒ 落点使审计不成立时，
+       对话仍可继续（该会话无审计）；本行只做到「大声记录 + 广播」，未做到「真拒」。
+  线 ③ **会话入口 ⇒ `admit_conversation`（**机制缺口，见下**）**：会话入口先**计算**准入裁决
+       （缓冲**可写且未满**）；缓冲**不可写/满** ⇒ 裁决 `admitted:false` + `CONVERSATION_REFUSAL_NOTE`
+       （文案**不**声称拦截单次工具调用）。**但本引擎对 `on_session_start` 的返回值一律忽略**
+       （Observer 合同：`hermes_cli/plugins.py:132`；调用点 `agent/conversation_loop.py:864` 不回读返回值）
+       ——⇒ **该「拒」在产物里没有执行者：缓冲满/不可写时对话仍可继续，且该会话入不了缓冲 ⇒ 无审计**。
+       本回调只**记录 + 广播**（`audit.conversation.refused`）以便宿主可见；**不阻断对话**。
+       **待 Perry 裁决**（见事件「接线状态」与 N7 §8 实现落点）：要「真要不成」需引擎新增会话闸门
+       或桌面宿主侧准入闸（两者本批红线均不可动）。
 
 边界（红线，本模块**不做**）：
   * **不动后端、不加写路由**：本模块只在**引擎进程内**注册钩子；接收端（W2/W4）在另一仓。
@@ -29,6 +37,11 @@ PLK-REQ-0041（会话级、含全部聊天记录、中心化上传）／0043（�
 
 引擎钩子契约（本次接线依据，逐字引自 `hermes_cli/plugins.py` 的 `VALID_HOOKS`）：
   * `on_session_start` —— 每会话首轮；`session_id=…`（`agent/conversation_loop.py:865`）。
+    **类别＝Observer（`hooks.md` 目录表：「First turn of a new session; **return ignored**」）**：
+    返回被收集、但调用点**不回读**（`agent/conversation_loop.py:864` 只调 `_invoke_hook(...)` 丢弃结果）；
+    回调抛异常被 `invoke_hook` 吞掉（`hermes_cli/plugins_dispatch.py:239` `except (Exception, SystemExit)`，
+    仅 `pre_tool_call` 是 fail-closed 策略钩子——`plugins_dispatch.py:49`）。⇒ **`on_session_start`
+    没有任何 directive/拒绝通道，不能中止或拒绝会话**（机制实测见 `tests/test_audit_wiring.py`）。
   * `on_session_finalize` —— **真实会话边界**（`/new`、退出）；`session_id=…`
     （`hermes_cli/cli_session_mixin.py:437`、`tui_gateway/session_lifecycle.py:49`）。
     选 `on_session_finalize` 而非 `on_session_end`：后者**每轮**都会打（`agent/turn_finalizer.py:768`），
@@ -282,15 +295,23 @@ class SessionAuditHost:
 
     # ── 引擎钩子接线（线 ①②③ 的挂点） ──────────────────────────────────────
     def on_session_start(self, **kwargs: Any) -> dict:
-        """`on_session_start` 钩子：会话入口准入（线 ③）。返回裁决（供宿主/观测）。"""
+        """`on_session_start` 钩子：会话入口准入（线 ③）。**返回裁决（供宿主/观测），但不阻断会话**。
+
+        引擎把 `on_session_start` 当 **Observer**：本回调的返回被 `invoke_hook` 收集、调用点
+        （`agent/conversation_loop.py:864`）**不回读**；本回调抛错也会被吞（`plugins_dispatch.py:239`）。
+        ⇒ 本方法**只能告知**（error 日志 + `audit.conversation.refused` 广播），**不能拒会话**。
+        「缓冲满/不可写 ⇒ 对话真要不成」是**机制缺口**（需引擎会话闸门或桌面宿主准入闸，本批红线不可动）。
+        """
         decision = self.admit(str(kwargs.get("session_id") or ""))
         if not decision.get("admitted"):
             logger.error(
-                "plankton-enterprise: 审计会话准入被拒（fail-closed）—— note=%s（%s）",
+                "plankton-enterprise: 审计会话准入裁决＝拒绝（note=%s）—— 但本引擎 on_session_start "
+                "无法阻断会话（Observer：返回被忽略）；本会话将继续，且缓冲不可写/满时该会话无审计（%s）",
                 decision.get("note"), decision.get("message"),
             )
             _emit("audit.conversation.refused", {
                 "note": decision.get("note"), "message": decision.get("message"),
+                "enforced": False,
             })
         return decision
 
@@ -317,20 +338,24 @@ class SessionAuditHost:
     def register(self, ctx: Any) -> dict:
         """把线 ①②③ 接到 `ctx`（引擎 `register(ctx)` 的钩子面）。返回启动裁决。
 
-        线 ②：先跑落点自检；不通过 ⇒ 记 error + 广播 +（准入在 `admit` 里 fail-closed 拒），
-        **不静默回退**。线 ③/①：注册 `on_session_start` / `on_session_finalize`。
+        线 ②：先跑落点自检；不通过 ⇒ 记 error + 广播（**注意：本引擎无会话闸门、宿主无消费方 ⇒
+        这条「拒绝」目前不会真正阻止应用/会话；见模块头「机制缺口」，待 Perry 裁决**），**不静默回退**。
+        线 ③/①：注册 `on_session_start` / `on_session_finalize`（均为 Observer；① 的落盘效果真实生效，
+        ③ 的「拒会话」无执行者）。
         """
         verdict = self.startup_verdict()
         global LAST_STARTUP_VERDICT
         LAST_STARTUP_VERDICT = verdict
         if not verdict["usable"]:
             logger.error(
-                "plankton-enterprise: 审计落点自检未通过（%s）—— 已按 fail-closed **不进入可用状态**：%s",
+                "plankton-enterprise: 审计落点自检未通过（%s）—— 已记录 + 广播；但本引擎无会话闸门/"
+                "宿主无消费方，**未能真正阻止进入可用状态**（机制缺口，待裁）：%s",
                 verdict.get("kind"), verdict.get("hint"),
             )
             _emit("audit.landing.refused", {
                 "kind": verdict.get("kind"), "hint": verdict.get("hint"),
                 "findings": (verdict.get("landing") or {}).get("findings"),
+                "enforced": False,
             })
         register_hook = getattr(ctx, "register_hook", None)
         if not callable(register_hook):

@@ -10,10 +10,12 @@
 
   线 ① 会话收尾 ⇒ `record_and_flush`：引擎 `on_session_finalize` 钩子一打，单元**落到缓冲并上传**；
        反证＝不接线（没注册钩子）⇒ 同一会话收尾**什么都没发生**（缓冲空、接收端空）。
-  线 ② 启动期 ⇒ `check_audit_landing` 拒进入可用状态：落点进个人 `~/.hermes` ⇒ 裁决 `usable:false`
-       + 会话准入被拒；反证＝良性落点不拦（范围收窄，门禁不重于功能）。
-  线 ③ 会话入口 ⇒ `admit_conversation`：缓冲**满/不可写** ⇒ **拒绝对话** + 文案；反证＝准入这步
-       拿掉（不接线）⇒ 会话照常进行（审计在有损状态下被放行）。
+  线 ② 启动期 ⇒ `check_audit_landing` 落点自检：落点进个人 `~/.hermes` ⇒ 裁决 `usable:false`（+ 准入裁决拒绝；
+       **同线 ③：裁决无执行者**）；反证＝良性落点不拦（范围收窄，门禁不重于功能）。
+  线 ③ 会话入口 ⇒ `admit_conversation`：**批 4 复核更正** —— 接线只**产出一个裁决**，**不是执行者**：
+       引擎 `on_session_start` 是 **Observer**（返回被弃、异常被吞、无 directive 通道），宿主亦无消费方
+       ⇒ `admitted:false` **不会让会话不成**（缓冲满/不可写时对话仍继续、该会话无审计）。机制调查见
+       `test_mechanism_gap_engine_cannot_refuse_a_session`；「真拒」需引擎会话闸门或宿主准入闸（待 Perry 裁）。
   线 ④ 真实传输：默认可注入且**默认无传输**（`no-transport` 安全态）；配置启用才出网。
 
 夹具一律**合成**：临时企业 home、只读会话事实库夹具、注入传输；**不连生产库、不发真实网络**。
@@ -306,10 +308,13 @@ def test_wire3_unwritable_buffer_refuses_conversation(wiring, egress, home):
         os.chmod(root, stat.S_IRWXU)
 
 
-def test_wire3_counterproof_without_admission_the_session_proceeds(wiring, egress, home):
-    """反证：**不接线**（会话入口不问准入）⇒ 缓冲满也会话照常进行（有损状态被放行）。
+def test_wire3_admission_verdict_is_computed_but_has_no_executor(wiring, egress, home):
+    """线 ③ 的**实情**（批 4 复核更正）：接线只**产出一个裁决**，**不是执行者**。
 
-    这证明「会话入口问准入」这步是承重的：拿掉它，缓冲满/不可写的失败态没有任何拦截。
+    引擎把 `on_session_start` 当 **Observer**（返回值被忽略、异常被吞、无 directive 通道），
+    桌面宿主也没有订阅者/准入闸 ⇒ `admitted:false` **不会让会话不成**。所以「接线承重」这句
+    对线 ③ 是**不成立**的：接线只多出一个**裁决**（供记录/广播），会话照样进行。本用例钉住这条，
+    以免「拒绝对话」的假声称再进仓（真机制调查见 `test_mechanism_gap_engine_cannot_refuse_a_session`）。
     """
     buf = egress.AuditBuffer(egress.buffer_root(home), limit=1)
     buf.pending_dir.mkdir(parents=True, exist_ok=True)
@@ -317,14 +322,56 @@ def test_wire3_counterproof_without_admission_the_session_proceeds(wiring, egres
         json.dumps({"key": "k", "enqueuedAt": 1.0, "unit": {"session_audit_id": "k"}}), encoding="utf-8"
     )
     ctx = FakeCtx()
-    # 没有 host.register(ctx) —— 会话入口没有准入这一关。
+    # 未接线：满缓冲下会话照常开始（没有任何裁决）。
     assert "on_session_start" not in ctx.hooks
-    # 朴素宿主：不问准入，直接开始会话。
-    naive_started = True
-    assert naive_started is True, "未接线 ⇒ 满缓冲下会话照样开始（审计在有损状态被放行）"
-    # 真实现（接线后）在同一状态下拒绝。
+    # 接线后：同一状态得到一个「拒绝」裁决 —— 但该裁决**无执行者**，会话仍可继续。
     _host(wiring, home, buffer_limit=1).register(ctx)
-    assert ctx.hooks["on_session_start"][0](session_id="s")["admitted"] is False
+    verdict = ctx.hooks["on_session_start"][0](session_id="s")
+    assert verdict["admitted"] is False and verdict["note"] == "buffer-full"
+    # 裁决只是数据（admitted/kind/note/message）；没有任何「会话已中止」的事实。
+    assert set(verdict) == {"admitted", "kind", "note", "message"}
+
+
+def test_mechanism_gap_engine_cannot_refuse_a_session():
+    """**机制调查（承重事实）**：本引擎没有任何「会话入口拒绝」机制。
+
+    逐条复算（file:line 见 `audit_wiring.py` 模块头）：
+      ① `on_session_start` 回调抛异常 ⇒ 被 `invoke_hook` 吞掉、**不上浮**（会话不中止）；
+      ② 唯一 fail-closed 的**策略**钩子是 `pre_tool_call`（`on_session_start` 不在内）；
+      ③ 对照：`pre_tool_call` 抛异常 ⇒ 转成 **block directive**（有执行者），`on_session_start` 没有。
+    HERMES_HOME 已由 conftest 钉到临时目录；只读、不发网络。
+    """
+    import sys
+    from pathlib import Path
+
+    repo_root = str(Path(__file__).resolve().parents[5])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    plugins = pytest.importorskip("hermes_cli.plugins", reason="需引擎源码在 import 路径（本仓 venv）")
+    dispatch = pytest.importorskip("hermes_cli.plugins_dispatch")
+
+    mgr = plugins.PluginManager()
+
+    def boom(**kwargs):
+        raise RuntimeError("REFUSE-ATTEMPT")
+
+    mgr._hooks.setdefault("on_session_start", []).append(boom)
+    # ① 抛异常被吞，绝不上浮；结果集里没有 block directive（会话照常继续）。
+    results = mgr.invoke_hook("on_session_start", session_id="s", model="m", platform="p")
+    assert results == [], "on_session_start 抛异常必须被吞、不进结果集（无 directive ⇒ 无法拒会话）"
+
+    # ② 唯一 fail-closed 的策略钩子是 pre_tool_call；on_session_start 不在内。
+    assert dispatch._HOOK_TIMEOUT_FAIL_CLOSED_HOOKS == {"pre_tool_call"}
+    assert "on_session_start" not in dispatch._HOOK_TIMEOUT_FAIL_CLOSED_HOOKS
+
+    # ③ 对照：pre_tool_call 抛异常 ⇒ 转成 block directive（这才是「有执行者」的拒绝）。
+    def tool_boom(**kwargs):
+        raise RuntimeError("GUARD-BOOM")
+
+    mgr._hooks.setdefault("pre_tool_call", []).append(tool_boom)
+    tool_results = mgr.invoke_hook("pre_tool_call", tool_name="terminal", args={}, tool_call_id="t")
+    assert tool_results and tool_results[0].get("action") == "block"
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
