@@ -685,6 +685,9 @@ def audit_profile_id(profileKey: str = "", name: str = "", aliases: str = "") ->
 
     `profile` 是 profile 的**稳定身份**（其 home 目录），**不是**名字：名字变/重名不影响 ID。
     只读语义：除首次纳管把 ID 落到企业 home 台账外，什么都不写、不上传。
+
+    P3-3 fail-closed：`profileKey` 为空/缺失 ⇒ **拒**（`profile-key-required`），
+    **不**归一到 `"default"`（否则漏传键的调用方会共用同一 ID，把不同 profile 混成一个人）。
     """
     audit = _audit_module()
     if audit is None:  # pragma: no cover - artifact defect
@@ -694,7 +697,7 @@ def audit_profile_id(profileKey: str = "", name: str = "", aliases: str = "") ->
         return {"kind": "rejected", "note": "enterprise-home-unavailable"}
     alias_list = [a for a in (aliases or "").split(",") if a.strip()]
     try:
-        return audit.resolve_profile_id(profileKey or "default", profile_name=name, aliases=alias_list, home=home)
+        return audit.resolve_profile_id(profileKey, profile_name=name, aliases=alias_list, home=home)
     except audit.AuditUnitRefused as exc:
         return {"kind": "rejected", "note": exc.note}
 
@@ -715,6 +718,8 @@ def audit_unit(
     素材只读取自会话事实库（默认 `HERMES_HOME/state.db`；可指向企业 home 内的另一只读库，供夹具/
     素材读取点注入）。人这一方恒为空（服务端盖章），agent 这一方全 self-reported；组完过密钥/键
     卫生扫描，命中即拒（不产）。**任何路径都必须落在企业 home 内**——越界即拒（不读企业 home 外的库）。
+
+    P3-3 fail-closed：`profileKey` 为空/缺失 ⇒ **拒**（`profile-key-required`），不归一共享值。
     """
     audit = _audit_module()
     if audit is None:  # pragma: no cover - artifact defect
@@ -733,7 +738,7 @@ def audit_unit(
         return {"kind": "rejected", "note": "session-db-unresolvable"}
     try:
         messages = audit.read_session_chat(db_real, session)
-        resolved = audit.resolve_profile_id(profileKey or "default", profile_name=name, home=home)
+        resolved = audit.resolve_profile_id(profileKey, profile_name=name, home=home)
         unit = audit.assemble_audit_unit(
             engine_session_id=session,
             messages=messages,

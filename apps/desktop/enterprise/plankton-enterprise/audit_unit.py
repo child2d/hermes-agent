@@ -26,7 +26,10 @@
   * **不上传、不发网络请求**：本模块**零网络、零 subprocess**，只产**单元（dict）**，**不发送**（上传＝W2）。
   * **不落令牌/密钥**：写入前复用引擎原生脱敏口径（`agent.redact.redact_sensitive_text`，即
     `hermes_logging.RedactingFormatter` 背后的同一实现，§2 脱敏）＋ 预签名 URL / JWT / Bearer /
-    云密钥的**独立**兜底清洗；组装后对整单元做**字段名与值**的密钥扫描，**命中即拒**（宁可拒不产）。
+    不透明令牌 / AWS access key 的**独立**兜底清洗；组装后对整单元做**字段名与值**的密钥扫描，
+    **命中即拒**（宁可拒不产）。P2-2 补的**定向云密钥**（Azure `AccountKey=`/SAS、裸 AWS
+    secret key 形态、GCP/通用 PEM 私钥、带密码的连接串 `scheme://user:pw@host`）走**检测即拒**
+    而非静默改写——刻意**不**用通用高熵启发式（那会误伤正常文本）。
   * **不另存工具载荷原文**（文件内容/命令全文/审批 diff）：单元里没有这种字段；工具输出**片段**若本就在
     助手消息正文中，则**随会话完整保留（不剔除）**（§9.0 #15，本期已裁）。
 
@@ -42,11 +45,18 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Iterator, Optional
+
+try:  # POSIX 文件锁（同机跨进程串行 profile-id 台账的读改写）；非 POSIX 仅有线程锁。
+    import fcntl  # type: ignore
+except ImportError:  # pragma: no cover - 非 POSIX 平台
+    fcntl = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +118,28 @@ _BEARER_RE = re.compile(r"\b(?:Bearer|Basic)\s+[A-Za-z0-9._\-+/=]{12,}", re.IGNO
 _AWS_KEY_RE = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _GH_TOKEN_RE = re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")
 
+# ── 定向云密钥模式（补 P2-2；**刻意不用通用高熵启发式**，以免误伤正常文本） ──────
+# 这些是**检测**模式（进 `_SECRET_VALUE_RES`，命中即拒），不是「悄悄改写」模式：
+# §2「宁可拒不产」——一条带云密钥的会话单元一旦上传不可撤回，故 fail-closed 拒整单元。
+
+#: Azure 存储连接串 / SAS 的密钥参数（`AccountKey=` / `SharedAccessKey=` / `SharedAccessSignature=`）。
+_AZURE_KEY_RE = re.compile(
+    r"\b(?:AccountKey|SharedAccessKey|SharedAccessSignature)\s*=\s*[A-Za-z0-9+/=%]{16,}",
+    re.IGNORECASE,
+)
+#: 裸 AWS secret access key：40 位 base64，且**含大写或 `/`,`+`**（排除全小写 hex，如 git sha；
+#: 真 AWS secret 是 30 随机字节的 base64，几乎必含大写/符号，故该约束既不漏真也不误伤常见文本）。
+_AWS_SECRET_RE = re.compile(
+    r"(?<![A-Za-z0-9/+=])"
+    r"(?=[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=]))"
+    r"(?=[A-Za-z0-9/+=]{0,39}[A-Z/+])"
+    r"[A-Za-z0-9/+=]{40}"
+)
+#: GCP 服务账号 / 通用 PEM 私钥块（`-----BEGIN … PRIVATE KEY-----`）。
+_PEM_RE = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
+#: 带密码的连接串（`scheme://user:password@host`）——postgres/mysql/mongo/redis/amqp/https 等。
+_DB_URI_RE = re.compile(r"\b[a-z][a-z0-9+.\-]{1,}://[^\s:@/]+:[^\s@/]{2,}@[^\s]+", re.IGNORECASE)
+
 #: **字段名**层面的密钥词（比对单元结构的键，不是正文）。
 #: 刻意不含裸 `auth`（不然 schema 自己的 `human.auth_user_id` 会被误判）。
 _SECRET_NAME_RE = re.compile(
@@ -139,6 +171,11 @@ _SECRET_VALUE_RES = (
     _BEARER_RE,
     _AWS_KEY_RE,
     _GH_TOKEN_RE,
+    # 定向云密钥（P2-2）：Azure 连接串 / 裸 AWS secret / PEM 私钥 / 带密码连接串。
+    _AZURE_KEY_RE,
+    _AWS_SECRET_RE,
+    _PEM_RE,
+    _DB_URI_RE,
 )
 
 
@@ -322,6 +359,10 @@ def profile_id_store_path(home: Optional[Path] = None) -> Path:
 
     覆盖：`PLANKTON_PROFILE_IDS_FILE`。**绝不**写个人 `~/.hermes`（PLK-REQ-0006 边界；
     企业 home 由桌面端 `HERMES_HOME` 钉定）。
+
+    P3-1（登记，本包不改）：本模块只把落点解析到企业 home，**尚无从代码层面**断言
+    「落点不得落在个人 `~/.hermes`」的护栏（plugin_api 的 W1 只读路由用 home 边界挡库，
+    但不挡本台账落点）——该护栏计划在 **W6** 补（`assert_outside_personal_trees` 同款判据）。
     """
     override = (os.environ.get("PLANKTON_PROFILE_IDS_FILE") or "").strip()
     if override:
@@ -374,6 +415,46 @@ def _save_profile_ids(path: Path, profiles: dict) -> bool:
         return False
 
 
+#: profile-id 台账的**进程内**串行锁（同进程多线程）；
+#: 跨进程另加 `.lock` 侧车文件的 `fcntl.flock`（见 `_profile_id_ledger_lock`）。
+_PROFILE_ID_THREAD_LOCK = threading.Lock()
+
+
+@contextmanager
+def _profile_id_ledger_lock(path: Path) -> Iterator[None]:
+    """串行化 profile-id 台账的「读→改→写」（P2-1：同键恒同 id、并发不丢更新）。
+
+    台账本体是 `os.replace` 原子替换 ⇒ **不能**锁本体：替换后旧 fd 指向已删除的 inode，
+    后来者在**新** inode 上各自加锁，形同没锁。故锁一个**从不被替换**的 `.lock` 侧车文件：
+      * 同机多进程：`fcntl.flock(LOCK_EX)`（POSIX）；
+      * 同进程多线程：`flock` 的语义按 open file description，不愿依赖 VFS 把两个独立 fd
+        判为同一把锁，故叠加一把模块级 `_PROFILE_ID_THREAD_LOCK` 兜底。
+
+    fail-closed：拿不到锁（父目录不可建/不可写）⇒ `AuditUnitRefused`，绝不无锁继续读写。
+    """
+    lock_path = path.with_name(f".{path.name}.lock")
+    with _PROFILE_ID_THREAD_LOCK:
+        try:
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            handle = open(lock_path, "a+")
+        except OSError as exc:
+            raise AuditUnitRefused("profile-id-store-unwritable") from exc
+        try:
+            if fcntl is not None:
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                except OSError as exc:  # pragma: no cover - 环境相关
+                    raise AuditUnitRefused("profile-id-store-unwritable") from exc
+            yield
+        finally:
+            if fcntl is not None:
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                except OSError:  # pragma: no cover - 解锁失败不掩盖主体结果
+                    pass
+            handle.close()
+
+
 def resolve_profile_id(
     profile_key: Any,
     *,
@@ -392,12 +473,32 @@ def resolve_profile_id(
     `aliases` 用于真正的目录改名：把旧键当别名交给本函数即可**沿用**同一 ID（对应引擎
     `hermes profile rename` 的 identity 迁移，`hermes_cli/profile_identity.py`）。
 
+    **并发（P2-1）**：整个「读台账 → 改 → 写回」在 `_profile_id_ledger_lock` 内原子完成，
+    保证「同一键恒同一 id」「并发不丢更新」，且**并发结果与串行一致**（每次都在锁内重读最新台账）。
+    空键 ⇒ `_canon_profile_key` **fail-closed 拒**（P3-3），不归一到任何共享值。
+
     返回 `{"kind":"ok","profileId":…,"profileName":…,"firstTime":bool}`，或抛 `AuditUnitRefused`
     （落点不可用/键为空/写失败 ⇒ 绝不假装发过号）。
     """
     canon = _canon_profile_key(profile_key)
     label = redact_text(profile_name)
     target = path or profile_id_store_path(home)
+    with _profile_id_ledger_lock(target):
+        return _resolve_profile_id_locked(canon, label, aliases, target, now)
+
+
+def _resolve_profile_id_locked(
+    canon: str,
+    label: str,
+    aliases: Iterable[Any],
+    target: Path,
+    now: Optional[float],
+) -> dict:
+    """`resolve_profile_id` 的**临界区**：调用方必须已持有 `_profile_id_ledger_lock(target)`。
+
+    在锁内**重读**最新台账再合并写回——这是「不丢更新」的关键（锁外读到的是快照，
+    并发的另一写者可能已改过；锁内重读 + 合并 + 原子替换才与串行等价）。
+    """
     profiles = _load_profile_ids(target)
 
     entry = profiles.get(canon)

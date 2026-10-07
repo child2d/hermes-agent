@@ -25,6 +25,8 @@ import importlib.util
 import json
 import re
 import sqlite3
+import threading
+import uuid
 from pathlib import Path
 
 import pytest
@@ -441,4 +443,216 @@ def test_backend_w1_routes_real_behaviour(monkeypatch, tmp_path):
     assert api.audit_unit(session="s1", db=str(outside)) == {
         "kind": "rejected",
         "note": "session-db-outside-enterprise-home",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⑨ P2-1 —— profile-id 台账在并发下不丢更新、同键恒同 id（读改写加锁，原子）
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _run_threads(fn, count: int):
+    """并发跑 count 个线程（用 Barrier 尽量让它们在临界点重叠），返回 (results, errors)。"""
+    results: list = [None] * count
+    errors: list = [None] * count
+    barrier = threading.Barrier(count)
+
+    def worker(index: int) -> None:
+        try:
+            barrier.wait(timeout=10)
+            results[index] = fn(index)
+        except BaseException as exc:  # pragma: no cover - 线程内异常回传
+            errors[index] = exc
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    return results, errors
+
+
+def test_profile_id_same_new_key_16_threads_yield_one_id(audit, home):
+    """同一新键首纳管 16 并发 ⇒ 恰好 1 个 id（原缺陷：返回 4 个不同 id）。"""
+    results, errors = _run_threads(
+        lambda _i: audit.resolve_profile_id("/profiles/alpha", profile_name="Alpha", home=home)["profileId"],
+        16,
+    )
+    assert not any(errors), errors
+    assert len(set(results)) == 1, f"同一键并发出现多个 id：{sorted(set(results))}"
+    store = audit.profile_id_store_path(home)
+    persisted = json.loads(store.read_text(encoding="utf-8"))["profiles"]
+    assert list(persisted.keys()) == ["/profiles/alpha"], persisted
+
+
+def test_profile_id_twelve_distinct_keys_concurrently_all_persisted(audit, home):
+    """12 个**不同新键**并发 ⇒ 12 条全落盘（原缺陷：仅 2/12 落盘，丢更新）。"""
+    keys = [f"/profiles/p{i}" for i in range(12)]
+    results, errors = _run_threads(
+        lambda i: audit.resolve_profile_id(keys[i], profile_name=keys[i], home=home)["profileId"],
+        12,
+    )
+    assert not any(errors), errors
+    assert len(set(results)) == 12, f"不同键得到重复 id：{results}"
+    persisted = json.loads(audit.profile_id_store_path(home).read_text(encoding="utf-8"))["profiles"]
+    assert set(persisted.keys()) == set(keys), f"丢更新：只落盘 {sorted(persisted.keys())}"
+
+
+def test_loadbearing_unlocked_read_modify_write_loses_updates(audit, home):
+    """承重反证：把「读→改→写」原样暴露在并发下（**不加锁**的错实现）⇒ 同键多 id、异键丢更新。
+
+    这跑出了缺陷本身；真实现（上面的两条）必须与之相反 —— 证明锁是承重的，不是装饰。
+    """
+
+    def naive_resolve(store: Path, key: str) -> str:  # 反例实现：无锁读改写
+        profiles = audit._load_profile_ids(store)  # 读（快照）
+        import time as _time
+
+        _time.sleep(0.002)  # 放大「读与写之间」的竞态窗口
+        entry = profiles.get(key)
+        if entry is None:
+            entry = {"profileId": f"pid_{uuid.uuid4().hex}", "createdAt": "", "profileName": "", "aliases": []}
+            profiles[key] = entry
+        audit._save_profile_ids(store, profiles)  # 写（覆盖整个台账）
+        return entry["profileId"]
+
+    same_key_store = home / "naive-same" / "profile-ids.json"
+    ids, errors = _run_threads(lambda _i: naive_resolve(same_key_store, "/profiles/alpha"), 16)
+    assert not any(errors), errors
+    assert len(set(ids)) > 1, f"无锁实现竟得单一 id（反证未成立）：{ids}"
+
+    many_store = home / "naive-many" / "profile-ids.json"
+    keys = [f"/profiles/q{i}" for i in range(12)]
+    _run_threads(lambda i: naive_resolve(many_store, keys[i]), 12)
+    persisted = json.loads(many_store.read_text(encoding="utf-8"))["profiles"]
+    assert len(persisted) < 12, f"无锁实现竟全落盘（反证未成立）：{len(persisted)}"
+
+
+def test_profile_id_concurrent_result_equals_serial_result(audit, tmp_path):
+    """并发写完的台账与**串行**写完的台账逐键一致（id 与别名都等价）。"""
+    concurrent_home = tmp_path / "concurrent"
+    serial_home = tmp_path / "serial"
+    concurrent_home.mkdir()
+    serial_home.mkdir()
+    keys = [f"/profiles/k{i}" for i in range(10)]
+
+    _run_threads(
+        lambda i: audit.resolve_profile_id(keys[i], profile_name=f"N{i}", home=concurrent_home),
+        10,
+    )
+    serial_ids = []
+    for i, key in enumerate(keys):
+        serial_ids.append(audit.resolve_profile_id(key, profile_name=f"N{i}", home=serial_home)["profileId"])
+
+    concurrent = json.loads(audit.profile_id_store_path(concurrent_home).read_text(encoding="utf-8"))["profiles"]
+    serial = json.loads(audit.profile_id_store_path(serial_home).read_text(encoding="utf-8"))["profiles"]
+    assert set(concurrent.keys()) == set(serial.keys()) == set(keys)
+    assert len(serial_ids) == 10
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⑩ P2-2 —— 定向云密钥脱敏兜底（检测即拒；**零假阳**，不用通用高熵）
+# ─────────────────────────────────────────────────────────────────────────────
+
+_AZURE_CONN = (
+    "DefaultEndpointsProtocol=https;AccountName=acct;"
+    "AccountKey=abcdefghijklmnopqrstuvwxyz0123456789ABCDEF=="
+)
+_BARE_AWS_SECRET = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+_GCP_PEM = (
+    "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQ\n"
+    "-----END PRIVATE KEY-----"
+)
+_DB_URI_WITH_PASSWORD = "postgres://appuser:S3cr3t-pw-9x@db.internal:5432/prod"
+_NEW_CLOUD_SECRETS = (_AZURE_CONN, _BARE_AWS_SECRET, _GCP_PEM, _DB_URI_WITH_PASSWORD)
+
+
+def test_new_cloud_secret_shapes_are_detected_by_the_gate(audit):
+    """每个新样本都被值扫描检出（这正是「命中即拒」的判据）。"""
+    for sample in _NEW_CLOUD_SECRETS:
+        assert audit._secret_value_note(sample, "<value>"), f"未检出：{sample}"
+        assert audit.audit_hygiene_problem({"agent": {"variant": sample}}), f"卫生扫描未拦：{sample}"
+
+
+def test_loadbearing_azure_and_bare_aws_secrets_refuse_the_unit(audit):
+    """承重：复核实测「原样穿过」的两类（Azure 连接串、裸 AWS secret）现在 fail-closed 拒整单元。"""
+    for sample in (_AZURE_CONN, _BARE_AWS_SECRET):
+        with pytest.raises(audit.AuditUnitRefused):
+            audit.assemble_audit_unit(engine_session_id="s", messages=[{"role": "user", "content": sample}])
+
+
+def test_new_cloud_secret_shapes_never_pass_through_intact(audit):
+    """新样本进正文 ⇒ 要么整单元被拒，要么原始串被清洗掉——**绝不**原样进单元。"""
+    for sample in _NEW_CLOUD_SECRETS:
+        try:
+            unit = audit.assemble_audit_unit(engine_session_id="s", messages=[{"role": "user", "content": sample}])
+        except audit.AuditUnitRefused:
+            continue  # 拒 = 拦
+        assert sample not in json.dumps(unit, ensure_ascii=False), f"原样穿过：{sample}"
+        assert audit.audit_hygiene_problem(unit) is None
+
+
+_CHAT_CORPUS = (
+    "今天和团队过了一遍 Q3 排期，下周二前把方案发出来，owner 先记我。",
+    "Sure — I'll push the branch, let CI go green, then open the PR this afternoon.",
+    "参考文档 https://docs.example.com/guide/getting-started?section=install 和本地 http://localhost:4173/preview",
+    "上一个 commit 是 1234567890abcdef1234567890abcdef12345678（40 位全小写 hex，非密钥）。",
+    "sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "把 profileId 写成 pid_ + uuid4().hex，例如 pid_2f8a1c9d4b7e4f10。",
+    "邮箱 perry.chen@example.com，电话 13800000000，工位 3 楼。",
+    "AccountKey=<YOUR_KEY_HERE> 只是个占位符，别填真值。",
+    "金额 ¥1,234,567.89，环比 ＋87.5%，同比 -12.3%。",
+    "{'kind': 'ok', 'profileId': 'pid_abc', 'firstTime': False}",
+    "README 里那条 curl -H 'Authorization: Bearer <token>' 是文档示例，不是真令牌。",
+    "会议纪要：决议 2026-Q4 预算冻结；RACI 见附表；风险项 TBD。",
+    "MySQL 端口 3306，Postgres 5432，Redis 6379 —— 都是默认端口记录。路径 /api/v1/audit/unit。",
+    "见 apps/desktop/enterprise/plankton-enterprise/audit_unit.py 里的 assembly 逻辑。",
+)
+
+
+def test_chat_corpus_has_zero_false_positives(audit):
+    """零假阳：正常聊天语料不得被密钥扫描判为密钥，也不会因此拒产（不退化成「什么都拦」）。"""
+    for text in _CHAT_CORPUS:
+        assert audit.audit_hygiene_problem({"content": text}) is None, f"假阳：{text}"
+        out = audit.assemble_audit_unit(engine_session_id="s", messages=[{"role": "user", "content": text}])
+        assert out["transcript"][0]["content"], f"正常文本被清空：{text}"
+    # 新加的值模式**不得**改写一句普通中文（区别于引擎既有的 Bearer/DB 清洗口径）。
+    plain = "今天开会讨论排期，周四前把方案发出来，owner 记我。"
+    assert audit.redact_text(plain) == plain
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⑪ P3-3 —— 空 / 缺失 profileKey ⇒ fail-closed 拒（不归一到共享 "default"）
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_resolve_profile_id_refuses_empty_or_missing_key(audit, home):
+    for bad in ("", "   ", None):
+        with pytest.raises(audit.AuditUnitRefused) as exc:
+            audit.resolve_profile_id(bad, profile_name="X", home=home)
+        assert exc.value.note == "profile-key-required"
+    assert audit.resolve_profile_id("/profiles/alpha", profile_name="Alpha", home=home)["kind"] == "ok"
+
+
+def test_backend_w1_empty_profile_key_is_rejected_not_defaulted(monkeypatch, tmp_path):
+    """路由层：空键 ⇒ 拒；合法键 ⇒ 正常；台账里**不得**出现 `default` 共享条目。"""
+    api = _load_plugin_api()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.delenv("PLANKTON_PROFILE_IDS_FILE", raising=False)
+
+    assert api.audit_profile_id(profileKey="") == {"kind": "rejected", "note": "profile-key-required"}
+    assert api.audit_profile_id(profileKey="   ") == {"kind": "rejected", "note": "profile-key-required"}
+
+    ok = api.audit_profile_id(profileKey="/profiles/alpha", name="Alpha")
+    assert ok["kind"] == "ok" and ok["profileId"].startswith("pid_")
+    persisted = json.loads((home / "plankton-enterprise" / "profile-ids.json").read_text(encoding="utf-8"))["profiles"]
+    assert "default" not in persisted
+
+    # `/audit/unit` 同一条闸：合法会话 + 空键 ⇒ 拒（不是悄悄共用 default）。
+    db = _sqlite_session(home / "fixture.db", "s1", [("user", "q"), ("assistant", "a")])
+    assert api.audit_unit(session="s1", db=str(db), profileKey="") == {
+        "kind": "rejected",
+        "note": "profile-key-required",
     }
