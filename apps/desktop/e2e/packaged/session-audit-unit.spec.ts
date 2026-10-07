@@ -60,7 +60,7 @@ function assertEnterpriseArtifactIdentity(appPath: string): void {
   expect(stamp.identityVariant, '产物身份戳必须命名 plankton 变体').toBe('plankton')
 
   const pluginDir = path.join(resources, 'enterprise', 'plankton-enterprise')
-  for (const relative of ['audit_unit.py', 'dashboard/plugin_api.py', '__init__.py', 'plugin.yaml']) {
+  for (const relative of ['audit_unit.py', 'audit_egress.py', 'dashboard/plugin_api.py', '__init__.py', 'plugin.yaml']) {
     const file = path.join(pluginDir, relative)
     expect(fs.existsSync(file), `企业插件 payload 缺失：${relative}`).toBe(true)
     expect(fs.statSync(file).size, `企业插件 payload 为空：${relative}`).toBeGreaterThan(0)
@@ -71,11 +71,24 @@ function assertEnterpriseArtifactIdentity(appPath: string): void {
   for (const marker of ['derive_session_audit_id', 'audit_hygiene_problem', 'resolve_profile_id', 'self-reported']) {
     expect(audit, `产物 audit_unit.py 必须带单元生产者（缺 ${marker}）`).toContain(marker)
   }
+  // 批 4 W5/W6 承载也必须**真的在产物字节里**。
+  const egress = fs.readFileSync(path.join(pluginDir, 'audit_egress.py'), 'utf8')
+  for (const marker of [
+    'class AuditBuffer',
+    'CONVERSATION_REFUSAL_NOTE',
+    'check_audit_landing',
+    'LANDING_ACTIONABLE_HINT',
+    'client-cannot-attest-human'
+  ]) {
+    expect(egress, `产物 audit_egress.py 必须带 W5/W6 承载（缺 ${marker}）`).toContain(marker)
+  }
   const api = fs.readFileSync(path.join(pluginDir, 'dashboard/plugin_api.py'), 'utf8')
   expect(api, '产物后端必须带只读 profile-id 路由').toContain('@router.get("/audit/profile-id")')
   expect(api, '产物后端必须带只读 unit 路由').toContain('@router.get("/audit/unit")')
-  // 本包不发送：后端不得出现 W1 的上传路由。
-  expect(api, 'W1 不得带上传路由').not.toContain('@router.post("/audit')
+  expect(api, '产物后端必须带只读缓冲健康路由').toContain('@router.get("/audit/buffer")')
+  expect(api, '产物后端必须带只读落点自检路由').toContain('@router.get("/audit/landing-check")')
+  // 本批不新增产品写口：后端不得出现任何 /audit 写路由。
+  expect(api, 'W5/W6 不得带 /audit 写路由').not.toMatch(/@router\.(post|put|patch|delete)\(\s*"\/audit/)
 }
 
 function packagedEnv(sandbox: Sandbox): Record<string, string> {
@@ -207,6 +220,16 @@ test('产物真实渲染器：profileId 稳定 + 会话单元组装（人方空�
 
     const blob = JSON.stringify(unit)
     expect(blob, '单元里不得出现原始令牌').not.toContain(RAW_TOKEN)
+
+    // ── W5/W6 · 只读可见面：缓冲健康 + 落点自检（真渲染器 → 主机桥 → 后端） ────
+    const buffer = await pluginGet(page, `${B}/audit/buffer`)
+    expect(buffer.kind, `缓冲健康路由必须可用：${JSON.stringify(buffer)}`).toBe('ok')
+    expect(buffer.pending, '空缓冲的 pending 应为 0').toBe(0)
+    expect(buffer.dropped, '本实现从不静默丢弃单元').toBe(0)
+
+    const landing = await pluginGet(page, `${B}/audit/landing-check`)
+    expect(landing.ok, `正常企业 home 的落点自检必须通过：${JSON.stringify(landing)}`).toBe(true)
+    expect(landing.findings).toEqual([])
 
     // ── 反例：未知会话、企业 home 外的库 ⇒ fail-closed，且不产单元 ─────────────
     const unknown = await pluginGet(page, `${B}/audit/unit?session=does-not-exist&db=${encodeURIComponent(fixtureDb)}`)

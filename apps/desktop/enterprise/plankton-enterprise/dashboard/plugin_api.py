@@ -755,6 +755,61 @@ def audit_unit(
     return {"kind": "ok", "unit": unit}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 批 4 §8 W5/W6 · 审计**出口**的可见面（**只读**）
+# ─────────────────────────────────────────────────────────────────────────────
+# W5 的「可见 / 健康观测」与 W6 的「home 落点自检」在客户端插件这半边只开**只读**面：
+#   * `GET /audit/buffer`       —— 断网缓冲的健康（待上传数/字节/最旧年龄/最近错误；只读）；
+#   * `GET /audit/landing-check`—— 启动期 home 落点自检的**只读裁决**（fail-closed 时给可行动提示）。
+# **不新增产品写口**：缓冲的写入与上传由 `audit_egress.AuditBuffer` 承担（宿主在会话收尾时调用；
+# 传输由宿主注入），本后端**不开**任何写台账/上传路由；上传的接收端在另一仓（W2/W4）。
+
+_AUDIT_EGRESS_MODULE_NAME = "plankton_enterprise_audit_egress"
+_AUDIT_EGRESS_PATH = Path(__file__).resolve().parent.parent / "audit_egress.py"
+
+
+def _egress_module():
+    """按绝对路径、固定名导入审计出口模块（与 `_audit_module` 同法，保证一进程一实例）。"""
+    module = sys.modules.get(_AUDIT_EGRESS_MODULE_NAME)
+    if module is not None:
+        return module
+    spec = importlib.util.spec_from_file_location(_AUDIT_EGRESS_MODULE_NAME, _AUDIT_EGRESS_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover - artifact defect
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_AUDIT_EGRESS_MODULE_NAME] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@router.get("/audit/buffer")
+def audit_buffer() -> dict:
+    """断网缓冲的**健康观测**（只读；§8 W5「可见」段）。**不上传、不写**。"""
+    egress = _egress_module()
+    if egress is None:  # pragma: no cover - artifact defect
+        return {"kind": "rejected", "note": "audit-egress-module-unavailable"}
+    home = _hermes_home()
+    if home is None:
+        return {"kind": "rejected", "note": "enterprise-home-unavailable"}
+    try:
+        buffer = egress.AuditBuffer(egress.buffer_root(home))
+        return buffer.status()
+    except egress.AuditEgressRefused as exc:
+        return {"kind": "rejected", "note": exc.note}
+
+
+@router.get("/audit/landing-check")
+def audit_landing_check() -> dict:
+    """启动期 home 落点自检的**只读裁决**（§5/§8 W6，fail-closed）。
+
+    不通过（落点落在个人 `~/.hermes` 内）⇒ `ok:false` + 可行动提示；**不静默回退**、不进入可用状态。
+    """
+    egress = _egress_module()
+    if egress is None:  # pragma: no cover - artifact defect
+        return {"kind": "rejected", "note": "audit-egress-module-unavailable"}
+    return egress.check_audit_landing(_hermes_home())
+
+
 def assert_outside_personal_trees(directory: Path, personal_home: Optional[Path] = None) -> None:
     """POLICY gate: refuse an engine store that resolves inside a personal tree.
 

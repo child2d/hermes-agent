@@ -90,7 +90,7 @@ echo "[plankton-pack] staged CLI: $CLI_DEST (from $CLI_SRC)"
 # would ship green and only die at plugin load — enumerate it here so the pack
 # stops before that.
 PLUGIN_PAYLOAD="enterprise/plankton-enterprise"
-for required in plugin.yaml __init__.py proposals.py audit_unit.py dashboard/manifest.json dashboard/plugin_api.py desktop/plugin.js skills/baymax/SKILL.md; do
+for required in plugin.yaml __init__.py proposals.py audit_unit.py audit_egress.py dashboard/manifest.json dashboard/plugin_api.py desktop/plugin.js skills/baymax/SKILL.md; do
   if [ ! -s "$PLUGIN_PAYLOAD/$required" ]; then
     echo "[plankton-pack] ERROR: enterprise plugin payload incomplete under $PLUGIN_PAYLOAD (missing/empty: $required)" >&2
     exit 1
