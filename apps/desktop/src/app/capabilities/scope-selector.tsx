@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { DesktopRosterAgent } from '@/global'
+import type { DesktopConnectionsRegistry, DesktopRosterAgent } from '@/global'
 import { getProfiles, type ProfileScope, profileScopeKey } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,28 @@ export interface CapabilityScope {
   options: ScopeOption[]
   value: string
   onChange: (value: string) => void
+}
+
+/**
+ * The bridge payload is TYPED as a full registry, but a malformed (or older
+ * Electron main's) answer can omit the `connections` array entirely — the read
+ * below (`registryData?.connections.length`) then threw `Cannot read properties
+ * of undefined (reading 'length')` and took the whole Capabilities page down.
+ * This is the only consumer of the query key, so normalize the shape here at
+ * the one boundary — the same array guard sdk/index.ts applies to this same
+ * bridge — so the read always sees an array and a genuine miss warns once per
+ * fetch instead of failing silently. A healthy payload keeps its identity.
+ */
+function normalizeRegistryPayload(payload: unknown): DesktopConnectionsRegistry {
+  const registry = payload as DesktopConnectionsRegistry | null | undefined
+
+  if (Array.isArray(registry?.connections)) {
+    return registry as DesktopConnectionsRegistry
+  }
+
+  console.warn('[capabilities] connection registry returned no connections array; treating as single-source')
+
+  return { ...(registry ?? {}), connections: [] } as DesktopConnectionsRegistry
 }
 
 /**
@@ -88,11 +110,14 @@ export function useCapabilityScope({
 
   const { data: registryData } = useQuery({
     queryKey: ['capabilities-connections-registry'],
-    queryFn: () => registryBridge!.list(),
+    // See normalizeRegistryPayload: the read below must never see a non-array.
+    queryFn: async () => normalizeRegistryPayload(await registryBridge!.list()),
     staleTime: 60_000,
     enabled: !fixedProfile && Boolean(registryBridge) && Boolean(rosterBridge)
   })
 
+  // Safe by construction: the queryFn above hands back a registry whose
+  // `connections` is always an array.
   const multiConnection = (registryData?.connections.length ?? 0) > 1
 
   const { data: rosterData } = useQuery({

@@ -421,6 +421,36 @@ describe('CapabilitiesView toolset management', { timeout: 60_000 }, () => {
     }
   })
 
+  it('degrades to single-source when the registry payload carries no connections array', async () => {
+    // Older/malformed Electron mains can answer the registry list with `{}`;
+    // `registryData?.connections.length` then threw
+    // `Cannot read properties of undefined (reading 'length')` during render and
+    // blanked the whole Capabilities page. The shape is now normalized at the
+    // query boundary, so the page paints and the roster fetch stays disabled.
+    const connections = { list: vi.fn().mockResolvedValue({}) }
+
+    const getAgentRoster = vi.fn()
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = { connections, getAgentRoster }
+
+    try {
+      await renderSkills()
+
+      await waitFor(() => expect(connections.list).toHaveBeenCalled())
+      // Single-source: the union roster is never fetched…
+      expect(getAgentRoster).not.toHaveBeenCalled()
+      // …the miss is observable…
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[capabilities]'))
+      // …and the page is alive (the toolset switch still renders).
+      expect(await screen.findByRole('switch', { name: 'Turn Web Search toolset off' })).toBeTruthy()
+    } finally {
+      delete (window as { hermesDesktop?: unknown }).hermesDesktop
+      warn.mockRestore()
+    }
+  })
+
   it('lists the built-in optional-skills catalog with Install buttons that route through the hub pipeline', async () => {
     // The full official catalog renders BELOW the installed list; each row
     // carries an Install button (no toggle until installed) that routes
