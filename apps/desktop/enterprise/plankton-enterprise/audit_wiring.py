@@ -357,8 +357,14 @@ def wiring_status(home: Optional[Path] = None, *, host: Optional[SessionAuditHos
         except Exception:  # pragma: no cover - 模块缺失
             active = None
     verdict = LAST_STARTUP_VERDICT
-    if verdict is None and active is not None:
-        verdict = active.startup_verdict()
+    if active is not None:
+        resolved = str(active.home) if active.home is not None else None
+        # 只认**同一 home** 的注册期裁决；home 不同（如只读面被另一个 profile 的 home 调用）则按该
+        # home 重算——否则会把 A 的裁决误报给 B（也避免同一进程里 test/长驻场景的陈旧裁决串台）。
+        if verdict is None or verdict.get("home") != resolved:
+            verdict = active.startup_verdict()
+    elif verdict is None:
+        verdict = None
     transport = None
     if active is not None:
         try:
