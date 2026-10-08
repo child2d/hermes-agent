@@ -494,11 +494,12 @@
     --dt-spacing-mul: 1;
 
     --radius: 0.75rem;
-    /* Effective value everywhere: the chat backdrop used to force 0.2 onto the
-       root element at runtime (an ungated leva slider default), so this 0.6
-       only ever applied to the windows that don't mount the backdrop. Pinned
-       to the value the app actually renders at. */
-    --radius-scalar: 0.2;
+    /* One knob for every corner in the app. 0.8 lands the scale on the stock
+       shadcn values — sm 6.4px / md 8px / lg 9.6px (shadcn: 6 / 8 / 10).
+       Was 0.2, a near-square IDE look; `rounded-md` rendered 2px. Retune the
+       whole UI from this single number and never hand-write a radius at a
+       call site. */
+    --radius-scalar: 0.8;
 
     /* Space under last message vs overlay composer — driven by the measured composer DOCK height (see
        composer/index.tsx), which covers the micro-action strip, the status stack, the composer, and the

@@ -4,8 +4,8 @@
    type — none of which is how this app draws a floating popover. Repaint it
    with the popover primitive's own recipe (components/ui/popover.tsx): a glass
    fill over --ui-bg-elevated, a single --ui-stroke-secondary hairline, and NO
-   shadow. Radius and type follow the app scale, which is near-square
-   (--radius-scalar: 0.2) and 12px-based.
+   shadow. Radius and type follow the app scale (the shared `--radius-scalar`
+   token) and are 12px-based.
 
    The scrim and the cutout geometry are config, not CSS — see TOUR_STYLE in
    run-tour.ts.

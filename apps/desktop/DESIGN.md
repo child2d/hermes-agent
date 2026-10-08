@@ -157,6 +157,7 @@ renderer and Electron's first window paint.
 | `--ui-widget-surface-background` | fill for inline chat widgets (`WIDGET_SHELL_CLASS`) |
 | `--chrome-action-hover` | hover fill for quiet controls |
 | `--theme-primary`, `--ui-accent` | brand/accent |
+| `--radius-scalar` | the single corner knob (`styles.css`); `rounded-sm/md/lg` all derive from it |
 
 Never hardcode `border-gray-*`, `bg-white`, `text-black`, etc. The two tiles in
 `BrandMark` (white in light mode, `#0d1117` in dark) are the sanctioned literals
@@ -224,8 +225,13 @@ context-dependent (e.g. "Show" / "Hide"). Never hardcode combos; always use
 `useKeybindHint` or `TipKeybindLabel`.
 
 Notes:
-- Text buttons are square (no radius) and sized by padding + line-height (no
-  fixed heights). Only icon buttons carry the shared 4px radius.
+- Every control — `Button`, `Input`/`Textarea`/`SelectTrigger` (via
+  `controlVariants`), `Badge`, `SegmentedControl`, `Kbd` — carries the **same**
+  `rounded-md` radius token. Never hand-write a radius (`rounded-[4px]`,
+  `rounded-[2.5px]`): the app's corner comes from `--radius-scalar` in
+  `styles.css` (0.8 → sm 6.4px / md 8px / lg 9.6px), so one number retunes every
+  corner at once.
+- Buttons are sized by padding + line-height (no fixed heights) so they stay snug.
 - SVGs inherit `size-3.5` (`size-3` at `xs`). Don't re-set icon size.
 - Polymorph with `asChild` when the button must render as a link/Slot.
 
