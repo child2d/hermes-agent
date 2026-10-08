@@ -165,22 +165,24 @@ Never hardcode `border-gray-*`, `bg-white`, `text-black`, etc. The two tiles in
 
 ## Buttons — one component
 
-`src/components/ui/button.tsx` is the single source. Pick a `variant` + `size`;
-do **not** pass `h-*`, `px-*`, `py-*`, or icon-size overrides.
+`src/components/ui/button.tsx` is the single source. It **is** the stock shadcn
+button (`style: new-york`) plus a set of compatibility aliases. Pick a `variant`
++ `size`; do **not** pass `h-*`, `px-*`, `py-*`, or icon-size overrides.
 
-**Variants:** `default` (primary), `destructive`, `secondary` (soft fill —
-the default non-primary look), `outline` (transparent + 1px inset ring, no
-fill/shadow), `ghost`, `floating` (a control loose from any surface — opaque
-popover fill + `shadow-md`, hover lifts the glyph only), `link`, `text`
-(boxless quiet inline — "Cancel", "Clear"), `textStrong` (bold underlined
-inline affordance — "Change", "Open logs").
-`grip` is the quiet, fill-free drawer handle; pair it with size `grip` for a
-48×16 hit area around a small horizontal ridge.
+**shadcn API:** variants `default` (primary), `destructive`, `outline`,
+`secondary`, `ghost`, `link`; sizes `default` (`h-9`), `sm` (`h-8`), `lg`
+(`h-10`), `icon` (`h-9 w-9`). Sizing is shadcn's, not an app-local ladder.
 
-**Sizes:** `default`, `xs`, `sm`, `lg`, `inline` (flush, zero box — for buttons
-that sit inside a heading/sentence; replaces `h-auto px-0 py-0`), `micro`
-(status-stack/table-footers), and the icon family `icon` / `icon-xs` /
-`icon-sm` / `icon-lg` / `icon-titlebar`.
+**Compatibility aliases — do not use in new code.** These exist only because
+existing call sites still name them, and should be deleted once those move onto
+the shadcn names. Variants: `floating` (a control loose from any surface —
+opaque popover fill + `shadow-md`), `grip` (quiet fill-free drawer handle),
+`text` (boxless quiet inline — "Cancel", "Clear"), `textStrong` (bold underlined
+inline affordance — "Change", "Open logs"). Sizes: `xs` (one step below `sm`),
+`inline` (flush, zero box — replaces `h-auto px-0 py-0`), `micro`
+(status-stack/table-footers), the icon family `icon-xs` / `icon-sm` / `icon-lg`,
+and `icon-titlebar` (measured from the titlebar tokens, not the size ladder —
+the window controls reserve from the same numbers).
 
 **Tooltips only when hover teaches something new.** `<Tip>` is for discovery,
 not a tax on every icon. Ask: does hover reveal something the user cannot

@@ -8,58 +8,61 @@ import { cn } from '@/lib/utils'
 // Text+icon actions underline the label on hover, not the glyph.
 const TEXT_ACTION_ICON = '[&_.codicon]:no-underline [&_svg]:no-underline'
 
-// Every button shares one radius token (rounded-md → --radius-md); the app-wide
-// corner comes from --radius-scalar in styles.css, so never hand-write a radius
-// here. Buttons are sized by padding + line-height (no fixed heights) so they
-// stay snug and scale with content.
+// Plankton's Button IS the stock shadcn button (style: new-york) — the base
+// string, the six variants and the size ladder below mirror
+// `src/components/ui-kit/button.tsx`, which is the vendored registry copy. Keep
+// the two in step: that is what lets us re-sync from the shadcn registry. The
+// only deliberate divergence in the base string is `cursor-pointer`, which
+// DESIGN.md requires at the primitive level.
+//
+// The entries under the `--- Plankton ---` markers are NOT shadcn. They exist
+// because ~278 call sites already use these names. They are aliases kept for
+// compatibility, not part of the design system: no new code should reach for
+// them, and they can be deleted once call sites move onto the shadcn names.
+//
+// Density is deliberately shadcn's (h-9 default, text-sm) rather than the old
+// padding-driven compact sizing, so app chrome reads as stock shadcn.
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md text-xs leading-4 font-medium whitespace-nowrap shadow-none transition-all duration-100 outline-none focus-visible:border-ring focus-visible:ring-[0.1875rem] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-default disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:size-4",
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive:
-          'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40',
-        // Quiet action — transparent fill with a 1.5px inset ring (no layout-shifting border).
-        outline:
-          'bg-transparent text-(--ui-text-primary) shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--ui-stroke-secondary)_50%,transparent)] hover:bg-(--chrome-action-hover) hover:text-(--ui-text-primary)',
-        // Soft-fill action (the default "non-primary button" look).
-        secondary:
-          'bg-(--ui-bg-quaternary) text-(--ui-text-primary) hover:bg-(--chrome-action-hover) hover:text-(--ui-text-primary)',
-        ghost: 'text-(--ui-text-secondary) hover:bg-(--chrome-action-hover) hover:text-(--ui-text-primary)',
-        grip: 'bg-transparent text-(--ui-text-tertiary) transition-colors hover:text-(--ui-text-secondary) focus-visible:text-(--ui-text-primary)',
-        // A control floating free of any surface (fan-menu discs, detached
-        // chips): the menu/popover treatment — opaque popover fill + the
-        // shared `shadow-md` ring-and-drop. Hover only lifts the glyph; a fill
-        // change on a lone disc reads as a toggle flipping.
-        floating: 'bg-popover text-(--ui-text-secondary) shadow-md hover:text-(--ui-text-primary)',
-        link: `text-primary underline-offset-4 decoration-current/20 hover:underline ${TEXT_ACTION_ICON}`,
-        // Boxless inline-text action (no bg/border). Quiet by default — reads as
-        // muted label text, underlines on hover (e.g. "Cancel", "Clear").
+        default: 'bg-primary text-primary-foreground shadow hover:bg-primary/90',
+        destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
+        outline: 'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground',
+        secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
+        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        link: 'text-primary underline-offset-4 hover:underline',
+        // --- Plankton aliases ---
+        // Emphasized inline-text action: bold + always-underlined ("Change", "Open logs").
+        textStrong: `font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground ${TEXT_ACTION_ICON}`,
+        // Boxless inline-text action (no bg/border) — "Cancel", "Clear".
         text: `text-muted-foreground underline-offset-4 hover:text-foreground hover:underline ${TEXT_ACTION_ICON}`,
-        // Emphasized inline-text action: bold + always-underlined link. Use for
-        // the actionable affordance in a row ("Change", "Set", "Open logs", …).
-        textStrong: `font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground ${TEXT_ACTION_ICON}`
+        // A control floating free of any surface (fan-menu discs, detached chips).
+        floating: 'bg-popover text-muted-foreground shadow-md hover:text-foreground',
+        // Quiet, fill-free drawer handle.
+        grip: 'bg-transparent text-muted-foreground transition-colors hover:text-foreground'
       },
       size: {
-        default: 'px-3 py-1.5 has-[>svg]:px-2.5',
-        xs: "gap-1 px-2 py-0.5 text-[0.6875rem] leading-4 has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: 'px-2.5 py-1 has-[>svg]:px-2',
-        lg: 'px-5 py-2 text-sm leading-5 has-[>svg]:px-4',
-        // Flush inline text action — no box padding/height. Pair with text/link
-        // variants when the button must sit inline in a heading or sentence
-        // (replaces ad-hoc `h-auto px-0 py-0` overrides).
+        default: 'h-9 px-4 py-2',
+        sm: 'h-8 rounded-md px-3 text-xs',
+        lg: 'h-10 rounded-md px-8',
+        icon: 'h-9 w-9',
+        // --- Plankton aliases ---
+        // One step below `sm` — the old compact default.
+        xs: "h-7 gap-1.5 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        // Flush inline text action — no box padding/height.
         inline: 'h-auto gap-1 p-0 has-[>svg]:px-0',
         // Status-stack headers, table footers — 12px text actions beside a label.
-        micro:
-          "h-auto gap-0.5 px-1 py-0 text-xs leading-4 font-normal has-[>svg]:px-0.5 [&_svg:not([class*='size-'])]:size-3",
-        icon: 'size-9 rounded-md',
-        'icon-xs': "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        'icon-sm': 'size-8 rounded-md',
-        'icon-lg': 'size-10 rounded-md',
+        micro: "h-auto gap-0.5 px-1 py-0 text-xs leading-4 font-normal [&_svg:not([class*='size-'])]:size-3",
+        'icon-xs': 'size-7',
+        'icon-sm': 'size-8',
+        'icon-lg': 'size-10',
         grip: 'h-4 w-12 rounded-full p-0',
+        // Measured from the titlebar tokens, not the size ladder: the window
+        // controls and the tab strip are reserved from these same numbers.
         'icon-titlebar':
-          'titlebar-icon-button h-(--titlebar-control-height) w-(--titlebar-control-size) rounded-md [&_svg:not([class*="size-"])]:size-(--titlebar-icon-size)'
+          'titlebar-icon-button h-(--titlebar-control-height) w-(--titlebar-control-size) [&_svg:not([class*="size-"])]:size-(--titlebar-icon-size)'
       }
     },
     compoundVariants: [
