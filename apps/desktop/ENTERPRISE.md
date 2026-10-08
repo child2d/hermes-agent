@@ -484,6 +484,35 @@ Packaging the artifact and re-running the clean-environment fail-closed check
 (`env -i … Plankton.app`) is a separate step; the human browser login cannot be
 automated and must be validated by an operator against the production IdP.
 
+---
+
+## 8. Interface mode — the enterprise build rests in Simple
+
+Upstream ships one interface with everything on. The enterprise build sets the
+**resting mode** of an untouched install to **Simple** (chat-first): the standing
+developer instrumentation — statusbar, profile rail, terminal / files / review
+panes, inline code diffs, technical tool payloads — is not what this audience
+opens the app for. Same mechanism, same picker, same "mode changes what is SHOWN,
+never what the app can do" rule (⌘K and every keybind still reach every surface).
+
+- The switch is one expression: `DEFAULT_INTERFACE_MODE` in
+  `src/store/interface-mode.ts` reads `$enterpriseEnabled` (the preload-bridge
+  flag, same gate as the shared-metrics row) — `simple` on this build,
+  `advanced` upstream. Upstream behaviour is bit-identical; no upstream test
+  changes.
+- An **explicit choice always wins.** The picker still encodes the default as
+  "no key", so an untouched install gains no record; both explicit values
+  round-trip, so a colleague who picks Advanced keeps it across reloads, and
+  switching back to Simple clears the record again.
+- Users change it in **Settings → Appearance → Window & layout → Interface
+  mode**, from **⌘K** ("Simple mode"), or by binding `view.toggleSimpleMode`
+  (unbound by default).
+- Tests: `src/store/interface-mode.test.ts` §"the build decides where an
+  untouched install rests" (upstream rests Advanced, this build Simple, a stored
+  choice survives).
+
+---
+
 ## Build / pack / rollback
 
 ### One command (the supported entry point)
@@ -625,14 +654,15 @@ Use this section for handover and for reviews. Write new status text in the same
 9. The app does not look for updates. The team sends each new version by hand.
 10. The build is one command. A person runs `npm run pack:plankton`.
 11. The app writes the model key at the first start. The key comes from the seed file.
+12. The app starts in Simple mode. The user sees the chat and the session list. The user can change the mode in the settings.
 
 ### What does not work now
 
-12. **Signature.** The app has no code signature. The app has no notarization. macOS stops the app on a colleague's computer. Sign and notarize the app before you give it to a colleague. You must have an Apple Developer account for this step.
-13. **Model key is one person's key.** The seed carries one person's key. The usage is charged to that person. You cannot cancel the key for one user. Replace the key before you give the app to many people.
-14. **Network for plugins.** The app does not contain the uv cache. The cache had a size of 1.9 GB. Without the cache, the app needs the network to add a plugin.
-15. **Two apps.** The /Applications folder contains the old Plankton build. The new build stays in the build folder. Do not mix the two apps.
-16. **Chat area.** The chat area shows "Waking up". The session list is complete. The message is a readiness note for the model.
+13. **Signature.** The app has no code signature. The app has no notarization. macOS stops the app on a colleague's computer. Sign and notarize the app before you give it to a colleague. You must have an Apple Developer account for this step.
+14. **Model key is one person's key.** The seed carries one person's key. The usage is charged to that person. You cannot cancel the key for one user. Replace the key before you give the app to many people.
+15. **Network for plugins.** The app does not contain the uv cache. The cache had a size of 1.9 GB. Without the cache, the app needs the network to add a plugin.
+16. **Two apps.** The /Applications folder contains the old Plankton build. The new build stays in the build folder. Do not mix the two apps.
+17. **Chat area.** The chat area shows "Waking up". The session list is complete. The message is a readiness note for the model.
 
 ### Rules for this section
 
@@ -649,6 +679,8 @@ Use this section for handover and for reviews. Write new status text in the same
 **现在能做到的**：它就是我们自己改的 Plankton（基于 MIT 许可的开源 Hermes 桌面端，包内附许可原文与第三方声明）；引擎内置于包内，不需要额外安装；数据只落在企业目录、不碰个人目录；界面上能看到已有的 8 条会话；不向 Nous 发送使用数据、网络只在本机内；包体积 3.0G（原 4.9G）。
 
 本轮新做好的四项：⑧ 设置里不再显示「发送」开关，而且引擎把发送口彻底封死（配置里就算手改成 `send: true` 也不发）；⑨ 不再检查自动更新（内部分发靠人工推新版本）；⑩ 构建已固化成一条命令 `npm run pack:plankton`；⑪ 首启会把模型密钥写进企业目录的 `.env`（0600），界面与流程可端到端对话。
+
+本轮新增一项：⑫ 首次打开默认是「简洁」界面——聊天优先，状态栏 / 终端 / 文件 / 代码差异这些开发仪表收起来（能力不减，⌘K 与快捷键仍可达）；在「设置 → 外观 → 窗口与布局 → 界面模式」里可切回「高级」，切过一次就永久记住。上游版本默认仍是「高级」，不受影响。
 
 **还没做到的（五项）**：① 没有代码签名与公证，发给同事会被 macOS 拦下，需要 Apple 开发者账号（签名/公证本轮**挂起**，见 KI-PLANKTON-0068）；② 当前密钥是**个人 key 临时内置**，用度记在该个人账号、无法按人吊销，扩大分发前必须换成专供密钥（见 KI-PLANKTON-0069）；③ 为了瘦身删掉了 1.9G 缓存，代价是加装插件要联网；④ `/Applications` 里还是旧版本，新版在构建目录，别混用；⑤ 聊天区显示的「Waking up」是模型就绪提示（不影响会话列表）。
 

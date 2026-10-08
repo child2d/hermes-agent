@@ -2,6 +2,7 @@ import { atom, computed, type ReadableAtom, type WritableAtom } from 'nanostores
 
 import { createLayoutPersistence } from '@/lib/layout-persistence'
 import { type Codec, persistentAtom } from '@/lib/persisted'
+import { $enterpriseEnabled } from '@/store/enterprise-flag'
 import type { SidebarRowMeta } from '@/store/layout'
 import type { ToolViewMode } from '@/store/tool-view'
 import { isBrowserWindow, isHudWindow, isSecondaryWindow } from '@/store/windows'
@@ -14,6 +15,10 @@ import { isBrowserWindow, isHudWindow, isSecondaryWindow } from '@/store/windows
 // out of the way. Mode changes what is SHOWN, never what Hermes can do: every
 // route still answers ⌘K, every pane still answers its keybind and the agent's
 // `focus_pane`.
+//
+// Which one an UNTOUCHED install rests in is the build's call, not this
+// module's: upstream rests in Advanced, the enterprise build in Simple (see
+// DEFAULT_INTERFACE_MODE). The mode a user picks is their own from then on.
 //
 // A mode is a RESOLVER INPUT, not a preset that writes preferences. Three
 // layers, one precedence, one place:
@@ -39,14 +44,23 @@ export type InterfaceMode = 'advanced' | 'simple'
 /** Picker order — the quiet option first. */
 export const INTERFACE_MODES: readonly InterfaceMode[] = ['simple', 'advanced']
 
-export const DEFAULT_INTERFACE_MODE: InterfaceMode = 'advanced'
+// Where an untouched install RESTS. Upstream rests in Advanced — the app as it
+// has always been. The enterprise (Plankton) build rests in Simple: its
+// audience talks to the agent, and the developer instrumentation is what this
+// build should not lead with (ENTERPRISE.md). Only the resting point differs;
+// the mechanism, the picker and the "never writes a preference" rule below are
+// the same on both, so an explicit choice always outranks this.
+export const DEFAULT_INTERFACE_MODE: InterfaceMode = $enterpriseEnabled.get() ? 'simple' : 'advanced'
 
 const INTERFACE_MODE_STORAGE_KEY = 'hermes.desktop.interfaceMode.v1'
 
-// Advanced is the ABSENCE of a mode: encoded as "no key" so a user who never
-// touched the picker never gains a record, and clearing the key means Advanced.
+// The default is the ABSENCE of a mode: encoded as "no key" so a user who never
+// touched the picker never gains a record, and clearing the key means the
+// build's default. BOTH explicit values round-trip, so a Plankton user who
+// picks Advanced keeps it (and switching back to Simple clears the record
+// again) — the codec must never fold an explicit choice into the default.
 const modeCodec: Codec<InterfaceMode> = {
-  decode: raw => (raw === 'simple' ? 'simple' : DEFAULT_INTERFACE_MODE),
+  decode: raw => (raw === 'simple' || raw === 'advanced' ? raw : DEFAULT_INTERFACE_MODE),
   encode: mode => (mode === DEFAULT_INTERFACE_MODE ? null : mode)
 }
 

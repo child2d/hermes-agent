@@ -6,7 +6,7 @@
  */
 
 import { atom } from 'nanostores'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const MODE_KEY = 'hermes.desktop.interfaceMode.v1'
 
@@ -166,5 +166,65 @@ describe('tiers', () => {
     expect($showsAdvancedChrome.get()).toBe(true)
     setInterfaceMode('simple')
     expect($showsAdvancedChrome.get()).toBe(false)
+  })
+})
+
+describe('the build decides where an untouched install rests', () => {
+  const upstreamBridge = window.hermesDesktop
+
+  const setEnterpriseBridge = (enterpriseEnabled: boolean) => {
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+      ...(upstreamBridge ?? {}),
+      enterpriseEnabled
+    }
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = upstreamBridge
+    vi.resetModules()
+  })
+
+  it('upstream still rests in Advanced', async () => {
+    setEnterpriseBridge(false)
+
+    const { DEFAULT_INTERFACE_MODE, $interfaceMode } = await loadStore()
+
+    expect(DEFAULT_INTERFACE_MODE).toBe('advanced')
+    expect($interfaceMode.get()).toBe('advanced')
+  })
+
+  it('the enterprise build rests in Simple, and still honours an explicit Advanced', async () => {
+    setEnterpriseBridge(true)
+
+    const { DEFAULT_INTERFACE_MODE, $interfaceMode, setInterfaceMode } = await loadStore()
+
+    expect(DEFAULT_INTERFACE_MODE).toBe('simple')
+    expect($interfaceMode.get()).toBe('simple')
+
+    // The resting mode is still the ABSENCE of a record…
+    setInterfaceMode('simple')
+    expect(window.localStorage.getItem(MODE_KEY)).toBeNull()
+
+    // …and picking Advanced is kept, not folded back into the default.
+    setInterfaceMode('advanced')
+    expect(window.localStorage.getItem(MODE_KEY)).toBe('advanced')
+    vi.resetModules()
+    expect((await loadStore()).$interfaceMode.get()).toBe('advanced')
+
+    // Choosing the resting mode again clears the record.
+    ;(await loadStore()).setInterfaceMode('simple')
+    expect(window.localStorage.getItem(MODE_KEY)).toBeNull()
+  })
+
+  it('a stored value from the other build still wins over the new default', async () => {
+    window.localStorage.setItem(MODE_KEY, 'advanced')
+    setEnterpriseBridge(true)
+
+    expect((await loadStore()).$interfaceMode.get()).toBe('advanced')
   })
 })
