@@ -202,9 +202,8 @@ export function HubSkillsSection({ bot, onInstalled }: HubSkillsSectionProps) {
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-[0.7rem] font-medium text-(--ui-text-secondary)">{b.tools.skillsHub}</div>
         <Button
-          className="text-[0.65rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)"
+          className="text-[0.65rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary) h-auto p-0"
           onClick={() => setBrowseHub(v => !v)}
-          size="inline"
           variant="link"
         >
           {browseHub ? h.pickerHide : h.pickerBrowse}

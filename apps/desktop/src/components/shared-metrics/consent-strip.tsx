@@ -41,11 +41,10 @@ export function SharedMetricsConsentStrip() {
         <>
           {CHOICES.map(choice => (
             <Button
-              className="text-foreground/90 hover:text-foreground"
+              className="text-foreground/90 hover:text-foreground h-auto px-1 py-0 text-xs leading-4 font-normal"
               disabled={saving}
               key={choice}
               onClick={() => void choose(choice)}
-              size="micro"
               type="button"
               variant="link"
             >
@@ -53,9 +52,8 @@ export function SharedMetricsConsentStrip() {
             </Button>
           ))}
           <Button
-            className="text-muted-foreground/75 hover:text-foreground/90"
+            className="text-muted-foreground/75 hover:text-foreground/90 h-auto px-1 py-0 text-xs leading-4 font-normal"
             onClick={() => $sharedMetricsDetailsOpen.set(true)}
-            size="micro"
             type="button"
             variant="link"
           >

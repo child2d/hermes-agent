@@ -40,7 +40,7 @@ export function AddServerForm({ draft, nameTaken, onChange }: AddServerFormProps
       <PasteBox copy={copy} onFill={onChange} previous={draft} />
 
       <Field label={copy.name}>
-        <Input onChange={event => set({ name: event.currentTarget.value })} size="sm" value={draft.name} />
+        <Input onChange={event => set({ name: event.currentTarget.value })} value={draft.name} />
         {nameTaken ? <p className="text-[0.65rem] text-(--ui-red)">{copy.nameTaken}</p> : null}
       </Field>
 
@@ -68,7 +68,7 @@ function StdioFields({ copy, draft, set }: { copy: AddCopy; draft: AddServerDraf
   return (
     <>
       <Field label={copy.command}>
-        <Input onChange={event => set({ command: event.currentTarget.value })} size="sm" value={draft.command} />
+        <Input onChange={event => set({ command: event.currentTarget.value })} value={draft.command} />
       </Field>
 
       <ValueRows
@@ -97,7 +97,7 @@ function StdioFields({ copy, draft, set }: { copy: AddCopy; draft: AddServerDraf
       />
 
       <Field label={copy.cwd}>
-        <Input onChange={event => set({ cwd: event.currentTarget.value })} size="sm" value={draft.cwd} />
+        <Input onChange={event => set({ cwd: event.currentTarget.value })} value={draft.cwd} />
       </Field>
     </>
   )
@@ -111,7 +111,7 @@ function HttpFields({ copy, draft, set }: { copy: AddCopy; draft: AddServerDraft
   return (
     <>
       <Field label={copy.url}>
-        <Input onChange={event => set({ url: event.currentTarget.value })} size="sm" value={draft.url} />
+        <Input onChange={event => set({ url: event.currentTarget.value })} value={draft.url} />
       </Field>
 
       <PairRows
@@ -134,7 +134,6 @@ function HttpFields({ copy, draft, set }: { copy: AddCopy; draft: AddServerDraft
         <Field label={copy.authBearer}>
           <Input
             onChange={event => set({ bearer: event.currentTarget.value })}
-            size="sm"
             type="password"
             value={draft.bearer}
           />
@@ -272,7 +271,6 @@ function ValueRows({
             className="min-w-0 flex-1"
             onChange={event => replace(row, event.currentTarget.value)}
             placeholder={placeholder}
-            size="sm"
             value={row.value}
           />
           <TrashButton label={removeLabel} onClick={() => onChange(rows.filter(other => other.id !== row.id))} />
@@ -307,7 +305,6 @@ function PairRows({
             className="min-w-0 flex-1"
             onChange={event => patch(row, { key: event.currentTarget.value })}
             placeholder={copy.keyPlaceholder}
-            size="sm"
             value={row.key}
           />
           <Input
@@ -315,7 +312,6 @@ function PairRows({
             className="min-w-0 flex-1"
             onChange={event => patch(row, { value: event.currentTarget.value })}
             placeholder={copy.valuePlaceholder}
-            size="sm"
             value={row.value}
           />
           <TrashButton label={copy.removeRow} onClick={() => onChange(rows.filter(other => other.id !== row.id))} />

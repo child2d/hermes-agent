@@ -229,9 +229,8 @@ export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps
             />
           )}
           <Button
-            className="flex items-center gap-1 text-xs font-medium text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)"
+            className="flex items-center gap-1 text-xs font-medium text-(--ui-text-tertiary) hover:text-(--ui-text-secondary) h-auto p-0"
             onClick={() => setAdvanced(v => !v)}
-            size="inline"
             variant="link"
           >
             <DisclosureCaret open={advanced} />

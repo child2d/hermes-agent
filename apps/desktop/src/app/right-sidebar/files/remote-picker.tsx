@@ -233,7 +233,6 @@ export function RemoteFolderPicker() {
                       }
                     }}
                     placeholder={r.remotePickerFolderName}
-                    size="sm"
                     value={newFolderName}
                   />
                   <Button

@@ -237,9 +237,8 @@ export function WorktreeDialog() {
           <Popover onOpenChange={setProjectOpen} open={projectOpen}>
             <PopoverTrigger asChild>
               <Button
-                className="group w-full flex justify-start items-center min-w-0 gap-1.5 hover:no-underline hover:text-muted-foreground"
+                className="group w-full flex justify-start items-center min-w-0 gap-1.5 hover:no-underline hover:text-muted-foreground h-auto p-0"
                 disabled={pending}
-                size="inline"
                 variant="link"
               >
                 <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="folder" size="0.8rem" />

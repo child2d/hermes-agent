@@ -381,17 +381,16 @@ const FanCluster = memo(function FanCluster({
             aria-label={item.label}
             aria-pressed={item.active}
             className={cn(
-              'absolute inset-0 rounded-full shadow-md',
+              'absolute inset-0 rounded-full bg-popover shadow-md',
               entered ? 'pointer-events-auto' : 'pointer-events-none'
             )}
             disabled={item.disabled}
             onClick={item.onSelect}
             onPointerEnter={onPointerEnter}
             onPointerLeave={onPointerLeave}
-            size="inline"
             style={discStyle(offsets[index], index, entered)}
             type="button"
-            variant={item.active ? 'default' : 'floating'}
+            variant={item.active ? 'default' : 'secondary'}
           >
             {item.icon}
           </Button>

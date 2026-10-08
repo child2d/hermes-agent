@@ -39,9 +39,8 @@ export function BillingBanner({ sessionId }: { sessionId: null | string }) {
       trailing={
         <>
           <Button
-            className="text-foreground/90 hover:text-foreground"
+            className="text-foreground/90 hover:text-foreground h-auto px-1 py-0 text-xs leading-4 font-normal"
             onClick={() => runBillingRecovery(block)}
-            size="micro"
             type="button"
             variant="link"
           >

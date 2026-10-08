@@ -302,10 +302,9 @@ function ConfirmingModelPanel({
           </p>
         )}
         <Button
-          className="mt-0.5 text-xs"
+          className="mt-0.5 text-xs h-auto p-0"
           disabled={flow.saving}
           onClick={() => setPickerOpen(true)}
-          size="inline"
           variant="link"
         >
           {t.onboarding.change}

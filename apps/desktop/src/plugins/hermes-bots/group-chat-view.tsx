@@ -1037,9 +1037,8 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
                 {room.running && event.kind === 'working' ? (
                   <Tip label={b.group.stopHint}>
                     <Button
-                      className="shrink-0 text-(--ui-accent)"
+                      className="shrink-0 text-(--ui-accent) h-auto px-1 py-0 text-xs leading-4 font-normal"
                       onClick={() => void stopRoomRun()}
-                      size="micro"
                       variant="ghost"
                     >
                       <Codicon name="debug-stop" />
@@ -1288,9 +1287,8 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
             ) : (
               <Tip label={revealed ? 'Hide full handle' : 'Show full handle'}>
                 <Button
-                  className="text-left text-[0.7rem] font-semibold text-(--ui-accent)"
+                  className="text-left text-[0.7rem] font-semibold text-(--ui-accent) h-auto p-0"
                   onClick={() => setRevealedSpeaker(revealed ? null : entryKey)}
-                  size="inline"
                   variant="link"
                 >
                   {label}
@@ -1416,10 +1414,9 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         </form>
       ) : (
         <Button
-          className="w-fit px-2 pb-1 text-left text-[0.65rem] text-(--ui-accent) transition-colors"
+          className="w-fit px-2 pb-1 text-left text-[0.65rem] text-(--ui-accent) transition-colors h-auto p-0"
           key={`replylink:${id}`}
           onClick={() => setReplyThread(id)}
-          size="inline"
           variant="link"
         >
           {b.group.replyInThread}

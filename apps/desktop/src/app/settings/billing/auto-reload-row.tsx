@@ -190,7 +190,6 @@ export function AutoReloadRow({
                     max={maxBound}
                     min={minBound}
                     onChange={onField(setThreshold)}
-                    size="sm"
                     step="0.01"
                     tabIndex={editing ? undefined : -1}
                     type="number"
@@ -207,7 +206,6 @@ export function AutoReloadRow({
                     max={maxBound}
                     min={minBound}
                     onChange={onField(setReloadTo)}
-                    size="sm"
                     step="0.01"
                     tabIndex={editing ? undefined : -1}
                     type="number"

@@ -43,7 +43,7 @@ export function CategoryPicker({ categories, onChange, value }: CategoryPickerPr
         <button
           aria-expanded={open}
           aria-haspopup="listbox"
-          className={cn(controlVariants({ size: 'xs' }), 'flex w-auto items-center gap-1.5 whitespace-nowrap')}
+          className={cn(controlVariants(), 'flex w-auto items-center gap-1.5 whitespace-nowrap')}
           ref={trigger}
           type="button"
         >

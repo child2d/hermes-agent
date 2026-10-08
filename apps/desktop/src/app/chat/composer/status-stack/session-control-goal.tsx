@@ -346,9 +346,8 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                 {hasDetails && (
                   <StatusControlRow icon="eye">
                     <Button
-                      className="text-[0.7rem] text-muted-foreground/75 hover:text-foreground/90"
+                      className="text-[0.7rem] text-muted-foreground/75 hover:text-foreground/90 h-auto p-0"
                       onClick={() => setDetailsOpen(true)}
-                      size="inline"
                       type="button"
                       variant="link"
                     >
@@ -373,10 +372,9 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                     trailing={
                       <div className="flex items-center gap-1">
                         <Button
-                          className="text-[0.68rem] text-muted-foreground/75 hover:text-foreground/90"
+                          className="text-[0.68rem] text-muted-foreground/75 hover:text-foreground/90 h-auto px-1 py-0 text-xs leading-4 font-normal"
                           disabled={isBusy}
                           onClick={openAddCriterion}
-                          size="micro"
                           type="button"
                           variant="link"
                         >
@@ -384,10 +382,9 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                         </Button>
                         {goal.subgoals.length > 0 && (
                           <Button
-                            className="text-[0.68rem] text-muted-foreground/60 hover:text-destructive"
+                            className="text-[0.68rem] text-muted-foreground/60 hover:text-destructive h-auto px-1 py-0 text-xs leading-4 font-normal"
                             disabled={isBusy}
                             onClick={confirmClearCriteria}
-                            size="micro"
                             type="button"
                             variant="link"
                           >

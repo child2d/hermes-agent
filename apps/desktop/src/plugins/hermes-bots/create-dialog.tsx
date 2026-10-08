@@ -708,7 +708,7 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
             />
           )}
           <Button
-            className="flex items-center gap-1 text-xs font-medium text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)"
+            className="flex items-center gap-1 text-xs font-medium text-(--ui-text-tertiary) hover:text-(--ui-text-secondary) h-auto p-0"
             onClick={() => {
               setAdvanced(v => {
                 if (!v) {
@@ -718,7 +718,6 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
                 return !v
               })
             }}
-            size="inline"
             variant="link"
           >
             <DisclosureCaret open={advanced} />

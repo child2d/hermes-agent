@@ -866,7 +866,7 @@ function Intro() {
       data-selectable-text="true"
     >
       <p className="min-w-0">{k.introBody}</p>
-      <Button onClick={() => $introDismissed.set(true)} size="inline" variant="link">
+      <Button className="h-auto p-0" onClick={() => $introDismissed.set(true)} variant="link">
         {k.introGotIt}
       </Button>
     </div>

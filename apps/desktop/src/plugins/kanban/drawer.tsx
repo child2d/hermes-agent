@@ -220,7 +220,7 @@ function WorkspaceValue({ kind, path }: { kind: null | string | undefined; path:
       </div>
       <CopyButton
         appearance="icon"
-        buttonSize="icon-xs"
+        buttonSize="icon"
         buttonVariant="ghost"
         className="-mt-0.5 shrink-0"
         text={path}
@@ -504,10 +504,9 @@ function AttachmentDownload({
     <Tip label={attachment.filename} placement="row">
       <Button
         aria-label={`${t.fileMenu.download} ${attachment.filename}`}
-        className="max-w-full justify-start font-normal"
+        className="max-w-full justify-start font-normal h-auto p-0"
         disabled={!path || download.isPending}
         onClick={() => download.mutate()}
-        size="inline"
         variant="link"
       >
         <Codicon name={download.isPending ? 'sync' : 'cloud-download'} size="0.75rem" spinning={download.isPending} />

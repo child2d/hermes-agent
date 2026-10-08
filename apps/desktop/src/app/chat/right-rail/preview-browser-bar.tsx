@@ -206,7 +206,6 @@ export function PreviewBrowserBar({
             }
           }}
           placeholder={copy.addressPlaceholder}
-          size="xs"
           spellCheck={false}
           value={shown}
         />

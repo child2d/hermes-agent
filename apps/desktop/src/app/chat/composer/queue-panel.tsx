@@ -74,9 +74,8 @@ export function QueuePanel({
         parked ? (
           <Tip label={c.queueResumeTip}>
             <Button
-              className="text-muted-foreground/75 hover:text-foreground/90"
+              className="text-muted-foreground/75 hover:text-foreground/90 h-auto px-1 py-0 text-xs leading-4 font-normal"
               onClick={onResume}
-              size="micro"
               type="button"
               variant="link"
             >

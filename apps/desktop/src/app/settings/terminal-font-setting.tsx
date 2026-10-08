@@ -144,7 +144,7 @@ export function TerminalFontSetting() {
               renderOption={font => <span style={{ fontFamily: resolveTerminalFontFamily(font) }}>{font}</span>}
               value={value}
             />
-            <Button disabled={!value || draft === null} onClick={() => update('')} size="inline" variant="link">
+            <Button className="h-auto p-0" disabled={!value || draft === null} onClick={() => update('')} variant="link">
               {copy.terminalFontReset}
             </Button>
           </div>

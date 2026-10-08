@@ -127,9 +127,8 @@ export function BaseBranchPicker({
       >
         <PopoverTrigger asChild>
           <Button
-            className="group w-full flex justify-start items-center min-w-0 gap-1.5 hover:no-underline hover:text-muted-foreground"
+            className="group w-full flex justify-start items-center min-w-0 gap-1.5 hover:no-underline hover:text-muted-foreground h-auto p-0"
             disabled={disabled || loading}
-            size="inline"
             variant="link"
           >
             <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="git-branch" size="0.8rem" />

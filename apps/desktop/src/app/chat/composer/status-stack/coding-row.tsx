@@ -252,7 +252,7 @@ export const CodingStatusRow = memo(function CodingStatusRow({
                 </span>
                 <CopyButton
                   appearance="icon"
-                  buttonSize="icon-xs"
+                  buttonSize="icon"
                   className="pointer-events-none size-4 shrink-0 text-muted-foreground/50 hover:text-foreground group-hover/status-row:pointer-events-auto group-focus-within/status-row:pointer-events-auto"
                   iconClassName="size-3"
                   label={fileMenu.copyPath}

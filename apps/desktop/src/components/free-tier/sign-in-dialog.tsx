@@ -160,10 +160,9 @@ export function FreeTierSignInDialog({ onSelectModel }: FreeTierSignInDialogProp
                   {state.model}
                 </span>
                 <Button
+                  className="h-auto p-0"
                   onClick={() => finish(state.model, () => setModelPickerOpen(true))}
-                  size="inline"
-                  type="button"
-                  variant="link"
+                  type="button" variant="link"
                 >
                   {copy.change}
                 </Button>

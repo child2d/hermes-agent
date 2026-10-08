@@ -64,30 +64,27 @@ export function FreeTierNoticeStrip() {
       trailing={
         <>
           <Button
-            className="text-foreground/90 hover:text-foreground"
+            className="text-foreground/90 hover:text-foreground h-auto px-1 py-0 text-xs leading-4 font-normal"
             onClick={() => consume(() => setModelPickerOpen(true))}
-            size="micro"
             type="button"
             variant="link"
           >
             {copy.openModelPicker}
           </Button>
           <Button
-            className="text-foreground/90 hover:text-foreground"
+            className="text-foreground/90 hover:text-foreground h-auto px-1 py-0 text-xs leading-4 font-normal"
             onClick={() => consume(() => openFreeTierSignIn())}
-            size="micro"
             type="button"
             variant="link"
           >
             {copy.signIn}
           </Button>
           <Button
-            className="text-muted-foreground/75 hover:text-foreground/90"
+            className="text-muted-foreground/75 hover:text-foreground/90 h-auto px-1 py-0 text-xs leading-4 font-normal"
             onClick={() => {
               recordFriction('notice_dismissed', 'free_tier_notice')
               consume()
             }}
-            size="micro"
             type="button"
             variant="link"
           >

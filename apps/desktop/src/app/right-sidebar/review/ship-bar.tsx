@@ -109,7 +109,6 @@ export function ReviewShipBar() {
           }}
           placeholder={c.commitPlaceholder(formatCombo('mod+enter'))}
           rows={1}
-          size="sm"
           value={message}
         />
         <GenerateButton

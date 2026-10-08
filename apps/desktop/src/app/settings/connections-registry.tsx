@@ -602,7 +602,6 @@ export function ConnectionsRegistrySection() {
           placeholder={s.searchPlaceholder}
           prefix={<SearchIcon className="size-3.5" />}
           ref={searchInputRef}
-          size="sm"
           type="search"
           value={searchQuery}
         />

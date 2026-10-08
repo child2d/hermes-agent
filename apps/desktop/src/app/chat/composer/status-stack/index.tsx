@@ -270,9 +270,8 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
             group.type === 'subagent' ? (
               <Tip label={<TipKeybindLabel actionId="nav.agents" text={t.statusStack.agents} />}>
                 <Button
-                  className="text-muted-foreground/75 hover:text-foreground/90"
+                  className="text-muted-foreground/75 hover:text-foreground/90 h-auto px-1 py-0 text-xs leading-4 font-normal"
                   onClick={openAgents}
-                  size="micro"
                   type="button"
                   variant="link"
                 >

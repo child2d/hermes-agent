@@ -216,7 +216,6 @@ function BuyCreditsRow({ billing, row }: { billing: BillingStateResponse; row: B
             }}
             placeholder={billing.min_usd ?? ''}
             prefix="$"
-            size="xs"
             step="0.01"
             type="number"
             value={amount}
@@ -401,7 +400,6 @@ function BillingFixtureSelect({
         <SelectTrigger
           aria-label="Billing preview fixture (dev only)"
           className="h-7 w-36 border-dashed border-(--ui-stroke-secondary) bg-transparent px-2 text-xs font-normal text-(--ui-text-tertiary) shadow-none hover:bg-(--ui-bg-tertiary) focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-(--ui-bg-tertiary)"
-          size="sm"
         >
           <SelectValue />
         </SelectTrigger>

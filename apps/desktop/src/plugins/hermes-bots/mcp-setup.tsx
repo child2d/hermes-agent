@@ -349,7 +349,7 @@ export function McpSetupButton({ profile, entry, onDone, ensureProfile }: McpSet
     return (
       <span className="ml-1.5 text-[0.65rem] text-(--ui-danger,#f87171)">
         {(message || b.tools.setupFailed) + ' '}
-        <Button className="underline" onClick={() => setPhase('idle')} size="inline" variant="link">
+        <Button className="underline h-auto p-0" onClick={() => setPhase('idle')} variant="link">
           {t.common.retry}
         </Button>
       </span>
@@ -359,9 +359,8 @@ export function McpSetupButton({ profile, entry, onDone, ensureProfile }: McpSet
   // idle
   return (
     <Button
-      className="ml-1.5 text-[0.65rem] text-(--ui-accent) underline"
+      className="ml-1.5 text-[0.65rem] text-(--ui-accent) underline h-auto p-0"
       onClick={() => void (isOAuth ? beginOAuth() : beginKeys())}
-      size="inline"
       variant="link"
     >
       {isOAuth ? b.tools.signIn : b.tools.setUp}

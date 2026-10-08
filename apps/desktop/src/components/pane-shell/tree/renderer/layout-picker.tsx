@@ -249,7 +249,6 @@ export function LayoutPicker() {
                   }
                 }}
                 placeholder={t.zones.nameLayoutPlaceholder}
-                size="sm"
                 value={name}
               />
               <Button disabled={!name.trim()} size="sm" type="submit" variant="outline">
@@ -260,7 +259,7 @@ export function LayoutPicker() {
               </Button>
             </form>
           ) : (
-            <Button className="self-start" onClick={() => setSaving(true)} size="inline" variant="link">
+            <Button className="self-start h-auto p-0" onClick={() => setSaving(true)} variant="link">
               <Codicon name="save" size="0.8125rem" />
               {t.zones.saveCurrentAs}
             </Button>

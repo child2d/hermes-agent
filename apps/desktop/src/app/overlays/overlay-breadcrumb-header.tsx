@@ -23,7 +23,7 @@ export function OverlayBreadcrumbHeader({ child, group, rootLabel, trailing }: O
         <ChevronRight aria-hidden className="size-3 shrink-0" />
         {child ? (
           <>
-            <Button onClick={group.onSelect} size="inline" variant="link">
+            <Button className="h-auto p-0" onClick={group.onSelect} variant="link">
               {group.label}
             </Button>
             <ChevronRight aria-hidden className="size-3 shrink-0" />

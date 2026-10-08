@@ -28,7 +28,15 @@ const buttonVariants = cva(
         default: 'h-9 px-4 py-2',
         sm: 'h-8 rounded-md px-3 text-xs',
         lg: 'h-10 rounded-md px-8',
-        icon: 'h-9 w-9'
+        icon: 'h-9 w-9',
+        // NOT a legacy alias — a deliberate Plankton extension of the shadcn
+        // ladder. The titlebar reserves its control band from these same
+        // measured tokens (window controls + tab strip geometry), so stock
+        // `icon` at h-9 would exceed the reserved height and break the window
+        // chrome. shadcn has no measured-chrome size; this is the single place
+        // the local kit extends it. Everything else is stock.
+        'icon-titlebar':
+          'titlebar-icon-button h-(--titlebar-control-height) w-(--titlebar-control-size) [&_svg:not([class*="size-"])]:size-(--titlebar-icon-size)'
       }
     },
     defaultVariants: {

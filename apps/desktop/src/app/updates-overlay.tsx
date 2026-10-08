@@ -314,7 +314,7 @@ function IdleView({
               {index === 0 && commits.length > 0 && (
                 <CopyButton
                   appearance="icon"
-                  buttonSize="icon-xs"
+                  buttonSize="icon"
                   className="-my-1 size-5 shrink-0 text-muted-foreground/70 hover:text-foreground"
                   iconClassName="size-3"
                   label={u.copyFullLog}

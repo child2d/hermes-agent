@@ -299,7 +299,7 @@ function HostedLead({
         <div className="flex items-center gap-3">
           <p className="min-w-0 flex-1 text-[0.72rem] text-(--ui-text-secondary)">{reason}</p>
           {waiting ? (
-            <Button onClick={waiting} size="inline" variant="link">
+            <Button className="h-auto p-0" onClick={waiting} variant="link">
               {t.connectorsPage.card.verb.stopWaiting}
             </Button>
           ) : null}
@@ -408,7 +408,7 @@ function OrgNote({ count, onOpenAdmin }: { count: number; onOpenAdmin?: () => vo
     <div className="grid gap-1 rounded-md bg-(--ui-orange)/8 p-2.5">
       <p className="text-[0.7rem] text-(--ui-text-secondary)">{copy.orgNote(count)}</p>
       {onOpenAdmin ? (
-        <Button className="justify-self-start" onClick={onOpenAdmin} size="inline" variant="link">
+        <Button className="justify-self-start h-auto p-0" onClick={onOpenAdmin} variant="link">
           {copy.orgLink}
         </Button>
       ) : null}

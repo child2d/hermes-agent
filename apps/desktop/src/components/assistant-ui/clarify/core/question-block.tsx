@@ -89,7 +89,6 @@ export function QuestionBlock({
               onFocus={onOtherFocus}
               placeholder={copy.other}
               rows={1}
-              size="sm"
               value={staged.draft}
             />
           </label>
@@ -102,7 +101,6 @@ export function QuestionBlock({
           onFocus={onOtherFocus}
           placeholder={copy.placeholder}
           rows={1}
-          size="sm"
           value={staged.draft}
         />
       )}

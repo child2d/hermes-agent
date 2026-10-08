@@ -94,7 +94,7 @@ export function WaysSection({ card, onChange, value, ...rest }: WaysSectionProps
       {bothWaysOn(card.ways) && rest.onServerToggle ? (
         <div className="flex flex-wrap items-center gap-2">
           <p className="min-w-0 flex-1 text-[0.7rem] text-(--ui-text-secondary)">{copy.dialog.bothOn(card.name)}</p>
-          <Button onClick={() => rest.onServerToggle?.(false)} size="inline" variant="link">
+          <Button className="h-auto p-0" onClick={() => rest.onServerToggle?.(false)} variant="link">
             {copy.dialog.turnOffLocal}
           </Button>
         </div>

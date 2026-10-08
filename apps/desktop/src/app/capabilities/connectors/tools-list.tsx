@@ -235,7 +235,7 @@ function UnavailableLine({ onRetry }: { onRetry: () => void }) {
   return (
     <Line
       action={
-        <Button onClick={onRetry} size="inline" variant="link">
+        <Button className="h-auto p-0" onClick={onRetry} variant="link">
           {t.connectorsPage.tools.retry}
         </Button>
       }
@@ -250,7 +250,7 @@ function SignInLine({ onSignIn }: { onSignIn: () => void }) {
   return (
     <Line
       action={
-        <Button onClick={onSignIn} size="inline" variant="link">
+        <Button className="h-auto p-0" onClick={onSignIn} variant="link">
           {t.connectorsPage.page.signIn}
         </Button>
       }
@@ -309,11 +309,11 @@ function RulesLine({
     <Line
       action={
         signedOut && onSignIn ? (
-          <Button onClick={onSignIn} size="inline" variant="link">
+          <Button className="h-auto p-0" onClick={onSignIn} variant="link">
             {copy.page.signIn}
           </Button>
         ) : onRetryRules ? (
-          <Button onClick={onRetryRules} size="inline" variant="link">
+          <Button className="h-auto p-0" onClick={onRetryRules} variant="link">
             {copy.page.retry}
           </Button>
         ) : null

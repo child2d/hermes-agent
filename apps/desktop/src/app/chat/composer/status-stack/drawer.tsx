@@ -45,10 +45,9 @@ export function StatusDrawerToggle({ collapsed, controls, onToggle }: StatusDraw
         aria-controls={controls}
         aria-expanded={!collapsed}
         aria-label={label}
-        className="status-drawer-toggle absolute -top-2 left-1/2 z-10 -translate-x-1/2"
+        className="status-drawer-toggle absolute -top-2 left-1/2 z-10 -translate-x-1/2 h-4 w-12 rounded-full p-0"
         data-slot="status-drawer-toggle"
         onClick={onToggle}
-        size="grip"
         type="button"
         variant="ghost"
       >

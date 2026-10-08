@@ -257,12 +257,11 @@ export function RowFootnoteAction({ children, onClick }: { children: ReactNode; 
   return (
     <div className="mt-1.5">
       <Button
+        className="h-auto p-0"
         onClick={() => {
           triggerHaptic('selection')
           onClick()
-        }}
-        size="inline"
-        variant="link"
+        }} variant="link"
       >
         {children}
       </Button>

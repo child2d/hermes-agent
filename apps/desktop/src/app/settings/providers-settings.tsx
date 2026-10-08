@@ -198,9 +198,8 @@ function OAuthPicker({
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <SettingsCategoryHeading icon={KeyRound} title={p.connectAccount} />
         <Button
-          className="text-[length:var(--conversation-caption-font-size)]"
+          className="text-[length:var(--conversation-caption-font-size)] h-auto p-0"
           onClick={onWantApiKey}
-          size="inline"
           type="button"
           variant="link"
         >
@@ -241,9 +240,8 @@ function OAuthPicker({
       )}
       {collapsible && (
         <Button
-          className="py-1 text-[length:var(--conversation-caption-font-size)]"
+          className="py-1 text-[length:var(--conversation-caption-font-size)] h-auto p-0"
           onClick={() => setShowAll(v => !v)}
-          size="inline"
           type="button"
           variant="link"
         >
