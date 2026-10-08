@@ -116,7 +116,7 @@ export function LanguageSwitcher({ className, collapsed = false, dropUp = false 
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent align="end" className="w-56" side={dropUp ? 'top' : 'bottom'} variant="menu">
+      <PopoverContent align="end" className="w-56" side={dropUp ? 'top' : 'bottom'}>
         <LanguageCommand
           allLocales={allLocales}
           autoFocus

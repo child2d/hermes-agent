@@ -89,7 +89,6 @@ export function ToolRow({ expanded, on, onExpand, onToggle, preview = false, rea
               checked={on}
               disabled={readOnly}
               onCheckedChange={onToggle}
-              size="xs"
             />
           )}
         </span>

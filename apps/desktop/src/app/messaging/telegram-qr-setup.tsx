@@ -253,7 +253,7 @@ export function TelegramQrSetup({ onApplied, platform, scopeProfile }: TelegramQ
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[length:var(--conversation-text-font-size)] font-medium">{q.quickSetup}</span>
-            <Badge variant="success">{q.recommended}</Badge>
+            <Badge variant="secondary">{q.recommended}</Badge>
           </div>
           <p className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
             {q.quickHelp}
@@ -274,7 +274,7 @@ export function TelegramQrSetup({ onApplied, platform, scopeProfile }: TelegramQ
 
       {phase === 'idle' && connectedBot && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Badge variant="success">{t.messaging.states.connected}</Badge>
+          <Badge variant="secondary">{t.messaging.states.connected}</Badge>
           <span className="font-mono text-xs text-muted-foreground">@{connectedBot}</span>
         </div>
       )}
@@ -292,7 +292,7 @@ export function TelegramQrSetup({ onApplied, platform, scopeProfile }: TelegramQ
           <div className="grid content-start gap-3">
             {phase === 'waiting' && (
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="warn">{q.waiting}</Badge>
+                <Badge variant="destructive">{q.waiting}</Badge>
                 <span className="text-xs text-muted-foreground">{q.scanHint}</span>
               </div>
             )}
@@ -300,7 +300,7 @@ export function TelegramQrSetup({ onApplied, platform, scopeProfile }: TelegramQ
             {(phase === 'ready' || phase === 'applying') && (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="success">{q.ready}</Badge>
+                  <Badge variant="secondary">{q.ready}</Badge>
                   {botUsername && <span className="font-mono text-xs text-muted-foreground">@{botUsername}</span>}
                 </div>
 
@@ -310,7 +310,7 @@ export function TelegramQrSetup({ onApplied, platform, scopeProfile }: TelegramQ
                       {q.allowedUsers}
                     </span>
                     {detectedOwnerId && allowedIds.includes(detectedOwnerId) && (
-                      <Badge variant="success">{q.ownerDetected}</Badge>
+                      <Badge variant="secondary">{q.ownerDetected}</Badge>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-1.5">

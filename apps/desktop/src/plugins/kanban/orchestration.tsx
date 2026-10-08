@@ -168,7 +168,6 @@ export function OrchestrationPanel() {
             aria-label={k.autoDecompose}
             checked={settings.auto_decompose}
             onCheckedChange={checked => save.mutate({ auto_decompose: checked })}
-            size="xs"
           />
           {k.autoDecompose}
         </label>

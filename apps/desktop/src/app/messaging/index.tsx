@@ -590,7 +590,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                 }
               >
                 {restartNeeded && (
-                  <Alert variant="warning">
+                  <Alert variant="destructive">
                     <AlertTriangle />
                     <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
                       <span>{m.restartNeeded}</span>
@@ -954,7 +954,6 @@ function PlatformActionBar({
           checked={platform.enabled}
           disabled={saving === `enabled:${platform.id}`}
           onCheckedChange={onToggle}
-          size="xs"
         />
         {platform.enabled ? m.enabled : m.disabled}
       </label>

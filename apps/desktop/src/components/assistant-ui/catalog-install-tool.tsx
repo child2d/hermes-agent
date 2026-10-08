@@ -310,7 +310,7 @@ function RowOutcome({
         <p className={cn(CAPTION, 'text-(--ui-text-tertiary) wrap-anywhere')}>
           {target.state === 'initiated' && target.detail ? target.detail : copy.installing}
         </p>
-        <Progress animated aria-label={copy.installing} className="h-0.5 bg-primary/15" indeterminate />
+        <Progress aria-label={copy.installing} className="h-0.5 bg-primary/15" />
       </div>
     )
   }

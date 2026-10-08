@@ -2,7 +2,7 @@ import { compactNumber } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
 import { useCallback, useMemo, useState } from 'react'
 
-import { CountSkeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/ui/skeleton'
 import { type ProfileScope, setToolsetEnabled } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { isDesktopToolsetVisible } from '@/lib/desktop-toolsets'
@@ -165,7 +165,7 @@ export function ToolsetsTab({ profile, query, toolsets }: ToolsetsTabProps) {
               key={toolset.name}
               meta={
                 calls === null ? (
-                  <CountSkeleton />
+                  <Skeleton className="inline-block h-2 w-3.5 translate-y-px rounded-sm bg-current/25" />
                 ) : calls > 0 ? (
                   `×${compactNumber(calls)}`
                 ) : (

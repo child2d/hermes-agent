@@ -141,7 +141,6 @@ export function ComboboxInput({
           }
         }}
         onOpenAutoFocus={e => e.preventDefault()}
-        variant="menu"
       >
         <Command onValueChange={setActive} ref={commandRef} shouldFilter={false} value={active} variant="menu">
           <CommandList id={listId}>

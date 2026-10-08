@@ -1105,7 +1105,7 @@ function ModelFamilyRow({
           </span>
           {tag ? <ModelChip>{tag}</ModelChip> : null}
           {decoration.badge ? (
-            <Badge className="shrink-0 uppercase tracking-wide" data-model-menu-row-badge="" size="xs" variant="muted">
+            <Badge className="shrink-0 uppercase tracking-wide" data-model-menu-row-badge="" variant="secondary">
               {decoration.badge}
             </Badge>
           ) : null}
@@ -1174,7 +1174,7 @@ const favoriteProviderLabel = 'pt-1.5 pb-0 pr-2 pl-7.75 text-[0.625rem] text-(--
  *  different kinds of fact at a glance. */
 function ModelChip({ children, setting = false }: { children: ReactNode; setting?: boolean }): ReactElement {
   return (
-    <Badge className="shrink-0 uppercase tracking-wide" size="xs" variant={setting ? 'outline' : 'muted'}>
+    <Badge className="shrink-0 uppercase tracking-wide" variant={setting ? 'outline' : 'secondary'}>
       {children}
     </Badge>
   )

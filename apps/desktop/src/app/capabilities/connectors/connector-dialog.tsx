@@ -17,16 +17,16 @@ import { type InstallField, LocalInstall } from './local-server-control'
 import type { ConnectorCardModel, ConnectorState, ConnectorVerb, ConnectorWayHosted, ConnectorWayLocal } from './types'
 import { type WayChoice, WaysSection } from './ways-section'
 
-type BadgeVariant = 'default' | 'destructive' | 'muted' | 'success' | 'warn'
+type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline'
 
 const STATE_BADGE = {
-  available: 'muted',
+  available: 'secondary',
   broken: 'destructive',
-  connected: 'success',
-  connecting: 'warn',
-  expired: 'warn',
-  off: 'muted',
-  unknown: 'muted'
+  connected: 'secondary',
+  connecting: 'destructive',
+  expired: 'destructive',
+  off: 'secondary',
+  unknown: 'secondary'
 } satisfies Record<ConnectorState, BadgeVariant>
 
 const RULEABLE = {
@@ -126,7 +126,7 @@ function Header({ card, titleRef, ...rest }: PartProps & { titleRef: RefObject<H
 
           {showsCatalogMark(card) ? <CatalogMark /> : null}
 
-          <Badge className="shrink-0" size="xs" variant={STATE_BADGE[card.state]}>
+          <Badge className="shrink-0" variant={STATE_BADGE[card.state]}>
             {copy.state[card.stateWord]}
           </Badge>
         </div>
@@ -181,7 +181,6 @@ function HeaderActions({
           aria-label={localWay.serverEnabled === true ? copy.turnServerOff(card.name) : copy.turnServerOn(card.name)}
           checked={localWay.serverEnabled ?? false}
           onCheckedChange={onServerToggle}
-          size="xs"
         />
       ) : null}
 
@@ -191,7 +190,6 @@ function HeaderActions({
           checked={hosted.state !== 'off'}
           disabled={card.offBy === 'org' || togglePending || rulesReadOnly}
           onCheckedChange={onToggleForMe}
-          size="xs"
         />
       ) : null}
 

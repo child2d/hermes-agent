@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { CountSkeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/ui/skeleton'
 import { previewSkillHub, type ProfileScope, profileScopeKey } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { Loader2 } from '@/lib/icons'
@@ -69,7 +69,7 @@ export function OfficialSkillDetail({
         </div>
       )}
       {previewQuery.isLoading ? (
-        <CountSkeleton />
+        <Skeleton className="inline-block h-2 w-3.5 translate-y-px rounded-sm bg-current/25" />
       ) : parsed ? (
         <pre
           className="overflow-auto whitespace-pre-wrap wrap-break-word rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-3 font-mono text-[0.68rem] leading-relaxed"

@@ -27,12 +27,8 @@ export function PetProgress({ done, total }: { done?: number; total?: number }) 
 
   return (
     <Progress
-      animated
       aria-label="Hatching progress"
       className="bg-[color-mix(in_srgb,var(--ui-accent)_15%,transparent)]"
-      fillClassName="bg-(--ui-accent)"
-      indeterminate={!determinate}
-      size="sm"
       value={determinate ? done / total : 0}
     />
   )

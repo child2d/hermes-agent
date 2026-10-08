@@ -503,7 +503,7 @@ function FreeTierReadyPanel({
           <span className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-muted-foreground">
             {t.onboarding.defaultModel}
           </span>
-          <Badge size="xs" variant="success">
+          <Badge variant="secondary">
             {t.onboarding.freeTier}
           </Badge>
         </div>
@@ -560,8 +560,6 @@ function Preparing({ boot }: { boot: DesktopBootState }) {
       </p>
       <Progress
         aria-label={installing ? t.onboarding.preparingInstall : t.onboarding.starting}
-        destructive={hasError}
-        size="lg"
         value={progress / 100}
       />
       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">

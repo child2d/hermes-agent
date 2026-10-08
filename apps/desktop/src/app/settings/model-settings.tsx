@@ -1050,7 +1050,6 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                     onCheckedChange={checked =>
                       void writeAgentDefault('agent.service_tier', checked ? 'fast' : 'normal')
                     }
-                    size="xs"
                   />
                 </label>
               )}
@@ -1255,7 +1254,6 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                 checked={currentMoaPreset.enabled !== false}
                 disabled={applying}
                 onCheckedChange={checked => updateMoaPreset(prev => ({ ...prev, enabled: checked }))}
-                size="xs"
               />
             </label>
             <Button

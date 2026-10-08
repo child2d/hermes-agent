@@ -252,7 +252,6 @@ export function WorktreeDialog() {
             <PopoverContent
               align="start"
               className="z-(--z-modal-popover) min-w-(--radix-popover-trigger-width)"
-              variant="menu"
             >
               <Command
                 filter={(value, search) => (value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0)}

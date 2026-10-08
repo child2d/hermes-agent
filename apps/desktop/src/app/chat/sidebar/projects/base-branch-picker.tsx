@@ -143,7 +143,6 @@ export function BaseBranchPicker({
         <PopoverContent
           align="start"
           className="z-(--z-modal-popover) min-w-(--radix-popover-trigger-width)"
-          variant="menu"
         >
           <Command
             filter={(searchValue, search) => (searchValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0)}

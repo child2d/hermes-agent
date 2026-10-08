@@ -106,7 +106,7 @@ export function SearchableSelect({
           settings grid, so a width pinned to it clipped every IANA row after
           "Africa/A…". The popover keeps its own width and only grows to cover a
           trigger wider than that. */}
-      <PopoverContent align="start" className="min-w-(--radix-popover-trigger-width)" variant="menu">
+      <PopoverContent align="start" className="min-w-(--radix-popover-trigger-width)">
         <Command filter={rankSearchOption} variant="menu">
           <CommandInput autoFocus placeholder={placeholder} />
           <CommandList>

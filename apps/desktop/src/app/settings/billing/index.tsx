@@ -341,10 +341,6 @@ function UsageBar({ bar, fallbackLabel }: { bar?: BillingUsageRowView['bar']; fa
   return (
     <Progress
       aria-label={resolvedBar.label}
-      destructive={resolvedBar.state === 'danger'}
-      fillClassName={resolvedBar.state === 'danger' ? undefined : isOk ? 'bg-(--ui-green)' : 'bg-muted-foreground/45'}
-      fillStyle={{ minWidth: resolvedBar.value > 0 ? 4 : undefined }}
-      size="lg"
       value={resolvedBar.value}
     />
   )

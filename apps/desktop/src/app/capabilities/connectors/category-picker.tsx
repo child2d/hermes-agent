@@ -53,7 +53,7 @@ export function CategoryPicker({ categories, onChange, value }: CategoryPickerPr
           <Codicon className="shrink-0 opacity-60" name="chevron-down" size="0.875rem" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="min-w-(--radix-popover-trigger-width)" variant="menu">
+      <PopoverContent align="start" className="min-w-(--radix-popover-trigger-width)">
         <Command variant="menu">
           <CommandInput autoFocus placeholder={copy.filterCategory} />
           <CommandList>

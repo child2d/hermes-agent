@@ -212,7 +212,7 @@ function WorkspaceValue({ kind, path }: { kind: null | string | undefined; path:
     <div className="flex items-start gap-1.5">
       <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
         {kind && kind !== 'dir' && (
-          <Badge size="xs" variant="muted">
+          <Badge variant="secondary">
             {kind}
           </Badge>
         )}
@@ -773,7 +773,7 @@ function FeedTabs({
               return (
                 <li className="flex flex-col gap-0.5 text-[0.6875rem]" key={run.id}>
                   <div className="flex items-center gap-2">
-                    <Badge size="xs" variant={failed ? 'destructive' : 'muted'}>
+                    <Badge variant={failed ? 'destructive' : 'secondary'}>
                       {run.outcome ?? run.status}
                     </Badge>
                     {run.profile && <span className="text-(--ui-text-tertiary)">{run.profile}</span>}

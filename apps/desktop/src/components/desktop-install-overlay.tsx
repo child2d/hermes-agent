@@ -629,7 +629,6 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
               <Progress
                 aria-label={copy.progress(completedCount, totalCount)}
                 className="bg-(--ui-bg-tertiary)"
-                destructive={failed}
                 value={progressPct / 100}
               />
             </div>

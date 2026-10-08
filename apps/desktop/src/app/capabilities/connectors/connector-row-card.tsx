@@ -111,7 +111,7 @@ export function ConnectorRowCard({
           {showsCatalogMark(card) ? <CatalogMark /> : null}
 
           {twin ? (
-            <Badge className="shrink-0" size="xs" variant="muted">
+            <Badge className="shrink-0" variant="secondary">
               {twin === 'hostedTwin' ? copy.hostedTwin : copy.alsoLocal}
             </Badge>
           ) : null}
@@ -166,7 +166,6 @@ function CardLane({
           aria-label={server.serverEnabled ? copy.turnServerOff(card.name) : copy.turnServerOn(card.name)}
           checked={server.serverEnabled ?? false}
           onCheckedChange={onServerToggle}
-          size="xs"
         />
       ) : null}
 

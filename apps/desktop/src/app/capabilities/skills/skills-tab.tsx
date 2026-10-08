@@ -60,7 +60,7 @@ function skillSubtitle(skill: SkillInfo): ReactNode {
         </Badge>
       )}
       {provenance === 'hub' && (
-        <Badge className="shrink-0 normal-case" variant="muted">
+        <Badge className="shrink-0 normal-case" variant="secondary">
           hub
         </Badge>
       )}

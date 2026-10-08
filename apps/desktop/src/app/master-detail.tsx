@@ -380,7 +380,6 @@ export function ListStripMenu({
             <Switch
               checked={toggle.checked}
               className={cn('pointer-events-none shrink-0', !toggle.checked && 'opacity-60')}
-              size="xs"
               tabIndex={-1}
             />
           </DropdownMenuItem>
@@ -501,7 +500,6 @@ export function CapRow({
           className={cn('mr-1.5 shrink-0 cursor-pointer', !enabled && 'opacity-60')}
           disabled={busy}
           onCheckedChange={onToggle}
-          size="xs"
           title={toggleLabel ?? title}
         />
       )}

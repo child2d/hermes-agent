@@ -1,49 +1,28 @@
-import { cva, type VariantProps } from 'class-variance-authority'
-import { Switch as SwitchPrimitive } from 'radix-ui'
-import * as React from 'react'
+import * as SwitchPrimitives from "@radix-ui/react-switch"
+import * as React from "react"
 
-import { cn } from '@/lib/utils'
+import { cn } from "@/lib/utils"
 
-const switchVariants = cva(
-  'peer inline-flex shrink-0 items-center rounded-full border border-[color-mix(in_srgb,var(--dt-foreground)_18%,transparent)] bg-[color-mix(in_srgb,var(--dt-background)_58%,var(--dt-input))] shadow-[inset_0_0_0_0.0625rem_color-mix(in_srgb,var(--dt-foreground)_8%,transparent)] transition-colors outline-none focus-visible:border-ring focus-visible:ring-[0.1875rem] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-transparent data-[state=checked]:bg-primary disabled:data-[state=checked]:bg-(--ui-text-tertiary)',
-  {
-    variants: {
-      size: {
-        default: 'h-5 w-9',
-        xs: 'h-4 w-7'
-      }
-    },
-    defaultVariants: {
-      size: 'default'
-    }
-  }
-)
+const Switch = React.forwardRef<
+  React.ElementRef<typeof SwitchPrimitives.Root>,
+  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
+>(({ className, ...props }, ref) => (
+  <SwitchPrimitives.Root
+    className={cn(
+      "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
+      className
+    )}
+    {...props}
+    ref={ref}
+  >
+    <SwitchPrimitives.Thumb
+      className={cn(
+        "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0"
+      )}
+    />
+  </SwitchPrimitives.Root>
+))
 
-const switchThumbVariants = cva(
-  'pointer-events-none block rounded-full bg-foreground shadow-[0_0.0625rem_0.1875rem_color-mix(in_srgb,var(--dt-background)_50%,transparent)] ring-0 transition-transform data-[state=unchecked]:translate-x-0 data-[state=checked]:bg-background',
-  {
-    variants: {
-      size: {
-        default: 'size-4 data-[state=checked]:translate-x-4',
-        xs: 'size-3 data-[state=checked]:translate-x-3.5'
-      }
-    },
-    defaultVariants: {
-      size: 'default'
-    }
-  }
-)
-
-function Switch({
-  className,
-  size,
-  ...props
-}: React.ComponentProps<typeof SwitchPrimitive.Root> & VariantProps<typeof switchVariants>) {
-  return (
-    <SwitchPrimitive.Root className={cn(switchVariants({ size }), className)} data-slot="switch" {...props}>
-      <SwitchPrimitive.Thumb className={switchThumbVariants({ size })} data-slot="switch-thumb" />
-    </SwitchPrimitive.Root>
-  )
-}
+Switch.displayName = SwitchPrimitives.Root.displayName
 
 export { Switch }

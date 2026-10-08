@@ -10,7 +10,7 @@ export function UndeliveredNotice() {
   const { t } = useI18n()
 
   return (
-    <Alert className="gap-x-2 px-3 py-2 text-xs" role="status" variant="warning">
+    <Alert className="gap-x-2 px-3 py-2 text-xs" role="status" variant="destructive">
       <AlertTriangle />
       <AlertDescription>{t.assistant.clarify.notDelivered}</AlertDescription>
     </Alert>

@@ -1254,10 +1254,9 @@ export function CreateGroupChatDialog({ open, roster, onClose, onCreated }: Crea
           <div className="flex flex-wrap gap-1">
             {selected.map(bot => (
               <Badge
-                asChild
                 className="rounded-full bg-(--chrome-action-hover) pl-2 pr-1.5 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:text-foreground"
                 key={botRosterKey(bot)}
-                variant="muted"
+                variant="secondary"
               >
                 <Tip label={b.group.removeFromSelection}>
                   <RowButton

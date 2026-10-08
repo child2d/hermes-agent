@@ -1,18 +1,15 @@
-import { cn } from '@/lib/utils'
+import { cn } from "@/lib/utils"
 
-function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('animate-pulse rounded-md bg-accent', className)} data-slot="skeleton" {...props} />
-}
-
-/** Inline pulsing chip standing in for a small count/badge while it loads. */
-function CountSkeleton({ className, ...props }: React.ComponentProps<'span'>) {
+function Skeleton({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <span
-      className={cn('inline-block h-2 w-3.5 translate-y-px animate-pulse rounded-sm bg-current/25', className)}
-      data-slot="count-skeleton"
+    <div
+      className={cn("animate-pulse rounded-md bg-primary/10", className)}
       {...props}
     />
   )
 }
 
-export { CountSkeleton, Skeleton }
+export { Skeleton }

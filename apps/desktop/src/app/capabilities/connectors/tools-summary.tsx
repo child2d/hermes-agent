@@ -108,7 +108,6 @@ export function ToolsSummary({
                     checked={row.switchState !== 'off'}
                     disabled={readOnly || row.locked}
                     onCheckedChange={next => onToggleFacet(row.facet, next)}
-                    size="xs"
                   />
                 </>
               )}

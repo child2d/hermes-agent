@@ -511,8 +511,6 @@ function ApplyingView({
 
       <Progress
         aria-label={label}
-        indeterminate={percent === null}
-        size="lg"
         value={percent === null ? 0 : percent / 100}
       />
 

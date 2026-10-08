@@ -72,7 +72,6 @@ export function TipBubble({ action, anchor, keybind, onClose, side, text, title 
         onOpenAutoFocus={event => event.preventDefault()}
         role="status"
         side={side}
-        variant="accent"
       >
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">

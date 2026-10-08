@@ -790,7 +790,7 @@ function NewTaskDialog({
           )}
 
           <label className="flex cursor-pointer items-center gap-2 text-[0.75rem] text-(--ui-text-secondary)">
-            <Switch aria-label={k.goalMode} checked={goalMode} onCheckedChange={setGoalMode} size="xs" />
+            <Switch aria-label={k.goalMode} checked={goalMode} onCheckedChange={setGoalMode} />
             {k.goalMode}
           </label>
 

@@ -103,7 +103,7 @@ function withCountBadge(icon: ReactNode, count: number | undefined): ReactNode {
     <span className="relative inline-flex">
       {icon}
       <span className="pointer-events-none absolute -top-2.5 -right-1.5 z-1">
-        <Badge aria-hidden size="overlay" variant="solid">
+        <Badge aria-hidden variant="default">
           {compactNumber(count)}
         </Badge>
       </span>

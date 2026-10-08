@@ -20,7 +20,7 @@ import {
   type NotificationKind
 } from '@/store/notifications'
 
-type ToneVariant = 'default' | 'destructive' | 'warning' | 'success'
+type ToneVariant = 'default' | 'destructive'
 
 /** A user dismissal (✕, swipe, clear all) is friction, counted by the toast's code-defined id only.
  *  Timers, action buttons and programmatic clears are not dismissals and go straight to the store. */
@@ -35,9 +35,9 @@ function userDismiss(id: string) {
 
 const tone: Record<NotificationKind, { icon: IconComponent; iconClass: string; variant: ToneVariant }> = {
   error: { icon: AlertCircle, iconClass: 'text-destructive', variant: 'destructive' },
-  warning: { icon: AlertTriangle, iconClass: 'text-primary', variant: 'warning' },
+  warning: { icon: AlertTriangle, iconClass: 'text-primary', variant: 'default' },
   info: { icon: Info, iconClass: 'text-muted-foreground', variant: 'default' },
-  success: { icon: CheckCircle2, iconClass: 'text-primary', variant: 'success' }
+  success: { icon: CheckCircle2, iconClass: 'text-primary', variant: 'default' }
 }
 
 const STACK_SURFACE = 'pointer-events-auto border border-(--stroke-nous) bg-popover/95 shadow-nous backdrop-blur-md'

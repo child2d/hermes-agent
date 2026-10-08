@@ -313,7 +313,7 @@ export function WebhooksView({ onClose }: WebhooksViewProps) {
   const banners = (
     <>
       {!enabled && (
-        <Alert className="mb-4" variant="warning">
+        <Alert className="mb-4" variant="destructive">
           <Globe />
           <AlertTitle>{w.disabledTitle}</AlertTitle>
           <AlertDescription>
@@ -327,7 +327,7 @@ export function WebhooksView({ onClose }: WebhooksViewProps) {
       )}
 
       {restartNeeded && (
-        <Alert className="mb-4" variant="warning">
+        <Alert className="mb-4" variant="destructive">
           <AlertTriangle />
           <AlertDescription>
             <p>{restartError ?? w.restartNeeded}</p>

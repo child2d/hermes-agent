@@ -27,10 +27,10 @@ export function SettingsContent({ children, bare = false }: { children: ReactNod
 }
 
 const PILL_VARIANT = {
-  muted: 'muted',
+  muted: 'secondary',
   primary: 'default',
-  success: 'success',
-  warn: 'warn',
+  success: 'secondary',
+  warn: 'destructive',
   destructive: 'destructive'
 } as const
 

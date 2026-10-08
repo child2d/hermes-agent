@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 type CommandVariant = 'default' | 'menu'
 
 // `default` is the palette look (command palette, model/session pickers).
-// `menu` is a picker list inside `<PopoverContent variant="menu">`: the parts
+// `menu` is a picker list inside `<PopoverContent>`: the parts
 // read the DropdownMenu/Select rows, so a combobox looks like every other menu.
 const CommandVariantContext = React.createContext<CommandVariant>('default')
 

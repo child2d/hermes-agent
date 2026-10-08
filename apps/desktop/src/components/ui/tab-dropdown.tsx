@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { CountSkeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/ui/skeleton'
 import { TextTab, TextTabMeta } from '@/components/ui/text-tab'
 import type { IconComponent } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 export type TabMeta = number | string | null | undefined
 
 export function tabMetaContent(meta: number | string | null) {
-  return meta === null ? <CountSkeleton /> : typeof meta === 'number' ? compactNumber(meta) : meta
+  return meta === null ? <Skeleton className="inline-block h-2 w-3.5 translate-y-px rounded-sm bg-current/25" /> : typeof meta === 'number' ? compactNumber(meta) : meta
 }
 
 export interface TabDropdownItem {
