@@ -135,13 +135,13 @@ export const ReactionPicker: FC<{
                   triggerHaptic('selection')
                   onSelect(emoji)
                 }}
-                size="icon-sm"
+                size="icon"
                 variant="ghost"
               >
                 {emoji}
               </Button>
             ))}
-            <Button aria-label="More emoji" onClick={() => setExpanded(true)} size="icon-sm" variant="ghost">
+            <Button aria-label="More emoji" onClick={() => setExpanded(true)} size="icon" variant="ghost">
               <Plus />
             </Button>
           </>

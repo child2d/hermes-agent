@@ -96,7 +96,7 @@ export function DraftGrid({
                       event.stopPropagation()
                       onRemix(draft)
                     }}
-                    size="icon-xs"
+                    size="icon"
                     type="button"
                     variant="ghost"
                   >
@@ -111,7 +111,7 @@ export function DraftGrid({
 
       {/* Same abort/go-back text link in both states (sits right under the grid);
           once drafts land, the full-width Hatch drops in below it. */}
-      <Button className="self-center" onClick={onCancel} size="xs" variant="text">
+      <Button className="self-center" onClick={onCancel} size="sm" variant="link">
         {t.common.cancel}
       </Button>
       {hasDrafts && (

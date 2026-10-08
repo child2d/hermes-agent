@@ -199,11 +199,11 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
       <div className="flex shrink-0 items-center justify-between px-3 py-1.5">
         <span className="text-[0.7rem] font-medium text-(--ui-text-tertiary)">{h.pickerTitle}</span>
         <div className="flex items-center gap-1">
-          <Button disabled={updating} onClick={updateAll} size="xs" variant="text">
+          <Button disabled={updating} onClick={updateAll} size="sm" variant="link">
             {updating && <Loader2 className="size-3 animate-spin" />}
             {updating ? h.updating : h.updateAll}
           </Button>
-          <Button onClick={() => setPaneHeightOverride(HUB_PANE_ID, open ? 0 : undefined)} size="xs" variant="text">
+          <Button onClick={() => setPaneHeightOverride(HUB_PANE_ID, open ? 0 : undefined)} size="sm" variant="link">
             {open ? h.pickerHide : h.pickerBrowse}
           </Button>
         </div>

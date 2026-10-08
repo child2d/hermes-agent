@@ -235,7 +235,7 @@ function UnavailableLine({ onRetry }: { onRetry: () => void }) {
   return (
     <Line
       action={
-        <Button onClick={onRetry} size="inline" variant="textStrong">
+        <Button onClick={onRetry} size="inline" variant="link">
           {t.connectorsPage.tools.retry}
         </Button>
       }
@@ -250,7 +250,7 @@ function SignInLine({ onSignIn }: { onSignIn: () => void }) {
   return (
     <Line
       action={
-        <Button onClick={onSignIn} size="inline" variant="textStrong">
+        <Button onClick={onSignIn} size="inline" variant="link">
           {t.connectorsPage.page.signIn}
         </Button>
       }
@@ -309,11 +309,11 @@ function RulesLine({
     <Line
       action={
         signedOut && onSignIn ? (
-          <Button onClick={onSignIn} size="inline" variant="textStrong">
+          <Button onClick={onSignIn} size="inline" variant="link">
             {copy.page.signIn}
           </Button>
         ) : onRetryRules ? (
-          <Button onClick={onRetryRules} size="inline" variant="textStrong">
+          <Button onClick={onRetryRules} size="inline" variant="link">
             {copy.page.retry}
           </Button>
         ) : null
@@ -329,7 +329,7 @@ function DeprecatedToggle({ count, onToggle, shown }: { count: number; onToggle:
 
   return (
     <div className="flex shrink-0 border-t border-(--ui-stroke-tertiary) px-3.5 py-1">
-      <Button aria-pressed={shown} onClick={onToggle} size="xs" variant="text">
+      <Button aria-pressed={shown} onClick={onToggle} size="sm" variant="link">
         {shown ? copy.hideDeprecated(count) : copy.showDeprecated(count)}
       </Button>
     </div>
@@ -522,10 +522,10 @@ function DirtyFooter({
       <span className="min-w-0 flex-1 truncate text-xs text-(--ui-text-primary)">
         {copy.footerDirty(counts.off, counts.backOn)}
       </span>
-      <Button disabled={saving} onClick={onDiscard} size="xs" variant="text">
+      <Button disabled={saving} onClick={onDiscard} size="sm" variant="link">
         {copy.discard}
       </Button>
-      <Button disabled={saving} loading={saving} onClick={onSave} size="xs">
+      <Button disabled={saving} loading={saving} onClick={onSave} size="sm">
         {saving ? copy.saving : copy.save}
       </Button>
     </div>

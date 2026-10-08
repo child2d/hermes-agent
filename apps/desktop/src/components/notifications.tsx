@@ -138,7 +138,7 @@ function TopCenterStack({
       <NotificationDeck expanded={expanded} notifications={notifications} />
       {older.length > 0 && (
         <div className="pointer-events-auto flex min-h-8 items-center justify-between px-3 text-xs">
-          <Button className="-ml-2" onClick={onToggleExpanded} size="xs" type="button" variant="text">
+          <Button className="-ml-2" onClick={onToggleExpanded} size="sm" type="button" variant="link">
             {expanded ? copy.hide : copy.show} {copy.more(older.length)}
           </Button>
           <Button
@@ -147,9 +147,9 @@ function TopCenterStack({
               notifications.forEach(notification => noteUserDismissed(notification.id))
               clearNotifications()
             }}
-            size="xs"
+            size="sm"
             type="button"
-            variant="text"
+            variant="link"
           >
             {copy.clearAll}
           </Button>
@@ -189,13 +189,13 @@ function BottomRightStack({
     >
       {older.length > 0 && (
         <div className="pointer-events-auto flex items-center justify-between px-2 text-xs">
-          <Button onClick={() => setExpanded(value => !value)} size="xs" variant="text">
+          <Button onClick={() => setExpanded(value => !value)} size="sm" variant="link">
             {expanded ? copy.hide : copy.show} {copy.more(older.length)}
           </Button>
           <Button
             onClick={() => notifications.forEach(notification => userDismiss(notification.id))}
-            size="xs"
-            variant="text"
+            size="sm"
+            variant="link"
           >
             {copy.clearAll}
           </Button>
@@ -341,7 +341,7 @@ function NotificationItem({ notification, stack }: { notification: AppNotificati
         onClick={() => {
           void stack.depart(() => userDismiss(notification.id))
         }}
-        size="icon-xs"
+        size="icon"
         type="button"
         variant="ghost"
       >

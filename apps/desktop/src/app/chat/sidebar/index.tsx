@@ -1889,7 +1889,7 @@ export function ChatSidebar({
                             // refresh repaints every dot just dismissed.
                             ackAllSessionsRead()
                           }}
-                          size="icon-xs"
+                          size="icon"
                           variant="ghost"
                         >
                           <Codicon name="check-all" size="0.75rem" />
@@ -1917,7 +1917,7 @@ export function ChatSidebar({
                                 event.stopPropagation()
                                 exitProjectScope()
                               }}
-                              size="icon-xs"
+                              size="icon"
                               variant="ghost"
                             >
                               <Codicon name="list-unordered" size="0.75rem" />

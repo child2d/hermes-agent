@@ -312,7 +312,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                             setMenuOpen(true)
                           }
                         }}
-                        size="icon-xs"
+                        size="icon"
                         type="button"
                         variant="ghost"
                       >
@@ -350,7 +350,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                       onClick={() => setDetailsOpen(true)}
                       size="inline"
                       type="button"
-                      variant="text"
+                      variant="link"
                     >
                       {ctrl.viewDetails}
                     </Button>
@@ -378,7 +378,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                           onClick={openAddCriterion}
                           size="micro"
                           type="button"
-                          variant="text"
+                          variant="link"
                         >
                           {ctrl.addCriterion}
                         </Button>
@@ -389,7 +389,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                             onClick={confirmClearCriteria}
                             size="micro"
                             type="button"
-                            variant="text"
+                            variant="link"
                           >
                             {ctrl.clearCriteria}
                           </Button>
@@ -419,7 +419,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                                     aria-label={ctrl.copyCriterion(index)}
                                     className="size-6 rounded text-muted-foreground/60 hover:text-foreground/90"
                                     onClick={() => void copyCriterionText(subgoal)}
-                                    size="icon-xs"
+                                    size="icon"
                                     type="button"
                                     variant="ghost"
                                   >
@@ -431,7 +431,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                                   className="size-6 rounded text-muted-foreground/60 hover:text-destructive"
                                   disabled={isBusy}
                                   onClick={() => confirmRemoveCriterion(index)}
-                                  size="icon-xs"
+                                  size="icon"
                                   type="button"
                                   variant="ghost"
                                 >

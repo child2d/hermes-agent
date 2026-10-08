@@ -5,25 +5,15 @@ import * as React from 'react'
 import { Loader2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
-// Text+icon actions underline the label on hover, not the glyph.
-const TEXT_ACTION_ICON = '[&_.codicon]:no-underline [&_svg]:no-underline'
-
-// Plankton's Button IS the stock shadcn button (style: new-york) — the base
-// string, the six variants and the size ladder below mirror
-// `src/components/ui-kit/button.tsx`, which is the vendored registry copy. Keep
-// the two in step: that is what lets us re-sync from the shadcn registry. The
-// only deliberate divergence in the base string is `cursor-pointer`, which
-// DESIGN.md requires at the primitive level.
+// Stock shadcn button (style: new-york). Kept in step with
+// `src/components/ui-kit/button.tsx`, the vendored registry copy — staying equal
+// to it is what lets us re-sync from the registry.
 //
-// The entries under the `--- Plankton ---` markers are NOT shadcn. They exist
-// because ~278 call sites already use these names. They are aliases kept for
-// compatibility, not part of the design system: no new code should reach for
-// them, and they can be deleted once call sites move onto the shadcn names.
-//
-// Density is deliberately shadcn's (h-9 default, text-sm) rather than the old
-// padding-driven compact sizing, so app chrome reads as stock shadcn.
+// DO NOT add app-specific variant or size names here. This component layer is
+// deliberately stock shadcn; call sites still using the fork's old vocabulary
+// get migrated onto these names rather than accommodated by aliases.
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:size-4",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -32,47 +22,15 @@ const buttonVariants = cva(
         outline: 'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
-        link: 'text-primary underline-offset-4 hover:underline',
-        // --- Plankton aliases ---
-        // Emphasized inline-text action: bold + always-underlined ("Change", "Open logs").
-        textStrong: `font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground ${TEXT_ACTION_ICON}`,
-        // Boxless inline-text action (no bg/border) — "Cancel", "Clear".
-        text: `text-muted-foreground underline-offset-4 hover:text-foreground hover:underline ${TEXT_ACTION_ICON}`,
-        // A control floating free of any surface (fan-menu discs, detached chips).
-        floating: 'bg-popover text-muted-foreground shadow-md hover:text-foreground',
-        // Quiet, fill-free drawer handle.
-        grip: 'bg-transparent text-muted-foreground transition-colors hover:text-foreground'
+        link: 'text-primary underline-offset-4 hover:underline'
       },
       size: {
         default: 'h-9 px-4 py-2',
         sm: 'h-8 rounded-md px-3 text-xs',
         lg: 'h-10 rounded-md px-8',
-        icon: 'h-9 w-9',
-        // --- Plankton aliases ---
-        // One step below `sm` — the old compact default.
-        xs: "h-7 gap-1.5 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5",
-        // Flush inline text action — no box padding/height.
-        inline: 'h-auto gap-1 p-0 has-[>svg]:px-0',
-        // Status-stack headers, table footers — 12px text actions beside a label.
-        micro: "h-auto gap-0.5 px-1 py-0 text-xs leading-4 font-normal [&_svg:not([class*='size-'])]:size-3",
-        'icon-xs': 'size-7',
-        'icon-sm': 'size-8',
-        'icon-lg': 'size-10',
-        grip: 'h-4 w-12 rounded-full p-0',
-        // Measured from the titlebar tokens, not the size ladder: the window
-        // controls and the tab strip are reserved from these same numbers.
-        'icon-titlebar':
-          'titlebar-icon-button h-(--titlebar-control-height) w-(--titlebar-control-size) [&_svg:not([class*="size-"])]:size-(--titlebar-icon-size)'
+        icon: 'h-9 w-9'
       }
     },
-    compoundVariants: [
-      // textStrong is a boxless link — size variants still inject px-*; strip
-      // inline padding so the underline sits flush with the label.
-      {
-        variant: 'textStrong',
-        class: 'px-0 has-[>svg]:px-0'
-      }
-    ],
     defaultVariants: {
       variant: 'default',
       size: 'default'

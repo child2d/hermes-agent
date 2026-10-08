@@ -577,7 +577,7 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
             className="opacity-0 transition-opacity group-hover:opacity-100"
             disabled={busy}
             onClick={() => act('remove')}
-            size="icon-xs"
+            size="icon"
             variant="ghost"
           >
             <Codicon name="trash" />
@@ -1277,7 +1277,7 @@ export function RoutinesPane() {
           <div className="text-[0.65rem] uppercase tracking-wider text-(--ui-text-quaternary)">{c.title}</div>
         </div>
         <Tip label={c.newCron}>
-          <Button aria-label={c.newCron} onClick={openCreate} size="icon-xs" variant="ghost">
+          <Button aria-label={c.newCron} onClick={openCreate} size="icon" variant="ghost">
             <Codicon name="add" />
           </Button>
         </Tip>

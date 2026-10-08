@@ -181,7 +181,7 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
           )}
           {status.version && <p className="text-[0.68rem] text-muted-foreground/80">{status.version}</p>}
         </div>
-        <Button onClick={() => void refresh()} size="sm" variant="text">
+        <Button onClick={() => void refresh()} size="sm" variant="link">
           <RefreshCw className="size-3.5" />
           Recheck
         </Button>

@@ -243,8 +243,8 @@ export function MaintenancePanel() {
                     void window.hermesDesktop.writeClipboard(url)
                     notify({ durationMs: 1500, kind: 'success', message: mm.linkCopied })
                   }}
-                  size="xs"
-                  variant="text"
+                  size="sm"
+                  variant="link"
                 >
                   {mm.copyLink}
                 </Button>
@@ -298,15 +298,15 @@ export function MaintenancePanel() {
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {curator.enabled && (
-                <Button disabled={curatorBusy} onClick={() => void toggleCurator()} size="xs" variant="text">
+                <Button disabled={curatorBusy} onClick={() => void toggleCurator()} size="sm" variant="link">
                   {curator.paused ? mm.resume : mm.pause}
                 </Button>
               )}
               <Button
                 disabled={actionStatus?.running === true}
                 onClick={() => void launch(mm.curator, runCurator)}
-                size="xs"
-                variant="textStrong"
+                size="sm"
+                variant="link"
               >
                 {mm.runNow}
               </Button>
@@ -376,7 +376,7 @@ function OpRow({
           {description}
         </div>
       </div>
-      <Button disabled={disabled} onClick={onRun} size="xs" variant="textStrong">
+      <Button disabled={disabled} onClick={onRun} size="sm" variant="link">
         {label}
       </Button>
     </div>
@@ -410,8 +410,8 @@ function MemoryFileRow({
         className="text-destructive hover:text-destructive"
         disabled={busy || size <= 0}
         onClick={onReset}
-        size="xs"
-        variant="text"
+        size="sm"
+        variant="link"
       >
         {resetLabel}
       </Button>

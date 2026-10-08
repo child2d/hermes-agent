@@ -205,7 +205,7 @@ export function ModelVisibilityDialog({
                                 event.preventDefault()
                                 removeCustomModel(provider.slug, family.id)
                               }}
-                              size="icon-xs"
+                              size="icon"
                               type="button"
                               variant="ghost"
                             >
@@ -256,15 +256,15 @@ export function ModelVisibilityDialog({
               onOpenChange(false)
               onOpenProviders()
             }}
-            size="xs"
+            size="sm"
             type="button"
-            variant="text"
+            variant="link"
           >
             {copy.addProvider}
           </Button>
           {/* Only once there is something to undo, like the sidebar view reset. */}
           {stored !== null && modelOptions.isSuccess && (
-            <Button className="-mr-2" onClick={() => void resetToDefaults()} size="xs" type="button" variant="text">
+            <Button className="-mr-2" onClick={() => void resetToDefaults()} size="sm" type="button" variant="link">
               {copy.resetToDefaults}
             </Button>
           )}

@@ -231,7 +231,7 @@ function EnvVarField({ envVar, isSet, onSaved, onCleared, profile }: EnvVarField
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save />}
               {t.common.save}
             </Button>
-            <Button onClick={() => setEditing(false)} size="sm" variant="text">
+            <Button onClick={() => setEditing(false)} size="sm" variant="link">
               {t.common.cancel}
             </Button>
           </div>
@@ -368,7 +368,7 @@ function PostSetupRunner({ toolset, postSetupKey, installed = false, onComplete,
               <Check className="size-3" />
               {copy.postSetupInstalled}
             </Pill>
-            <Button disabled={running} onClick={() => void run()} size="sm" variant="text">
+            <Button disabled={running} onClick={() => void run()} size="sm" variant="link">
               {running ? <Loader2 className="size-3.5 animate-spin" /> : <Terminal className="size-3.5" />}
               {running ? copy.postSetupRunning : copy.postSetupRerun}
             </Button>
@@ -864,8 +864,8 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
                       <Button
                         disabled={selecting !== null || isSearchBackend}
                         onClick={() => void handleSelectCapability(provider, 'search')}
-                        size="xs"
-                        variant="text"
+                        size="sm"
+                        variant="link"
                       >
                         {copy.webUseForSearch}
                       </Button>
@@ -874,8 +874,8 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
                       <Button
                         disabled={selecting !== null || isExtractBackend}
                         onClick={() => void handleSelectCapability(provider, 'extract')}
-                        size="xs"
-                        variant="text"
+                        size="sm"
+                        variant="link"
                       >
                         {copy.webUseForExtract}
                       </Button>

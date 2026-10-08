@@ -290,7 +290,7 @@ export function PluginSettingsForm({
       </div>
       {error && <FieldHint error>{error}</FieldHint>}
       <div className="flex items-center justify-end gap-2">
-        <Button disabled={disabled || !dirty} size="xs" type="submit" variant="outline">
+        <Button disabled={disabled || !dirty} size="sm" type="submit" variant="outline">
           {s.save}
         </Button>
       </div>

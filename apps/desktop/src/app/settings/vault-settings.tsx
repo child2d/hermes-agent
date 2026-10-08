@@ -424,7 +424,7 @@ export function VaultSettings({ subpage }: VaultSettingsProps = {}) {
                     aria-label={v.deleteAction}
                     className="text-(--ui-text-tertiary) hover:text-destructive"
                     onClick={() => setPendingDelete(item)}
-                    size="icon-sm"
+                    size="icon"
                     type="button"
                     variant="ghost"
                   >

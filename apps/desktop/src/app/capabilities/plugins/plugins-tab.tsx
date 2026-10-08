@@ -479,7 +479,7 @@ function PackageRow({
                   className="h-5 px-1.5 text-[0.65rem]"
                   disabled={busy}
                   onClick={() => onAgentUpdate(agent)}
-                  size="xs"
+                  size="sm"
                   variant="outline"
                 >
                   {p.updateToPin(agent.catalog_version ?? agent.catalog_sha?.slice(0, 8) ?? '')}
@@ -508,7 +508,7 @@ function PackageRow({
                   className="h-5 px-1.5 text-[0.65rem]"
                   disabled={!desktop.packageOrigin?.repo}
                   onClick={() => installAgentHalfHere(desktop, scope)}
-                  size="xs"
+                  size="sm"
                   variant="outline"
                 >
                   {p.installAgentHere}
@@ -860,7 +860,7 @@ export const PluginsTab = memo(function PluginsTab({
           <span className="text-[0.62rem] font-medium tracking-wide uppercase text-(--ui-text-quaternary)">
             {p.catalogTitle}
           </span>
-          <Button onClick={() => setPaneHeightOverride(CATALOG_PANE_ID, open ? 0 : undefined)} size="xs" variant="text">
+          <Button onClick={() => setPaneHeightOverride(CATALOG_PANE_ID, open ? 0 : undefined)} size="sm" variant="link">
             {open ? p.catalogHide : p.catalogBrowse}
           </Button>
         </div>

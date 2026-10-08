@@ -719,7 +719,7 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
               })
             }}
             size="inline"
-            variant="text"
+            variant="link"
           >
             <DisclosureCaret open={advanced} />
             {b.bot.advanced}

@@ -169,7 +169,7 @@ export const SessionControlHeartbeatSection = memo(function SessionControlHeartb
                             setMenuOpen(true)
                           }
                         }}
-                        size="icon-xs"
+                        size="icon"
                         type="button"
                         variant="ghost"
                       >

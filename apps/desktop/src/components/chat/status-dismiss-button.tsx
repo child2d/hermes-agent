@@ -18,7 +18,7 @@ export function StatusDismissButton({ label, onDismiss }: StatusDismissButtonPro
         onDismiss()
       }}
       onKeyDown={event => event.stopPropagation()}
-      size="icon-xs"
+      size="icon"
       type="button"
       variant="ghost"
     >

@@ -73,10 +73,10 @@ export function SubagentControls({ sessionId, subagentId, text, setText }: Subag
           placeholder={t.agents.steerPlaceholder}
           value={text}
         />
-        <Button disabled={pending || !text.trim()} size="xs" type="submit" variant="secondary">
+        <Button disabled={pending || !text.trim()} size="sm" type="submit" variant="secondary">
           {t.agents.steer}
         </Button>
-        <Button disabled={pending} onClick={() => void send('interrupt')} size="xs" type="button" variant="text">
+        <Button disabled={pending} onClick={() => void send('interrupt')} size="sm" type="button" variant="link">
           {t.statusStack.stop}
         </Button>
       </div>

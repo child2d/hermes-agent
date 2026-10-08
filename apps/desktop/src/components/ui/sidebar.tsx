@@ -241,7 +241,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
         onClick?.(event)
         toggleSidebar()
       }}
-      size="icon-sm"
+      size="icon"
       variant="ghost"
       {...props}
     >

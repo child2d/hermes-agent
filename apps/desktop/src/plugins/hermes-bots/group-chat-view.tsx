@@ -1012,7 +1012,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
             <Button
               className="shrink-0 text-(--ui-accent)"
               onClick={() => void stopRoomRun()}
-              size="xs"
+              size="sm"
               variant="ghost"
             >
               <Codicon name="debug-stop" />
@@ -1155,7 +1155,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
               <Button
                 aria-label={b.group.removeAttachment}
                 onClick={() => removeImage(thread, index)}
-                size="icon-xs"
+                size="icon"
                 variant="ghost"
               >
                 <Codicon name="close" />
@@ -1291,7 +1291,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
                   className="text-left text-[0.7rem] font-semibold text-(--ui-accent)"
                   onClick={() => setRevealedSpeaker(revealed ? null : entryKey)}
                   size="inline"
-                  variant="text"
+                  variant="link"
                 >
                   {label}
                 </Button>

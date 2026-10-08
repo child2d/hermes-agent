@@ -58,8 +58,8 @@ export function ShareControls({ imported = false, onImport, onResetMap, shareCod
         <Button
           className="text-muted-foreground hover:text-foreground"
           onClick={() => onResetMap?.()}
-          size="xs"
-          variant="text"
+          size="sm"
+          variant="link"
         >
           {t.starmap.resetToMine}
         </Button>

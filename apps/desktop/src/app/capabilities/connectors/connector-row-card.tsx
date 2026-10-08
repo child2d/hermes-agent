@@ -175,7 +175,7 @@ function CardLane({
           disabled={busy}
           loading={busy}
           onClick={onVerb}
-          size="xs"
+          size="sm"
           variant={card.state === 'available' ? 'outline' : 'secondary'}
         >
           {copy.verb[card.verb]}

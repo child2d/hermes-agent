@@ -115,7 +115,7 @@ export function ModelSelect({
             aria-label={m.chooseFromList}
             className="pointer-events-auto -my-1.5 -mr-1.5 text-muted-foreground"
             onClick={() => setTyping(false)}
-            size="icon-xs"
+            size="icon"
             type="button"
             variant="ghost"
           >

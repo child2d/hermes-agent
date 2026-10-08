@@ -171,7 +171,7 @@ function HeaderActions({
   return (
     <div className="flex shrink-0 items-center gap-2">
       {action ? (
-        <Button disabled={action.busy} onClick={action.run} size="xs">
+        <Button disabled={action.busy} onClick={action.run} size="sm">
           {copy.verb[action.verb]}
         </Button>
       ) : null}
@@ -198,7 +198,7 @@ function HeaderActions({
       {menu}
 
       <DialogClose asChild>
-        <Button aria-label={t.common.close} size="icon-xs" variant="ghost">
+        <Button aria-label={t.common.close} size="icon" variant="ghost">
           <X className="size-3" />
         </Button>
       </DialogClose>
@@ -299,7 +299,7 @@ function HostedLead({
         <div className="flex items-center gap-3">
           <p className="min-w-0 flex-1 text-[0.72rem] text-(--ui-text-secondary)">{reason}</p>
           {waiting ? (
-            <Button onClick={waiting} size="inline" variant="textStrong">
+            <Button onClick={waiting} size="inline" variant="link">
               {t.connectorsPage.card.verb.stopWaiting}
             </Button>
           ) : null}
@@ -408,7 +408,7 @@ function OrgNote({ count, onOpenAdmin }: { count: number; onOpenAdmin?: () => vo
     <div className="grid gap-1 rounded-md bg-(--ui-orange)/8 p-2.5">
       <p className="text-[0.7rem] text-(--ui-text-secondary)">{copy.orgNote(count)}</p>
       {onOpenAdmin ? (
-        <Button className="justify-self-start" onClick={onOpenAdmin} size="inline" variant="textStrong">
+        <Button className="justify-self-start" onClick={onOpenAdmin} size="inline" variant="link">
           {copy.orgLink}
         </Button>
       ) : null}

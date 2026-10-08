@@ -127,7 +127,7 @@ function PaymentMethodAside({ row }: { row: BillingAccountRowView }) {
           onClick={row.action.url ? () => openExternal(row.action?.url) : undefined}
           size="sm"
           type="button"
-          variant="textStrong"
+          variant="link"
         >
           {row.action.label}
         </Button>
@@ -221,7 +221,7 @@ function BuyCreditsRow({ billing, row }: { billing: BillingStateResponse; row: B
             type="number"
             value={amount}
           />
-          <Button disabled={!canBuy} onClick={startBuy} size="xs" type="button" variant="secondary">
+          <Button disabled={!canBuy} onClick={startBuy} size="sm" type="button" variant="secondary">
             {b.buyCredits.buyButton}
           </Button>
         </>

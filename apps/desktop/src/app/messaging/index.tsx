@@ -834,7 +834,7 @@ function PlatformDetail({
         </p>
         {platform.docs_url && (
           <div className="mt-3">
-            <Button asChild size="sm" variant="textStrong">
+            <Button asChild size="sm" variant="link">
               <a
                 href={platform.docs_url}
                 onClick={event => {

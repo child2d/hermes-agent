@@ -898,7 +898,7 @@ function ProfileDropdown({
           aria-label={p.title}
           className="min-w-0 flex-1 justify-between overflow-hidden px-1 text-(--ui-text-secondary) data-[state=open]:bg-(--ui-control-active-background) data-[state=open]:text-foreground"
           data-slot="profile-dropdown"
-          size="xs"
+          size="sm"
           type="button"
           variant="ghost"
         >
@@ -1098,7 +1098,7 @@ function ProfilePill({
         data-connection-id={connectionId}
         data-slot={slot}
         onClick={onSelect}
-        size="icon-xs"
+        size="icon"
         type="button"
         variant="ghost"
       >

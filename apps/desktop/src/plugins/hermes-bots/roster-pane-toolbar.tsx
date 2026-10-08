@@ -80,7 +80,7 @@ export function renderRosterToolbar({
             <Button
               className="rounded-md text-(--ui-text-tertiary) hover:text-foreground"
               onClick={() => setActivityToasts(!activityToasts)}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name={activityToasts ? 'bell' : 'bell-slash'} />
@@ -92,7 +92,7 @@ export function renderRosterToolbar({
                 <Button
                   aria-label={b.roster.newBotOrGroup}
                   className="rounded-md text-(--ui-text-tertiary) hover:text-foreground"
-                  size="icon-xs"
+                  size="icon"
                   variant="ghost"
                 >
                   <Codicon name="add" />
@@ -147,7 +147,7 @@ export function renderRosterToolbar({
                       'size-7 shrink-0 rounded-md text-(--ui-text-tertiary) hover:text-foreground',
                       activeFilterCount && 'text-(--ui-accent)'
                     )}
-                    size="icon-xs"
+                    size="icon"
                     variant="ghost"
                   >
                     <Codicon name="list-filter" />

@@ -429,7 +429,7 @@ function ReviewFileRow({ node, depth }: { node: ReviewTreeNode; depth: number })
                 event.stopPropagation()
                 void (file.staged ? unstageReviewFile(file.path) : stageReviewFile(file.path))
               }}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name={file.staged ? 'remove' : 'add'} size="0.7rem" />
@@ -443,7 +443,7 @@ function ReviewFileRow({ node, depth }: { node: ReviewTreeNode; depth: number })
                 event.stopPropagation()
                 requestRevert(file.path)
               }}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="discard" size="0.7rem" />

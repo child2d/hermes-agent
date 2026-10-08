@@ -63,10 +63,10 @@ export function SkillDetail({
       />
       {editable && (
         <div className="flex items-center gap-2">
-          <Button onClick={onEdit} size="xs" variant="text">
+          <Button onClick={onEdit} size="sm" variant="link">
             {t.skills.edit}
           </Button>
-          <Button className="text-destructive hover:text-destructive" onClick={onArchive} size="xs" variant="text">
+          <Button className="text-destructive hover:text-destructive" onClick={onArchive} size="sm" variant="link">
             {t.skills.archive}
           </Button>
         </div>

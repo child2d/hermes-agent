@@ -262,7 +262,7 @@ export function RowFootnoteAction({ children, onClick }: { children: ReactNode; 
           onClick()
         }}
         size="inline"
-        variant="text"
+        variant="link"
       >
         {children}
       </Button>

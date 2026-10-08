@@ -56,7 +56,7 @@ export function ToolsFilterBar({
         <span className="shrink-0 text-xs font-medium text-(--ui-text-primary)">{copy.title}</span>
         <span className="shrink-0 tabular-nums text-[0.7rem] text-(--ui-text-tertiary)">{total}</span>
 
-        <Button className="shrink-0" onClick={onShowSummary} size="xs" variant="text">
+        <Button className="shrink-0" onClick={onShowSummary} size="sm" variant="link">
           {copy.showSummary}
         </Button>
 
@@ -106,7 +106,7 @@ export function ToolsFilterBar({
                   aria-pressed={currentAction?.id === action.id}
                   key={action.id}
                   onClick={() => onApplyQuickAction(action.id)}
-                  size="xs"
+                  size="sm"
                   variant={currentAction?.id === action.id ? 'secondary' : 'outline'}
                 >
                   {quickActionLabel(copy, action.id)}
@@ -132,7 +132,7 @@ function FilterChip({
   selected: boolean
 }) {
   return (
-    <Button aria-pressed={selected} onClick={onClick} size="xs" variant={selected ? 'secondary' : 'ghost'}>
+    <Button aria-pressed={selected} onClick={onClick} size="sm" variant={selected ? 'secondary' : 'ghost'}>
       {label}
       {count === undefined ? null : (
         <span className={cn('tabular-nums', selected ? 'opacity-70' : 'text-(--ui-text-quaternary)')}>{count}</span>

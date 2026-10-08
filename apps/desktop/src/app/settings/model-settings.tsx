@@ -211,11 +211,11 @@ function StaleAuxWarning({ applying, onDismiss, onReset, slots, taskLabel }: Sta
         <span className="font-mono">{allSameProvider ? provider : m.staleAuxOtherProviders}</span>
         {m.staleAuxAfter}
       </span>
-      <Button disabled={applying} onClick={onReset} size="sm" variant="textStrong">
+      <Button disabled={applying} onClick={onReset} size="sm" variant="link">
         {m.resetAllToMain}
       </Button>
       {onDismiss && (
-        <Button disabled={applying} onClick={onDismiss} size="sm" variant="textStrong">
+        <Button disabled={applying} onClick={onDismiss} size="sm" variant="link">
           {m.staleAuxDismiss}
         </Button>
       )}
@@ -934,7 +934,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-destructive">
       <span>{error}</span>
       {skewRestart && (
-        <Button disabled={restartingBackend} onClick={() => void recycleStaleBackend()} size="sm" variant="textStrong">
+        <Button disabled={restartingBackend} onClick={() => void recycleStaleBackend()} size="sm" variant="link">
           {restartingBackend && <Loader2 className="size-3.5 animate-spin" />}
           {restartingBackend ? m.restartingBackend : m.restartBackend}
         </Button>
@@ -987,7 +987,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                   </Button>
                 </>
               ) : (
-                <Button onClick={startProviderSetup} size="sm" variant="textStrong">
+                <Button onClick={startProviderSetup} size="sm" variant="link">
                   {m.setUpProvider(selectedProviderRow?.name ?? m.setupProviderFallback)}
                 </Button>
               )
@@ -1078,7 +1078,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
               disabled={!mainModel || applying}
               onClick={() => void resetAuxiliaryModels()}
               size="sm"
-              variant="textStrong"
+              variant="link"
             >
               {m.resetAllToMain}
             </Button>
@@ -1117,7 +1117,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                             disabled={!mainModel || applying}
                             onClick={() => void setAuxiliaryToMain(meta.key)}
                             size="sm"
-                            variant="text"
+                            variant="link"
                           >
                             {m.setToMain}
                           </Button>
@@ -1125,7 +1125,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                             disabled={!providers.length || applying}
                             onClick={() => beginAuxiliaryEdit(meta.key)}
                             size="sm"
-                            variant="textStrong"
+                            variant="link"
                           >
                             {m.change}
                           </Button>
@@ -1269,7 +1269,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                 void saveMoa(next)
               }}
               size="sm"
-              variant="text"
+              variant="link"
             >
               {m.moaSetDefault}
             </Button>
@@ -1323,7 +1323,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                 void saveMoa(next)
               }}
               size="sm"
-              variant="textStrong"
+              variant="link"
             >
               {m.moaAddPreset}
             </Button>
@@ -1434,7 +1434,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
                 }))
               }
               size="sm"
-              variant="textStrong"
+              variant="link"
             >
               {m.moaAddReference}
             </Button>

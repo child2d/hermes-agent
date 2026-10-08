@@ -170,7 +170,7 @@ export function GatewayMenuPanel({
               className="text-muted-foreground hover:text-foreground"
               disabled={reconnecting}
               onClick={reconnect}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <RefreshCw className={cn(reconnecting && 'animate-spin')} />
@@ -181,7 +181,7 @@ export function GatewayMenuPanel({
               aria-label={copy.openSystem}
               className="text-muted-foreground hover:text-foreground"
               onClick={openSystem}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <LayoutDashboard />
@@ -196,7 +196,7 @@ export function GatewayMenuPanel({
               aria-label={t.commandCenter.restartGateway}
               className="text-muted-foreground hover:text-destructive"
               onClick={restart}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Power />
@@ -218,9 +218,9 @@ export function GatewayMenuPanel({
             <Button
               className="-mr-2 h-auto py-0 font-medium leading-none text-muted-foreground"
               onClick={openSystem}
-              size="xs"
+              size="sm"
               type="button"
-              variant="text"
+              variant="link"
             >
               {copy.viewAllLogs}
             </Button>

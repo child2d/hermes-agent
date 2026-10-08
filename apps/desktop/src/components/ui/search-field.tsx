@@ -98,7 +98,7 @@ export function SearchField({
             aria-label={t.ui.search.clear}
             className="shrink-0 text-muted-foreground/85 hover:bg-accent/60 hover:text-foreground"
             onClick={clear}
-            size="icon-xs"
+            size="icon"
             variant="ghost"
           >
             <Codicon name="close" size="0.875rem" />

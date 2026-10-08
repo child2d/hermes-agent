@@ -274,7 +274,7 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
                   onClick={openAgents}
                   size="micro"
                   type="button"
-                  variant="text"
+                  variant="link"
                 >
                   {t.statusStack.agents}
                 </Button>

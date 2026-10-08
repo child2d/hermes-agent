@@ -118,7 +118,7 @@ export function ToolsSummary({
       </ul>
 
       <div className="flex items-center gap-3">
-        <Button onClick={onShowAll} size="inline" variant="textStrong">
+        <Button onClick={onShowAll} size="inline" variant="link">
           {copy.showAllTools(total)}
         </Button>
       </div>

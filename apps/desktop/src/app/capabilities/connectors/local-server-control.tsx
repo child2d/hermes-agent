@@ -46,7 +46,7 @@ export function LocalInstall({
         disabled={installing || missing}
         loading={installing}
         onClick={() => onInstall(draft)}
-        size="xs"
+        size="sm"
         variant="outline"
       >
         {t.connectorsPage.card.verb.install}

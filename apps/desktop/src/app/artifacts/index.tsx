@@ -540,7 +540,7 @@ function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat }: 
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <Button onClick={() => onOpenChat(artifact.sessionId)} size="xs" type="button" variant="textStrong">
+          <Button onClick={() => onOpenChat(artifact.sessionId)} size="sm" type="button" variant="link">
             <FolderOpen className="size-3" />
             {a.chat}
           </Button>

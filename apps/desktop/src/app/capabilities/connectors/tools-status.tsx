@@ -105,7 +105,7 @@ export function ToolsStatus({
         view.actions.length > 0 ? (
           <div className="flex items-center gap-2">
             {view.actions.map(action => (
-              <Button key={action.id} onClick={() => onAction(action.id)} size="xs" variant={action.variant}>
+              <Button key={action.id} onClick={() => onAction(action.id)} size="sm" variant={action.variant}>
                 {action.label(t.connectorsPage)}
               </Button>
             ))}

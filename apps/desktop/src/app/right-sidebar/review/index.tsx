@@ -109,7 +109,7 @@ export function ReviewPane() {
               className={ACTION_BTN}
               disabled={!hasFiles}
               onClick={toggleReviewTreeMode}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name={treeMode === 'tree' ? 'list-flat' : 'list-tree'} size="0.8125rem" />
@@ -121,7 +121,7 @@ export function ReviewPane() {
               className={ACTION_BTN}
               disabled={!hasFiles || !isUncommitted}
               onClick={() => void stageReviewFile(null).catch(err => notifyError(err, c.stageAll))}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="add" size="0.8125rem" />
@@ -133,7 +133,7 @@ export function ReviewPane() {
               className={ACTION_BTN}
               disabled={!hasFiles || !isUncommitted}
               onClick={() => requestRevert(null)}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="discard" size="0.8125rem" />
@@ -144,13 +144,13 @@ export function ReviewPane() {
               aria-label={t.rightSidebar.refreshTree}
               className={ACTION_BTN}
               onClick={() => void refreshReview()}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="refresh" size="0.8125rem" spinning={loading} />
             </Button>
           </Tip>
-          <Button aria-label={c.close} className={ACTION_BTN} onClick={closeReview} size="icon-xs" variant="ghost">
+          <Button aria-label={c.close} className={ACTION_BTN} onClick={closeReview} size="icon" variant="ghost">
             <Codicon name="close" size="0.8125rem" />
           </Button>
         </RightSidebarSectionHeader>
@@ -192,7 +192,7 @@ export function ReviewPane() {
                       selectedFile.staged ? unstageReviewFile(selectedFile.path) : stageReviewFile(selectedFile.path)
                     ).catch(err => notifyError(err, c.stage))
                   }
-                  size="icon-xs"
+                  size="icon"
                   variant="ghost"
                 >
                   <Codicon name={selectedFile.staged ? 'remove' : 'add'} size="0.8rem" />
@@ -203,7 +203,7 @@ export function ReviewPane() {
               aria-label={c.close}
               className={ACTION_BTN}
               onClick={clearReviewSelection}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="close" size="0.8rem" />

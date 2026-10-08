@@ -68,7 +68,7 @@ export function RosterGroupRowView({
               aria-label={`${rowProps.group}: ${delta === -1 ? b.sections.moveUp : b.sections.moveDown}`}
               disabled={!reorderGroupRows(sortedGroupRows, rowProps.group, delta)}
               onClick={() => moveRoom(rowProps.group, delta)}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name={delta === -1 ? 'chevron-up' : 'chevron-down'} />

@@ -369,7 +369,7 @@ export function ConnectorOffer({ owner, request }: ConnectorOfferProps) {
       </ConnectorCard>
       {unresolved ? (
         <div className="px-3.5">
-          <Button onClick={() => void continueConnectionRequest(request)} size="xs" variant="textStrong">
+          <Button onClick={() => void continueConnectionRequest(request)} size="sm" variant="link">
             {t.common.continue}
           </Button>
         </div>

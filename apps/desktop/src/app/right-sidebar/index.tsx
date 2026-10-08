@@ -196,7 +196,7 @@ function FilesystemTab({
             // repo does, and that has to be legible without hovering.
             className={showIgnored ? HEADER_ACTION_CLASS : HEADER_ACTION_LABEL_REVEAL}
             onClick={onToggleShowIgnored}
-            size="icon-xs"
+            size="icon"
             variant="ghost"
           >
             <Codicon name={showIgnored ? 'eye' : 'eye-closed'} size="0.8125rem" />
@@ -208,7 +208,7 @@ function FilesystemTab({
             className={HEADER_ACTION_LABEL_REVEAL}
             disabled={loading}
             onClick={onRefresh}
-            size="icon-xs"
+            size="icon"
             variant="ghost"
           >
             <Codicon name="refresh" size="0.8125rem" spinning={loading} />
@@ -220,7 +220,7 @@ function FilesystemTab({
             className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
             disabled={!canCollapse}
             onClick={onCollapseAll}
-            size="icon-xs"
+            size="icon"
             variant="ghost"
           >
             <Codicon name="collapse-all" size="0.8125rem" />

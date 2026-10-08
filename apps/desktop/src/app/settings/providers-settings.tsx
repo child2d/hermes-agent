@@ -202,7 +202,7 @@ function OAuthPicker({
           onClick={onWantApiKey}
           size="inline"
           type="button"
-          variant="textStrong"
+          variant="link"
         >
           {p.haveApiKey}
         </Button>
@@ -245,7 +245,7 @@ function OAuthPicker({
           onClick={() => setShowAll(v => !v)}
           size="inline"
           type="button"
-          variant="text"
+          variant="link"
         >
           {showAll ? p.collapse : connected.length > 0 ? p.connectAnother : p.otherProviders}
           <ChevronDown className={cn('size-3.5 transition', showAll && 'rotate-180')} />
@@ -305,7 +305,7 @@ function ConnectedProviderRow({
           <Button
             aria-label={`${copy.disconnect} ${title} in terminal`}
             onClick={() => onTerminalDisconnect(provider)}
-            size="icon-xs"
+            size="icon"
             type="button"
             variant="ghost"
           >
@@ -319,7 +319,7 @@ function ConnectedProviderRow({
             aria-label={`${t.common.remove} ${title}`}
             disabled={disconnecting}
             onClick={() => onDisconnect(provider)}
-            size="icon-xs"
+            size="icon"
             type="button"
             variant="ghost"
           >
@@ -331,7 +331,7 @@ function ConnectedProviderRow({
             <Button
               aria-label={`${copy.disconnect} ${title}`}
               onClick={() => onTerminalDisconnect(provider)}
-              size="icon-xs"
+              size="icon"
               type="button"
               variant="ghost"
             >

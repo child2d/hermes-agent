@@ -339,7 +339,7 @@ function IdleView({
         <Button className="font-semibold" onClick={onInstall} size="lg">
           {u.updateNow}
         </Button>
-        <Button className="font-medium" onClick={onLater} type="button" variant="text">
+        <Button className="font-medium" onClick={onLater} type="button" variant="link">
           {u.maybeLater}
         </Button>
       </div>
@@ -548,7 +548,7 @@ function ErrorView({ message, onDismiss, onRetry }: { message: string; onDismiss
       <Button className="font-semibold" onClick={onRetry} size="lg">
         {u.tryAgain}
       </Button>
-      <Button onClick={onDismiss} variant="text">
+      <Button onClick={onDismiss} variant="link">
         {u.notNow}
       </Button>
     </ErrorState>

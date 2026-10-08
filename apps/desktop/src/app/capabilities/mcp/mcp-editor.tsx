@@ -46,7 +46,7 @@ export function McpJsonEditor({ controller, highlightServer }: McpJsonEditorProp
       onSave={() => void controller.saveDoc()}
       remountKey={controller.docVersion}
       trailing={
-        <Button disabled={controller.saving || !controller.dirty} onClick={() => void controller.saveDoc()} size="xs">
+        <Button disabled={controller.saving || !controller.dirty} onClick={() => void controller.saveDoc()} size="sm">
           {controller.saving ? t.common.saving : t.common.save}
         </Button>
       }

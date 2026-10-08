@@ -98,7 +98,7 @@ export function CatalogInstallCard({ request }: { request: ConnectionRequest }) 
       ))}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 px-3.5">
         {unresolved && !request.settled ? (
-          <Button onClick={() => void continueConnectionRequest(request)} size="xs" variant="textStrong">
+          <Button onClick={() => void continueConnectionRequest(request)} size="sm" variant="link">
             {t.common.continue}
           </Button>
         ) : null}
@@ -282,7 +282,7 @@ function RowOutcome({
             disabled={sending}
             loading={sending}
             onClick={onInstall}
-            size="xs"
+            size="sm"
             variant="ghost"
           >
             {retryLabel}
@@ -321,16 +321,16 @@ function RowOutcome({
         <Button
           className="h-full rounded-none px-2 text-xs font-medium text-primary hover:bg-primary/15 hover:text-primary"
           onClick={onInstall}
-          size="xs"
+          size="sm"
           variant="ghost"
         >
           {copy.install}
         </Button>
       </span>
-      <Button className="h-6 px-1.5 text-(--ui-text-tertiary)" onClick={onAdvanced} size="xs" variant="ghost">
+      <Button className="h-6 px-1.5 text-(--ui-text-tertiary)" onClick={onAdvanced} size="sm" variant="ghost">
         {copy.advanced}
       </Button>
-      <Button className="h-6 px-1.5 text-(--ui-text-tertiary)" onClick={onSkip} size="xs" variant="ghost">
+      <Button className="h-6 px-1.5 text-(--ui-text-tertiary)" onClick={onSkip} size="sm" variant="ghost">
         {copy.skip}
       </Button>
     </div>

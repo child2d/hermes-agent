@@ -182,13 +182,13 @@ function RootErrorFallback({ error, reset }: ErrorBoundaryFallbackProps) {
         <Button className="font-semibold" onClick={reset} size="lg">
           {t.common.retry}
         </Button>
-        <Button onClick={() => window.location.reload()} variant="text">
+        <Button onClick={() => window.location.reload()} variant="link">
           {t.errors.reloadWindow}
         </Button>
-        <Button onClick={() => void window.hermesDesktop?.revealLogs()?.catch(() => undefined)} variant="text">
+        <Button onClick={() => void window.hermesDesktop?.revealLogs()?.catch(() => undefined)} variant="link">
           {t.errors.openLogs}
         </Button>
-        <Button onClick={() => requestSendDiagnostics(error.stack || error.message)} variant="text">
+        <Button onClick={() => requestSendDiagnostics(error.stack || error.message)} variant="link">
           {t.errors.sendDiagnostics}
         </Button>
       </ErrorState>

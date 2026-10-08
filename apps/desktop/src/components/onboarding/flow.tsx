@@ -76,7 +76,7 @@ export function FlowPanel({
           </details>
         ) : null}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button onClick={cancelOnboardingFlow} variant="text">
+          <Button onClick={cancelOnboardingFlow} variant="link">
             {t.onboarding.pickDifferentProvider}
           </Button>
           <Button onClick={() => startManualOnboarding(null, ctx.scope ?? ctx.profile)} variant="outline">
@@ -306,7 +306,7 @@ function ConfirmingModelPanel({
           disabled={flow.saving}
           onClick={() => setPickerOpen(true)}
           size="inline"
-          variant="text"
+          variant="link"
         >
           {t.onboarding.change}
         </Button>
@@ -362,7 +362,7 @@ function ConfirmingModelPanel({
 
 export function DocsLink({ children, href }: { children: React.ReactNode; href: string }) {
   return (
-    <Button asChild size="xs" variant="text">
+    <Button asChild size="sm" variant="link">
       <a href={href} rel="noreferrer" target="_blank">
         <ExternalLink className="size-3" />
         {children}

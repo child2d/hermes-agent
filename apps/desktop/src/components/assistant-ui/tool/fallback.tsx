@@ -561,7 +561,7 @@ function ToolEntry({ part }: ToolEntryProps) {
         event.stopPropagation()
         dismissToolRow(disclosureId)
       }}
-      size="icon-xs"
+      size="icon"
       type="button"
       variant="ghost"
     >

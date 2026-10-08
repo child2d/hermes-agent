@@ -78,7 +78,7 @@ export function ConnectorRow({ action, connector, cue, mark, markLabel }: Connec
                 disabled={action.disabled}
                 loading={action.busy}
                 onClick={action.onClick}
-                size="xs"
+                size="sm"
                 variant="ghost"
               >
                 {action.label}

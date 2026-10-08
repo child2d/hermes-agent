@@ -112,14 +112,14 @@ function ProfileDescriptionRow({ profile }: { profile: KanbanProfile }) {
       <Button
         disabled={save.isPending || draft.trim() === profile.description}
         onClick={() => save.mutate()}
-        size="xs"
+        size="sm"
         variant="outline"
       >
         {k.save}
       </Button>
       {/* Overlay the spinner so the button keeps its "Auto" width — the aux
           model can take a few seconds and a text swap would jump the row. */}
-      <Button className="relative" disabled={auto.isPending} onClick={() => auto.mutate()} size="xs" variant="ghost">
+      <Button className="relative" disabled={auto.isPending} onClick={() => auto.mutate()} size="sm" variant="ghost">
         <span className={auto.isPending ? 'invisible' : ''}>{k.auto}</span>
         {auto.isPending && (
           <span className="absolute inset-0 grid place-items-center">

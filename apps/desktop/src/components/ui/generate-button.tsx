@@ -46,7 +46,7 @@ export function GenerateButton({
         className={cn('text-muted-foreground/80 hover:text-foreground', className)}
         disabled={generating ? !onCancel : disabled}
         onClick={cancellable ? onCancel : onGenerate}
-        size="icon-xs"
+        size="icon"
         type="button"
         variant="ghost"
         {...rest}

@@ -446,7 +446,7 @@ export function DesktopOnboardingOverlay({
             aria-label={t.common.close}
             className="absolute right-3 top-3 z-10 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground"
             onClick={() => closeManualOnboarding()}
-            size="icon-sm"
+            size="icon"
             variant="ghost"
           >
             <Codicon name="close" size="1rem" />
@@ -520,14 +520,14 @@ function FreeTierReadyPanel({
         <Button onClick={() => void onDismiss()} type="button">
           {copy.begin}
         </Button>
-        <Button onClick={() => void onDismiss(() => openFreeTierSignIn())} size="xs" type="button" variant="text">
+        <Button onClick={() => void onDismiss(() => openFreeTierSignIn())} size="sm" type="button" variant="link">
           {copy.signInInstead}
         </Button>
         <Button
           onClick={() => void onDismiss(() => startManualOnboarding(null))}
-          size="xs"
+          size="sm"
           type="button"
-          variant="text"
+          variant="link"
         >
           {copy.otherProviders}
         </Button>
@@ -700,9 +700,9 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
         <Button
           className="mt-1 self-center font-medium"
           onClick={() => setShowAll(persistShowAll(!showAll))}
-          size="xs"
+          size="sm"
           type="button"
-          variant="text"
+          variant="link"
         >
           {showAll ? t.onboarding.collapse : t.onboarding.otherProviders}
           <ChevronDown className={cn('size-3.5 transition', showAll && 'rotate-180')} />
@@ -713,7 +713,7 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
             In manual mode the overlay already has a close affordance, so the
             "choose later" escape would be redundant — hide it. */}
         {manual ? <span /> : <ChooseLaterLink />}
-        <Button className="-mr-2 font-medium" onClick={() => openKeyForm()} size="xs" type="button" variant="text">
+        <Button className="-mr-2 font-medium" onClick={() => openKeyForm()} size="sm" type="button" variant="link">
           {t.onboarding.haveApiKey}
         </Button>
       </div>
@@ -728,7 +728,7 @@ function ChooseLaterLink() {
   const { t } = useI18n()
 
   return (
-    <Button className="font-medium" onClick={() => dismissFirstRunOnboarding()} size="xs" type="button" variant="text">
+    <Button className="font-medium" onClick={() => dismissFirstRunOnboarding()} size="sm" type="button" variant="link">
       {t.onboarding.chooseLater}
     </Button>
   )
@@ -865,7 +865,7 @@ export function ApiKeyForm({
   return (
     <div className="grid gap-4">
       {canGoBack ? (
-        <Button className="-mt-1 self-start font-medium" onClick={onBack} size="xs" type="button" variant="text">
+        <Button className="-mt-1 self-start font-medium" onClick={onBack} size="sm" type="button" variant="link">
           <ChevronLeft className="size-3" />
           {t.onboarding.backToSignIn}
         </Button>

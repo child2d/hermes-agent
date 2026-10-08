@@ -94,7 +94,7 @@ export function SidebarSectionAddButton({
                 }
               : undefined
         }
-        size="icon-xs"
+        size="icon"
         variant="ghost"
       >
         <Codicon name="add" size="0.75rem" />

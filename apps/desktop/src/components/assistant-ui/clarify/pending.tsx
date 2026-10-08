@@ -307,10 +307,10 @@ export function ClarifyToolPending({
 
       {undelivered ? null : (
         <div className="flex items-center justify-end gap-1">
-          <Button disabled={disabled} onClick={() => void cancelAll()} size="xs" type="button" variant="text">
+          <Button disabled={disabled} onClick={() => void cancelAll()} size="sm" type="button" variant="link">
             {copy.skip}
           </Button>
-          <Button disabled={disabled || !canConfirm} size="xs" type="submit">
+          <Button disabled={disabled || !canConfirm} size="sm" type="submit">
             {submitting ? (
               <Loader2 className="animate-spin" />
             ) : (

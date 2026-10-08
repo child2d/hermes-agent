@@ -133,7 +133,7 @@ function BoardDialog({
         </DialogHeader>
         <div className="flex flex-col gap-3">{children}</div>
         <DialogFooter>
-          <Button onClick={onClose} variant="text">
+          <Button onClick={onClose} variant="link">
             {k.cancel}
           </Button>
           <Button disabled={disabled} onClick={onConfirm}>

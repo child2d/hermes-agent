@@ -74,7 +74,7 @@ export function PluginToolsPanel({ card, onOpenPlugins, plugin, scope }: PluginT
         <span className="min-w-0 flex-1 text-[0.7rem] text-(--ui-text-tertiary)">
           {copy.dialog.providedByPlugin(plugin)}
         </span>
-        <Button onClick={onOpenPlugins} size="inline" variant="textStrong">
+        <Button onClick={onOpenPlugins} size="inline" variant="link">
           {copy.dialog.openPlugins}
         </Button>
       </div>
@@ -94,7 +94,7 @@ export function PluginToolsPanel({ card, onOpenPlugins, plugin, scope }: PluginT
       ) : (
         <PanelEmpty
           action={
-            <Button onClick={() => void probe.refetch()} size="inline" variant="textStrong">
+            <Button onClick={() => void probe.refetch()} size="inline" variant="link">
               {copy.tools.retry}
             </Button>
           }

@@ -669,7 +669,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
             <Button
               className="-ml-2 text-muted-foreground hover:text-foreground"
               onClick={() => setLogOpen(v => !v)}
-              size="xs"
+              size="sm"
               type="button"
               variant="ghost"
             >

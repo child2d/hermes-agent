@@ -1220,7 +1220,7 @@ function GatewayConnectionSettings({ embedded, standalone }: { embedded: boolean
                       // org and re-runs discovery with no org arg — a multi-org
                       // user gets the picker (NAS 409), a single-org user simply
                       // auto-resolves back to their one org (harmless).
-                      <Button onClick={() => changeCloudOrg()} size="sm" variant="text">
+                      <Button onClick={() => changeCloudOrg()} size="sm" variant="link">
                         {g.cloudOrgChange}
                       </Button>
                     ) : null}
@@ -1228,7 +1228,7 @@ function GatewayConnectionSettings({ embedded, standalone }: { embedded: boolean
                       disabled={cloudDiscover === 'loading'}
                       onClick={() => void discoverCloud(cloudOrg ?? undefined)}
                       size="sm"
-                      variant="text"
+                      variant="link"
                     >
                       {cloudDiscover === 'loading' ? <Loader2 className="animate-spin" /> : <RefreshCw />}
                       {g.cloudRefresh}
@@ -1442,7 +1442,7 @@ function GatewayConnectionSettings({ embedded, standalone }: { embedded: boolean
               disabled={state.envOverride || saving || remote.testing || !remote.canTest}
               onClick={() => void remote.test()}
               size="sm"
-              variant="text"
+              variant="link"
             >
               {remote.testing ? <Loader2 className="animate-spin" /> : null}
               {g.testRemote}
@@ -1453,7 +1453,7 @@ function GatewayConnectionSettings({ embedded, standalone }: { embedded: boolean
               disabled={testing || !state.sshHost.trim()}
               onClick={() => void testSsh()}
               size="sm"
-              variant="text"
+              variant="link"
             >
               {testing ? <Loader2 className="animate-spin" /> : null}
               {g.sshTestConnection}
@@ -1464,7 +1464,7 @@ function GatewayConnectionSettings({ embedded, standalone }: { embedded: boolean
               disabled={state.envOverride || saving}
               onClick={() => void save(false)}
               size="sm"
-              variant="textStrong"
+              variant="link"
             >
               {g.saveForRestart}
             </Button>
@@ -1488,7 +1488,7 @@ function GatewayConnectionSettings({ embedded, standalone }: { embedded: boolean
           />
           <ListRow
             action={
-              <Button onClick={() => void window.hermesDesktop?.revealLogs()} size="sm" variant="textStrong">
+              <Button onClick={() => void window.hermesDesktop?.revealLogs()} size="sm" variant="link">
                 <FileText />
                 {g.openLogs}
               </Button>

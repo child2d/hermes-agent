@@ -316,7 +316,7 @@ export function PaneStripGlyph({ active, disabled, icon, label, onSelect }: Omit
         disabled={disabled}
         onClick={onSelect}
         onPointerDown={event => event.stopPropagation()}
-        size="icon-xs"
+        size="icon"
         type="button"
         variant="ghost"
       >

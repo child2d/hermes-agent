@@ -2,21 +2,20 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { type ControlVariantProps, controlVariants } from './control'
+import { controlVariants } from './control'
 
 // `prefix`/`suffix` are DOM string attributes on the native element; we shadow
 // them with ReactNode adornments, so they're omitted from the base props.
-type InputProps = Omit<React.ComponentProps<'input'>, 'size' | 'prefix' | 'suffix'> &
-  ControlVariantProps & {
-    /** Leading adornment rendered inside the field (e.g. a `$` for money). */
-    prefix?: React.ReactNode
-    /** Trailing adornment rendered inside the field (e.g. a unit label). */
-    suffix?: React.ReactNode
-    /** Applied to the wrapper when an adornment promotes the field to a group. */
-    containerClassName?: string
-  }
+type InputProps = Omit<React.ComponentProps<'input'>, 'size' | 'prefix' | 'suffix'> & {
+  /** Leading adornment rendered inside the field (e.g. a `$` for money). */
+  prefix?: React.ReactNode
+  /** Trailing adornment rendered inside the field (e.g. a unit label). */
+  suffix?: React.ReactNode
+  /** Applied to the wrapper when an adornment promotes the field to a group. */
+  containerClassName?: string
+}
 
-function Input({ className, containerClassName, prefix, suffix, size, type, ...props }: InputProps) {
+function Input({ className, containerClassName, prefix, suffix, type, ...props }: InputProps) {
   const grouped = prefix != null || suffix != null
 
   const field = (
@@ -27,13 +26,14 @@ function Input({ className, containerClassName, prefix, suffix, size, type, ...p
       autoComplete="off"
       autoCorrect="off"
       className={cn(
-        // When adorned, the wrapper owns the chrome (border/background/focus
-        // ring) and the input goes transparent so the whole thing reads as one
-        // box; otherwise the input carries the chrome itself.
+        // NOTE (exposed gap): shadcn has no grouped-input primitive, so the
+        // adornment case is ours. When grouped, the wrapper must own the chrome
+        // and the inner input goes transparent — but the stock ring then draws
+        // around the transparent inner input rather than the whole box. This is
+        // an unresolved design gap, not something to paper over.
         grouped
-          ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground outline-none placeholder:text-muted-foreground'
-          : controlVariants({ size }),
-        'selection:bg-primary selection:text-primary-foreground',
+          ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-base text-foreground outline-none placeholder:text-muted-foreground md:text-sm'
+          : controlVariants(),
         className
       )}
       data-slot="input"
@@ -49,16 +49,7 @@ function Input({ className, containerClassName, prefix, suffix, size, type, ...p
 
   return (
     <div
-      className={cn(
-        // Same control chrome/sizing as a bare input; the outer div never
-        // focuses, so it mirrors the inner field's focus treatment via
-        // `focus-within`. The ring utilities are globally disabled (see
-        // control.ts) — the border-color change is the visible part.
-        controlVariants({ size }),
-        'inline-flex items-center gap-1 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring',
-        props.disabled && 'cursor-not-allowed opacity-50',
-        containerClassName
-      )}
+      className={cn(controlVariants(), 'inline-flex flex-row items-center gap-1', containerClassName)}
       data-slot="input-group"
     >
       {prefix != null && (

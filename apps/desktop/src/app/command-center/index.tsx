@@ -118,7 +118,7 @@ function RowIconButton({
         aria-label={title}
         className={cn('text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground', className)}
         onClick={onClick}
-        size="icon-xs"
+        size="icon"
         type="button"
         variant="ghost"
       >
@@ -501,10 +501,10 @@ export function CommandCenterView({
                           </div>
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 whitespace-nowrap max-[47.5rem]:whitespace-normal">
-                          <Button onClick={() => void runSystemAction('restart')} size="xs" variant="text">
+                          <Button onClick={() => void runSystemAction('restart')} size="sm" variant="link">
                             {cc.restartGateway}
                           </Button>
-                          <Button onClick={() => void runSystemAction('update')} size="xs" variant="textStrong">
+                          <Button onClick={() => void runSystemAction('update')} size="sm" variant="link">
                             {cc.updateHermes}
                           </Button>
                         </div>
@@ -622,7 +622,7 @@ function UsagePanel({ error, loading, onRefresh, period, usage }: UsagePanelProp
         ) : (
           <EmptyPanel
             action={
-              <Button onClick={onRefresh} size="xs" variant="text">
+              <Button onClick={onRefresh} size="sm" variant="link">
                 {cc.retry}
               </Button>
             }

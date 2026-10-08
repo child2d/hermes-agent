@@ -16,7 +16,7 @@ export function EmptyHint({ onExample }: EmptyHintProps) {
           className="h-auto w-fit rounded-full font-normal"
           key={example}
           onClick={() => onExample(`a ${example}`)}
-          size="xs"
+          size="sm"
           variant="outline"
         >
           {example}

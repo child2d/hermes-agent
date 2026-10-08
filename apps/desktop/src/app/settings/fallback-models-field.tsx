@@ -153,7 +153,7 @@ export function FallbackModelsField({
             <Button
               aria-label={t.common.remove}
               onClick={() => commit(rows.filter((_, i) => i !== index))}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <X className="size-3.5" />
@@ -162,7 +162,7 @@ export function FallbackModelsField({
         )
       })}
       <div>
-        <Button onClick={() => commit([...rows, { provider: '', model: '' }])} size="sm" variant="textStrong">
+        <Button onClick={() => commit([...rows, { provider: '', model: '' }])} size="sm" variant="link">
           <Plus className="size-3.5" />
           {m.fallbackAdd}
         </Button>

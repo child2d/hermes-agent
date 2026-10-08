@@ -205,7 +205,7 @@ export function HubSkillsSection({ bot, onInstalled }: HubSkillsSectionProps) {
           className="text-[0.65rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)"
           onClick={() => setBrowseHub(v => !v)}
           size="inline"
-          variant="text"
+          variant="link"
         >
           {browseHub ? h.pickerHide : h.pickerBrowse}
         </Button>

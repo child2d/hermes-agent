@@ -123,7 +123,7 @@ export function FreeTierSignInDialog({ onSelectModel }: FreeTierSignInDialogProp
               >
                 {state.url}
               </a>
-              <Button onClick={() => void copyFreeTierUrl()} size="xs" type="button" variant="text">
+              <Button onClick={() => void copyFreeTierUrl()} size="sm" type="button" variant="link">
                 {state.urlCopied ? t.common.copied : copy.copyLink}
               </Button>
             </div>
@@ -163,7 +163,7 @@ export function FreeTierSignInDialog({ onSelectModel }: FreeTierSignInDialogProp
                   onClick={() => finish(state.model, () => setModelPickerOpen(true))}
                   size="inline"
                   type="button"
-                  variant="text"
+                  variant="link"
                 >
                   {copy.change}
                 </Button>
@@ -193,7 +193,7 @@ export function FreeTierSignInDialog({ onSelectModel }: FreeTierSignInDialogProp
             heading={failureHeading(state.kind, copy)}
           >
             <Actions>
-              <Button onClick={() => closeFreeTierSignIn()} size="sm" type="button" variant="text">
+              <Button onClick={() => closeFreeTierSignIn()} size="sm" type="button" variant="link">
                 {state.kind === 'unavailable' ? copy.done : copy.notNow}
               </Button>
               {/* A terminal refusal (this version, a locked session, a proof-of-work

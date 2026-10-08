@@ -252,7 +252,7 @@ function ConnectionSwitcherTrigger({
         compact && 'h-full min-h-0 rounded-none px-1.5 text-[0.6875rem] font-normal',
         triggerProps.className
       )}
-      size="xs"
+      size="sm"
       type="button"
       variant="ghost"
     >

@@ -1310,22 +1310,19 @@
   }
 }
 
-/* No focus rings, anywhere. Kills the native outline plus Tailwind's
-   `focus-visible:ring-*` (a box-shadow driven by --tw-ring-*). Unlayered so it
-   beats the utilities layer without !important on the outline.
+/* The app used to kill every focus ring globally:
+     *:focus-visible { --tw-ring-shadow: 0 0 #0000 !important;
+                       --tw-ring-offset-shadow: 0 0 #0000 !important; }
+   That is incompatible with the shadcn component layer, whose entire focus
+   affordance IS the ring — with it suppressed, `focus-visible:ring-*` renders
+   nothing and controls have no focus state at all. The rule is removed so stock
+   shadcn rings actually draw.
 
-   CONSEQUENCE for the shadcn layer: shadcn's `focus-visible:ring-*` classes are
-   INERT under this rule. Any primitive adopting stock shadcn source must also
-   carry a non-ring focus affordance (e.g. `focus-visible:border-ring`), or it
-   renders with no focus state at all — see components/ui/control.ts. */
+   The native-outline reset below stays: shadcn primitives set their own
+   `focus-visible:outline-none` where they want it. */
 *:focus,
 *:focus-visible {
   outline: none;
-}
-
-*:focus-visible {
-  --tw-ring-shadow: 0 0 #0000 !important;
-  --tw-ring-offset-shadow: 0 0 #0000 !important;
 }
 
 button {

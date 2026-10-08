@@ -278,7 +278,7 @@ function Diagnostics({
                   <Button
                     key={`${action.kind}-${action.label}`}
                     onClick={() => act(action)}
-                    size="xs"
+                    size="sm"
                     variant={action.suggested ? 'secondary' : 'outline'}
                   >
                     {action.kind === 'cli_hint' && <Codicon name="copy" size="0.7rem" />}
@@ -407,7 +407,7 @@ function CommentComposer({
             className="absolute top-1 right-1 text-muted-foreground/80 hover:text-foreground"
             disabled={empty}
             onClick={submit}
-            size="icon-xs"
+            size="icon"
             type="button"
             variant="ghost"
           >
@@ -418,7 +418,7 @@ function CommentComposer({
       {running && onRequeue && (
         <div className="flex items-center justify-between gap-2">
           <span className="text-[0.625rem] leading-tight text-(--ui-text-quaternary)">{k.deliveredLive}</span>
-          <Button className="shrink-0" disabled={empty} onClick={requeue} size="xs" variant="outline">
+          <Button className="shrink-0" disabled={empty} onClick={requeue} size="sm" variant="outline">
             <Codicon name="debug-restart" size="0.7rem" />
             {k.requeueWithNote}
           </Button>
@@ -442,7 +442,7 @@ function DescriptionSection({ body, onSave }: { body: null | string | undefined;
             setDraft(body ?? '')
             setEditing(!editing)
           }}
-          size="icon-xs"
+          size="icon"
           variant="ghost"
         >
           <Codicon name={editing ? 'close' : 'edit'} size="0.75rem" />
@@ -463,7 +463,7 @@ function DescriptionSection({ body, onSave }: { body: null | string | undefined;
               onSave(draft)
               setEditing(false)
             }}
-            size="xs"
+            size="sm"
             variant="secondary"
           >
             {k.save}
@@ -508,7 +508,7 @@ function AttachmentDownload({
         disabled={!path || download.isPending}
         onClick={() => download.mutate()}
         size="inline"
-        variant="text"
+        variant="link"
       >
         <Codicon name={download.isPending ? 'sync' : 'cloud-download'} size="0.75rem" spinning={download.isPending} />
         <span className="truncate">{attachment.filename}</span>
@@ -553,7 +553,7 @@ function AttachmentsSection({
             aria-label={k.uploadAttachment}
             disabled={pending}
             onClick={() => fileRef.current?.click()}
-            size="icon-xs"
+            size="icon"
             variant="ghost"
           >
             <Codicon name={pending ? 'sync' : 'cloud-upload'} size="0.8rem" spinning={pending} />
@@ -620,7 +620,7 @@ function EstimateSection({ id }: { id: string }) {
                 className="ml-auto"
                 disabled={est.isPending}
                 onClick={() => est.mutate()}
-                size="icon-xs"
+                size="icon"
                 variant="ghost"
               >
                 <Codicon name="refresh" size="0.75rem" spinning={est.isPending} />
@@ -633,7 +633,7 @@ function EstimateSection({ id }: { id: string }) {
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <Button disabled={est.isPending} onClick={() => est.mutate()} size="xs" variant="outline">
+          <Button disabled={est.isPending} onClick={() => est.mutate()} size="sm" variant="outline">
             <Codicon name={est.isPending ? 'loading' : 'dashboard'} size="0.75rem" spinning={est.isPending} />
             {est.isPending ? k.estimating : k.estimateEffort}
           </Button>
@@ -989,7 +989,7 @@ export function TaskDrawer({
               {task && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button aria-label={k.taskActions} size="icon-xs" variant="ghost">
+                    <Button aria-label={k.taskActions} size="icon" variant="ghost">
                       <Codicon name="ellipsis" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -1027,7 +1027,7 @@ export function TaskDrawer({
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
-              <Button aria-label={k.close} onClick={onClose} size="icon-xs" variant="ghost">
+              <Button aria-label={k.close} onClick={onClose} size="icon" variant="ghost">
                 <Codicon name="close" />
               </Button>
             </div>

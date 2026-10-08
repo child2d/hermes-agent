@@ -811,7 +811,7 @@ function NewTaskDialog({
                     aria-label={k.reEstimate}
                     disabled={!title.trim() || estMut.isPending}
                     onClick={() => estMut.mutate()}
-                    size="icon-xs"
+                    size="icon"
                     variant="ghost"
                   >
                     <Codicon name="refresh" size="0.7rem" spinning={estMut.isPending} />
@@ -823,7 +823,7 @@ function NewTaskDialog({
                 <Button
                   disabled={!title.trim() || estMut.isPending}
                   onClick={() => estMut.mutate()}
-                  size="xs"
+                  size="sm"
                   variant="ghost"
                 >
                   <Codicon
@@ -836,7 +836,7 @@ function NewTaskDialog({
               </Tip>
             )}
           </div>
-          <Button onClick={onClose} variant="text">
+          <Button onClick={onClose} variant="link">
             {k.cancel}
           </Button>
           <Button disabled={!title.trim() || busy} onClick={() => void submit()}>
@@ -866,7 +866,7 @@ function Intro() {
       data-selectable-text="true"
     >
       <p className="min-w-0">{k.introBody}</p>
-      <Button onClick={() => $introDismissed.set(true)} size="inline" variant="textStrong">
+      <Button onClick={() => $introDismissed.set(true)} size="inline" variant="link">
         {k.introGotIt}
       </Button>
     </div>
@@ -906,7 +906,7 @@ function FilterMenu({
         <Button
           aria-label={k.filters}
           className={cn(active && 'bg-(--ui-control-active-background) text-foreground')}
-          size="icon-xs"
+          size="icon"
           variant="ghost"
         >
           <Codicon name="filter" size="0.85rem" />
@@ -1025,7 +1025,7 @@ function SelectionBar({
 
         <DropdownMenu onOpenChange={open => setMenu(open ? 'move' : null)} open={menu === 'move'}>
           <DropdownMenuTrigger asChild>
-            <Button disabled={busy} size="xs" variant="ghost">
+            <Button disabled={busy} size="sm" variant="ghost">
               {k.moveToShort}
               <Codicon name="chevron-down" size="0.7rem" />
             </Button>
@@ -1044,7 +1044,7 @@ function SelectionBar({
 
         <DropdownMenu onOpenChange={open => setMenu(open ? 'assign' : null)} open={menu === 'assign'}>
           <DropdownMenuTrigger asChild>
-            <Button disabled={busy} size="xs" variant="ghost">
+            <Button disabled={busy} size="sm" variant="ghost">
               {k.assign}
               <Codicon name="chevron-down" size="0.7rem" />
             </Button>
@@ -1066,21 +1066,21 @@ function SelectionBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button disabled={busy} onClick={() => bulk.mutate({ archive: true })} size="xs" variant="ghost">
+        <Button disabled={busy} onClick={() => bulk.mutate({ archive: true })} size="sm" variant="ghost">
           {k.archive}
         </Button>
         <Button
           className="text-destructive"
           disabled={busy}
           onClick={() => bulkDelete.mutate()}
-          size="xs"
+          size="sm"
           variant="ghost"
         >
           {k.delete}
         </Button>
 
         <Tip label={k.clearSelection}>
-          <Button aria-label={k.clearSelection} onClick={onClear} size="icon-xs" variant="ghost">
+          <Button aria-label={k.clearSelection} onClick={onClear} size="icon" variant="ghost">
             <Codicon name="close" size="0.8rem" />
           </Button>
         </Tip>
@@ -1363,7 +1363,7 @@ export function KanbanBoardPage() {
               aria-label={k.orchestrationSettings}
               className={cn(settingsOpen && 'bg-(--ui-control-active-background) text-foreground')}
               onClick={() => setSettingsOpen(!settingsOpen)}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="organization" size="0.85rem" />

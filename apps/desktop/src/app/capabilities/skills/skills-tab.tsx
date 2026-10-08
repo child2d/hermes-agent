@@ -256,7 +256,7 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
   const skillEditorPane = skillEditor && (
     <DetailPane
       actions={
-        <Button disabled={skillSaving} onClick={() => void saveSkillEdit()} size="xs">
+        <Button disabled={skillSaving} onClick={() => void saveSkillEdit()} size="sm">
           {skillSaving ? t.common.saving : t.common.save}
         </Button>
       }
@@ -329,7 +329,7 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
               return (
                 <CapRow
                   action={
-                    <Button disabled={installing} onClick={() => handleInstallOfficial(skill)} size="xs" variant="text">
+                    <Button disabled={installing} onClick={() => handleInstallOfficial(skill)} size="sm" variant="link">
                       {installing && <Loader2 className="size-3 animate-spin" />}
                       {installing ? t.skills.hub.installing : t.skills.hub.install}
                     </Button>

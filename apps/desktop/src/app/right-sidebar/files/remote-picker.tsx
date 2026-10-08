@@ -240,7 +240,7 @@ export function RemoteFolderPicker() {
                     aria-label={r.remotePickerCreateFolder}
                     disabled={creating}
                     onClick={() => void createFolder()}
-                    size="icon-xs"
+                    size="icon"
                     variant="ghost"
                   >
                     <Codicon name={creating ? 'loading' : 'check'} size="0.875rem" spinning={creating} />

@@ -326,10 +326,10 @@ export function McpSetupButton({ profile, entry, onDone, ensureProfile }: McpSet
           />
         ))}
         <div className="flex gap-1">
-          <Button onClick={() => void submitKeys()} size="xs" variant="secondary">
+          <Button onClick={() => void submitKeys()} size="sm" variant="secondary">
             {b.tools.saveTest}
           </Button>
-          <Button onClick={() => setPhase('idle')} size="xs" variant="ghost">
+          <Button onClick={() => setPhase('idle')} size="sm" variant="ghost">
             {t.common.cancel}
           </Button>
         </div>

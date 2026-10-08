@@ -200,13 +200,13 @@ export function VersionHero({
                   className="mt-2"
                   onClick={() => void window.hermesDesktop?.relaunchApp?.()}
                   size="sm"
-                  variant="textStrong"
+                  variant="link"
                 >
                   <RefreshCw className="size-3" />
                   {u.bundleSwapPendingAction}
                 </Button>
               ) : (
-                <Button asChild className="mt-2" size="sm" variant="textStrong">
+                <Button asChild className="mt-2" size="sm" variant="link">
                   <a
                     href={INSTALLER_URL}
                     onClick={event => {
@@ -249,7 +249,7 @@ function UpdateActions({ target, u, view }: UpdateActionsProps): ReactElement | 
       <Button onClick={() => startActiveUpdate(target)} size="sm">
         {u.updateNow}
       </Button>
-      <Button onClick={() => openUpdateOverlayFor(target)} size="sm" variant="textStrong">
+      <Button onClick={() => openUpdateOverlayFor(target)} size="sm" variant="link">
         {u.seeWhatsNew}
       </Button>
     </>
@@ -319,7 +319,7 @@ export function UpdateStatusCard({
             disabled={checking || view.applying}
             onClick={() => void handleCheck()}
             size="sm"
-            variant="textStrong"
+            variant="link"
           >
             {checking ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
             {checking ? u.checkingShort : u.checkNow}
@@ -328,7 +328,7 @@ export function UpdateStatusCard({
           <UpdateActions target={target} u={u} view={view} />
 
           {showReleaseNotes && (
-            <Button asChild className="ml-auto" size="sm" variant="text">
+            <Button asChild className="ml-auto" size="sm" variant="link">
               <a
                 href={RELEASE_NOTES_URL}
                 onClick={event => {

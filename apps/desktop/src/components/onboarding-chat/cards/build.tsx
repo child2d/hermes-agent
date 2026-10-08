@@ -203,7 +203,7 @@ export function HandoffCard({ attrs, locked }: CardProps) {
             : `Opening ${title}\u2026`}
       </span>
       {state?.phase === 'error' && (
-        <Button disabled={locked} onClick={() => void retry()} size="sm" variant="text">
+        <Button disabled={locked} onClick={() => void retry()} size="sm" variant="link">
           Retry first build
         </Button>
       )}

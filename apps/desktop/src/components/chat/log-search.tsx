@@ -96,7 +96,7 @@ export function LogSearchField({ containerClassName, onChange, placeholder, sear
                     className="size-5 shrink-0 text-muted-foreground/85 hover:bg-accent/60 hover:text-foreground"
                     disabled={search.hits.length === 0}
                     onClick={search[direction]}
-                    size="icon-xs"
+                    size="icon"
                     variant="ghost"
                   >
                     <Icon className="size-3.5" />

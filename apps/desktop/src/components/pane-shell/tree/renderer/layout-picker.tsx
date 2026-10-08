@@ -260,7 +260,7 @@ export function LayoutPicker() {
               </Button>
             </form>
           ) : (
-            <Button className="self-start" onClick={() => setSaving(true)} size="inline" variant="text">
+            <Button className="self-start" onClick={() => setSaving(true)} size="inline" variant="link">
               <Codicon name="save" size="0.8125rem" />
               {t.zones.saveCurrentAs}
             </Button>

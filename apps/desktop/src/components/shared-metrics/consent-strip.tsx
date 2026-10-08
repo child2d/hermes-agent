@@ -47,7 +47,7 @@ export function SharedMetricsConsentStrip() {
               onClick={() => void choose(choice)}
               size="micro"
               type="button"
-              variant="text"
+              variant="link"
             >
               {copy.stripChoices[choice]}
             </Button>
@@ -57,7 +57,7 @@ export function SharedMetricsConsentStrip() {
             onClick={() => $sharedMetricsDetailsOpen.set(true)}
             size="micro"
             type="button"
-            variant="text"
+            variant="link"
           >
             {copy.stripDetails}
           </Button>

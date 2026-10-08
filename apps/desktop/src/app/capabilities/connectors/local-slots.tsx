@@ -28,7 +28,7 @@ export function LocalAdvanced({ controller, name, onRemove }: LocalAdvancedProps
         <McpLogPane server={name} />
       </div>
 
-      <Button className="justify-self-start text-destructive" onClick={onRemove} size="xs" variant="text">
+      <Button className="justify-self-start text-destructive" onClick={onRemove} size="sm" variant="link">
         {m.remove}
       </Button>
     </div>

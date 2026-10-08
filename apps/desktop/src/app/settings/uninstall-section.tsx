@@ -139,7 +139,7 @@ export function UninstallSection(): ReactElement | null {
                 {running && <Loader2 className="size-3 animate-spin" />}
                 {running ? u.uninstalling : u.yesUninstall}
               </Button>
-              <Button disabled={running} onClick={(): void => setPending(null)} size="sm" variant="text">
+              <Button disabled={running} onClick={(): void => setPending(null)} size="sm" variant="link">
                 {t.common.cancel}
               </Button>
             </div>

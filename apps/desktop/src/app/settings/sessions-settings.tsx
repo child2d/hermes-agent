@@ -178,7 +178,7 @@ function ArchivedSessionsSettings({ includeDefaultDirectory }: { includeDefaultD
                         onClick={() => void unarchive(session)}
                         size="sm"
                         type="button"
-                        variant="textStrong"
+                        variant="link"
                       >
                         {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArchiveOff className="size-3.5" />}
                         <span>{s.unarchive}</span>
@@ -420,12 +420,12 @@ function DefaultProjectDirSetting() {
       <ListRow
         action={
           <div className="flex items-center gap-3">
-            <Button disabled={busy} onClick={() => void choose()} size="sm" type="button" variant="textStrong">
+            <Button disabled={busy} onClick={() => void choose()} size="sm" type="button" variant="link">
               <FolderOpen className="size-3.5" />
               <span>{dir ? s.change : s.choose}</span>
             </Button>
             {dir && (
-              <Button disabled={busy} onClick={() => void clear()} size="sm" type="button" variant="text">
+              <Button disabled={busy} onClick={() => void clear()} size="sm" type="button" variant="link">
                 {s.clear}
               </Button>
             )}

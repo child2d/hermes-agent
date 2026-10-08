@@ -123,7 +123,7 @@ export function KeyField({
               className="text-muted-foreground hover:text-destructive"
               disabled={busy}
               onClick={() => void onClear(varKey, editKey)}
-              size="icon-xs"
+              size="icon"
               type="button"
               variant="ghost"
             >

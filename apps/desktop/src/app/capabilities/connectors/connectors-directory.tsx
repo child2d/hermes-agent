@@ -98,7 +98,7 @@ export function ConnectorsDirectory({
               {hiddenMatches > 0 ? (
                 <span className="flex items-center gap-1 text-[0.7rem] text-(--ui-text-tertiary)">
                   {copy.page.matchesElsewhere(hiddenMatches)}
-                  <Button onClick={() => set({ segment: 'all' })} size="xs" variant="text">
+                  <Button onClick={() => set({ segment: 'all' })} size="sm" variant="link">
                     {copy.page.showAllMatches}
                   </Button>
                 </span>
@@ -115,7 +115,7 @@ export function ConnectorsDirectory({
           <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <span className="font-medium">{copy.page.hostedFailedTitle}</span>
             <span className="opacity-80">{copy.page.hostedFailedBody}</span>
-            <Button className="text-destructive" onClick={onRetryHosted} size="xs" variant="text">
+            <Button className="text-destructive" onClick={onRetryHosted} size="sm" variant="link">
               {copy.page.retry}
             </Button>
           </span>
@@ -148,7 +148,7 @@ export function ConnectorsDirectory({
         <PanelEmpty
           action={
             <div className="flex items-center gap-2">
-              <Button onClick={() => set(EMPTY_CONNECTORS_FILTER)} size="xs" variant="secondary">
+              <Button onClick={() => set(EMPTY_CONNECTORS_FILTER)} size="sm" variant="secondary">
                 {copy.page.clearSearch}
               </Button>
               {addYourOwn}

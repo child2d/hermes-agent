@@ -178,7 +178,7 @@ export function ProfileSwitcher({ compact = false }: { compact?: boolean }) {
               'w-full min-w-0 justify-between overflow-hidden px-1 text-(--ui-text-secondary) data-[state=open]:bg-(--ui-control-active-background) data-[state=open]:text-foreground',
               compact && 'h-full min-h-0 rounded-none px-1.5 text-[0.6875rem] font-normal'
             )}
-            size="xs"
+            size="sm"
             type="button"
             variant="ghost"
           >

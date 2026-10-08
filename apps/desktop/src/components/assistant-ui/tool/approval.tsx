@@ -349,7 +349,7 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
         </pre>
       )}
       <div className="flex items-center justify-end gap-1.5 px-2 pb-2 pt-1" data-slot="tool-approval-actions">
-        <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="text">
+        <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="link">
           {submitting === 'deny' ? <Loader2 className="size-3 animate-spin" /> : copy.reject}
         </Button>
         {hasMoreOptions && (

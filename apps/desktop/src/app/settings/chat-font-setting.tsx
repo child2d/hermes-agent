@@ -139,7 +139,7 @@ export function ChatFontSetting() {
               )}
               value={value}
             />
-            <Button disabled={!value || draft === null} onClick={() => update('')} size="inline" variant="text">
+            <Button disabled={!value || draft === null} onClick={() => update('')} size="inline" variant="link">
               {copy.chatFontReset}
             </Button>
           </div>

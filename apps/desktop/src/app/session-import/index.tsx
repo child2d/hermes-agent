@@ -245,7 +245,7 @@ export function SessionImportView({ owner, onClose, onOpenSession }: SessionImpo
                   <Button
                     disabled={sessions.isFetchingNextPage}
                     onClick={() => void sessions.fetchNextPage()}
-                    variant="text"
+                    variant="link"
                   >
                     {copy.more}
                   </Button>
@@ -260,7 +260,7 @@ export function SessionImportView({ owner, onClose, onOpenSession }: SessionImpo
               <>
                 <div className="px-8 pb-5 pt-6">
                   <div className="mb-4 hidden max-[760px]:block">
-                    <Button onClick={() => setSelected(null)} variant="text">
+                    <Button onClick={() => setSelected(null)} variant="link">
                       {t.common.back}
                     </Button>
                   </div>

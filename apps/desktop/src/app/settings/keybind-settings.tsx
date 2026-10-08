@@ -283,7 +283,7 @@ function KeybindRow({ action }: { action: KeybindActionMeta }) {
               aria-label={k.clear}
               className="shrink-0 text-(--ui-text-tertiary) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
               onClick={() => clearBinding(action.id)}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="close" size="0.8125rem" />
@@ -298,7 +298,7 @@ function KeybindRow({ action }: { action: KeybindActionMeta }) {
             aria-label={k.reset}
             className="shrink-0 text-(--ui-text-tertiary) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             onClick={() => resetBinding(action.id)}
-            size="icon-xs"
+            size="icon"
             variant="ghost"
           >
             <Codicon name="discard" size="0.8125rem" />

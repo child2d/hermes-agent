@@ -94,7 +94,7 @@ export function WaysSection({ card, onChange, value, ...rest }: WaysSectionProps
       {bothWaysOn(card.ways) && rest.onServerToggle ? (
         <div className="flex flex-wrap items-center gap-2">
           <p className="min-w-0 flex-1 text-[0.7rem] text-(--ui-text-secondary)">{copy.dialog.bothOn(card.name)}</p>
-          <Button onClick={() => rest.onServerToggle?.(false)} size="inline" variant="textStrong">
+          <Button onClick={() => rest.onServerToggle?.(false)} size="inline" variant="link">
             {copy.dialog.turnOffLocal}
           </Button>
         </div>
@@ -130,19 +130,19 @@ function HostedWay({
       </span>
 
       {way.state === 'available' && onConnect ? (
-        <Button onClick={onConnect} size="xs">
+        <Button onClick={onConnect} size="sm">
           {copy.card.verb.connect}
         </Button>
       ) : null}
 
       {broken && onReconnect ? (
-        <Button onClick={onReconnect} size="xs" variant="secondary">
+        <Button onClick={onReconnect} size="sm" variant="secondary">
           {copy.card.verb.reconnect}
         </Button>
       ) : null}
 
       {way.state === 'off' && way.offBy === 'me' && onToggleForMe ? (
-        <Button onClick={() => onToggleForMe(true)} size="xs" variant="secondary">
+        <Button onClick={() => onToggleForMe(true)} size="sm" variant="secondary">
           {copy.card.verb.turnBackOn}
         </Button>
       ) : null}
@@ -173,11 +173,11 @@ function LocalWay({
       <span className="min-w-0 flex-1 text-[0.7rem] text-(--ui-text-tertiary)">{sentence}</span>
 
       {way.serverEnabled !== true && onServerToggle ? (
-        <Button onClick={() => onServerToggle(true)} size="xs">
+        <Button onClick={() => onServerToggle(true)} size="sm">
           {copy.card.verb.turnBackOn}
         </Button>
       ) : way.verb === 'authenticate' && onAuthenticate ? (
-        <Button onClick={onAuthenticate} size="xs">
+        <Button onClick={onAuthenticate} size="sm">
           {copy.card.verb.authenticate}
         </Button>
       ) : null}

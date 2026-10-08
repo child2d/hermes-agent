@@ -230,7 +230,7 @@ export function ConnectorsTab({ gateway, profile }: ConnectorsTabProps) {
     <div className="flex h-full min-h-0 flex-col gap-3 px-4 pb-2">
       <ConnectorsDirectory
         addYourOwn={
-          <Button disabled={mcp.profilePending} onClick={() => setAddOpen(true)} size="xs" variant="outline">
+          <Button disabled={mcp.profilePending} onClick={() => setAddOpen(true)} size="sm" variant="outline">
             {copy.add.action}
           </Button>
         }
@@ -342,7 +342,7 @@ function HostedNotice({ hasGuest, phase }: { hasGuest: boolean; phase: HostedPha
     return (
       <p className="flex shrink-0 items-center gap-1 text-[0.7rem] text-(--ui-text-tertiary)">
         {copy.signInLine}
-        <Button onClick={() => openFreeTierSignIn()} size="xs" variant="text">
+        <Button onClick={() => openFreeTierSignIn()} size="sm" variant="link">
           {copy.signIn}
         </Button>
       </p>

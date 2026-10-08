@@ -176,7 +176,7 @@ export const SessionControlLoopSection = memo(function SessionControlLoopSection
                             setMenuOpen(true)
                           }
                         }}
-                        size="icon-xs"
+                        size="icon"
                         type="button"
                         variant="ghost"
                       >

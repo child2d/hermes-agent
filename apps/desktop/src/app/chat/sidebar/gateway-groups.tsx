@@ -240,7 +240,7 @@ function GatewayProfileGroup({
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button aria-label={`${copy.actions}: ${label}`} size="icon-xs" variant="ghost">
+                <Button aria-label={`${copy.actions}: ${label}`} size="icon" variant="ghost">
                   <Codicon name="ellipsis" />
                 </Button>
               </DropdownMenuTrigger>

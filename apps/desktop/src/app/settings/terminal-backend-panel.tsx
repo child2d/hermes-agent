@@ -134,7 +134,7 @@ export function TerminalBackendPanel({ onConfiguredChange, profile }: TerminalBa
     <div className="grid gap-1.5">
       <div className="flex items-baseline justify-between gap-2 px-0.5">
         <span className="text-[0.72rem] font-medium">{copy.sectionTitle}</span>
-        <Button disabled={loading} onClick={() => void refresh()} size="sm" variant="text">
+        <Button disabled={loading} onClick={() => void refresh()} size="sm" variant="link">
           <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
         </Button>
       </div>

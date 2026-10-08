@@ -78,7 +78,7 @@ export function QueuePanel({
               onClick={onResume}
               size="micro"
               type="button"
-              variant="text"
+              variant="link"
             >
               {c.queueResume}
             </Button>
@@ -116,7 +116,7 @@ export function QueuePanel({
                       aria-label={isExpanded ? c.queueCollapse : c.queueExpand}
                       className="size-5 rounded-md"
                       onClick={() => toggleExpanded(entry.id)}
-                      size="icon-xs"
+                      size="icon"
                       type="button"
                       variant="ghost"
                     >
@@ -134,7 +134,7 @@ export function QueuePanel({
                     className="size-5 rounded-md"
                     disabled={Boolean(editingId) && !isEditing}
                     onClick={() => onEdit(entry)}
-                    size="icon-xs"
+                    size="icon"
                     type="button"
                     variant="ghost"
                   >
@@ -148,7 +148,7 @@ export function QueuePanel({
                       className="size-5 rounded-md"
                       disabled={isEditing}
                       onClick={() => onSteerNow?.(entry.id)}
-                      size="icon-xs"
+                      size="icon"
                       type="button"
                       variant="ghost"
                     >
@@ -162,7 +162,7 @@ export function QueuePanel({
                     className="size-5 rounded-md"
                     disabled={isEditing}
                     onClick={() => onSendNow(entry.id)}
-                    size="icon-xs"
+                    size="icon"
                     type="button"
                     variant="ghost"
                   >

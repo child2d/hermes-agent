@@ -2,9 +2,7 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { type ControlVariantProps, controlVariants } from './control'
-
-function Textarea({ className, size, ...props }: React.ComponentProps<'textarea'> & ControlVariantProps) {
+function Textarea({ className, ...props }: React.ComponentProps<'textarea'>) {
   return (
     <textarea
       // Off by default for every consumer — these are code/config/prompt fields,
@@ -12,7 +10,10 @@ function Textarea({ className, size, ...props }: React.ComponentProps<'textarea'
       autoCapitalize="off"
       autoComplete="off"
       autoCorrect="off"
-      className={cn(controlVariants({ size }), 'h-auto min-h-16', className)}
+      className={cn(
+        'flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',
+        className
+      )}
       data-slot="textarea"
       spellCheck={false}
       {...props}

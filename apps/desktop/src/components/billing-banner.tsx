@@ -43,7 +43,7 @@ export function BillingBanner({ sessionId }: { sessionId: null | string }) {
             onClick={() => runBillingRecovery(block)}
             size="micro"
             type="button"
-            variant="text"
+            variant="link"
           >
             {billingCtaLabel(block, copy)}
           </Button>
@@ -54,7 +54,7 @@ export function BillingBanner({ sessionId }: { sessionId: null | string }) {
               recordFriction('notice_dismissed', 'billing_banner')
               clearBillingBlock(sessionId)
             }}
-            size="icon-xs"
+            size="icon"
             type="button"
             variant="ghost"
           >

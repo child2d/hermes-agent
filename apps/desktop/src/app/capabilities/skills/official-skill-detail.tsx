@@ -53,7 +53,7 @@ export function OfficialSkillDetail({
         title={skill.name}
       />
       <div className="flex items-center gap-2">
-        <Button disabled={installing} onClick={onInstall} size="xs" variant="textStrong">
+        <Button disabled={installing} onClick={onInstall} size="sm" variant="link">
           {installing && <Loader2 className="size-3 animate-spin" />}
           {installing ? t.skills.hub.installing : t.skills.hub.install}
         </Button>

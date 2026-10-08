@@ -165,7 +165,7 @@ export function ReviewShipBar() {
               className="size-7 text-muted-foreground/80 hover:text-foreground"
               disabled={!ship.ghReady || busy}
               onClick={() => void createOrOpenPr().catch(err => notifyError(err, prLabel))}
-              size="icon-xs"
+              size="icon"
               variant="ghost"
             >
               <Codicon name="git-pull-request" size={ICON} />

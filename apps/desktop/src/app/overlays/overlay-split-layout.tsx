@@ -239,7 +239,7 @@ export function OverlayNav({ footer, groups }: { footer?: ReactNode; groups: Ove
                     className="absolute right-0.5 top-1/2 -translate-y-1/2"
                     data-tour={`nav-toggle-${group.id}`}
                     onClick={() => setDisclosures(previous => ({ ...previous, [group.id]: !expanded }))}
-                    size="icon-xs"
+                    size="icon"
                     type="button"
                     variant="ghost"
                   >

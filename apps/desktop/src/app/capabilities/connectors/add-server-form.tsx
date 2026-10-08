@@ -216,7 +216,7 @@ function TrashButton({ label, onClick }: { label: string; onClick: () => void })
       aria-label={label}
       className="shrink-0 text-(--ui-text-tertiary)"
       onClick={onClick}
-      size="icon-xs"
+      size="icon"
       variant="ghost"
     >
       <Codicon name="trash" size="0.8125rem" />
@@ -238,7 +238,7 @@ function RowsFrame({
   return (
     <Fieldset label={label}>
       {children}
-      <Button className="justify-self-start" onClick={onAdd} size="xs" variant="text">
+      <Button className="justify-self-start" onClick={onAdd} size="sm" variant="link">
         {addLabel}
       </Button>
     </Fieldset>

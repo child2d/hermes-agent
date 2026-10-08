@@ -50,7 +50,7 @@ export function StatusDrawerToggle({ collapsed, controls, onToggle }: StatusDraw
         onClick={onToggle}
         size="grip"
         type="button"
-        variant="grip"
+        variant="ghost"
       >
         <span aria-hidden className="h-0.75 w-7 rounded-full bg-current" />
       </Button>

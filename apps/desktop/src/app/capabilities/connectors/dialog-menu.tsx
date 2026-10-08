@@ -26,7 +26,7 @@ export function ConnectorDialogMenu({ onDisconnect, onReconnect, onRefreshTools 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button aria-label={copy.dialog.moreActions} size="icon-xs" variant="ghost">
+        <Button aria-label={copy.dialog.moreActions} size="icon" variant="ghost">
           <Codicon name="ellipsis" size="0.8125rem" />
         </Button>
       </DropdownMenuTrigger>

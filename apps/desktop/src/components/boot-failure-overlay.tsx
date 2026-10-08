@@ -552,9 +552,9 @@ export function BootFailureOverlay() {
               <Button
                 className="-ml-2 self-start font-medium"
                 onClick={() => setShowLogs(v => !v)}
-                size="xs"
+                size="sm"
                 type="button"
-                variant="text"
+                variant="link"
               >
                 {showLogs ? copy.hideRecentLogs : copy.showRecentLogs}
               </Button>

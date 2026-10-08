@@ -656,7 +656,7 @@ export function ConnectionsRegistrySection() {
                       <Button
                         aria-label={s.editConnection}
                         onClick={() => openEditor(editorFromConnection(conn), conn)}
-                        size="icon-sm"
+                        size="icon"
                         variant="ghost"
                       >
                         <Pencil className="size-3.5" />
@@ -665,7 +665,7 @@ export function ConnectionsRegistrySection() {
                         aria-label={s.removeConnection}
                         disabled={busy}
                         onClick={() => setRemoveTarget(conn)}
-                        size="icon-sm"
+                        size="icon"
                         variant="ghost"
                       >
                         {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}

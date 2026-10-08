@@ -252,7 +252,7 @@ export function ProjectDialog() {
                         aria-label={p.removeFolder}
                         className="size-5 shrink-0 text-(--ui-text-quaternary) hover:text-foreground"
                         onClick={() => setFolders(prev => prev.filter(f => f !== folder))}
-                        size="icon-xs"
+                        size="icon"
                         type="button"
                         variant="ghost"
                       >
@@ -316,7 +316,7 @@ export function ProjectDialog() {
                   className="size-5 text-(--ui-text-quaternary) hover:text-foreground"
                   disabled={submitting}
                   onClick={() => setTemplates(randomIdeaTemplates())}
-                  size="icon-xs"
+                  size="icon"
                   type="button"
                   variant="ghost"
                 >

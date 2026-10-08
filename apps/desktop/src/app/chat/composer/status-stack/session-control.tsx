@@ -67,7 +67,7 @@ export const SessionControlSections = memo(function SessionControlSections({
             aria-label={ctrl.dismissError}
             className="size-6 shrink-0 p-0 text-destructive hover:bg-destructive/20"
             onClick={handleDismissError}
-            size="icon-xs"
+            size="icon"
             type="button"
             variant="ghost"
           >

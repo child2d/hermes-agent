@@ -2,7 +2,7 @@ import { Select as SelectPrimitive } from 'radix-ui'
 import * as React from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
-import { type ControlVariantProps, controlVariants } from '@/components/ui/control'
+import { controlVariants } from '@/components/ui/control'
 import { usePopoverPortalContainer } from '@/components/ui/dialog-portal-context'
 import {
   menuItemClass,
@@ -20,14 +20,13 @@ function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>)
 function SelectTrigger({
   className,
   children,
-  size,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger> & ControlVariantProps) {
+}: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        controlVariants({ size }),
-        'flex items-center justify-between gap-2 whitespace-nowrap data-placeholder:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0',
+        controlVariants(),
+        'items-center justify-between gap-2 whitespace-nowrap data-placeholder:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0',
         className
       )}
       data-slot="select-trigger"

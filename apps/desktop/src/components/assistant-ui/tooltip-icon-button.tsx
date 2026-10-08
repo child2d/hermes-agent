@@ -16,7 +16,7 @@ export const TooltipIconButton = forwardRef<HTMLButtonElement, TooltipIconButton
     return (
       <Tip label={tooltip} side={side}>
         <Button
-          size="icon-xs"
+          size="icon"
           variant="ghost"
           {...rest}
           aria-label={tooltip}

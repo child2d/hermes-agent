@@ -64,8 +64,8 @@ export function ToolsetDetail({
           <div>
             <Button
               onClick={() => navigate(`${SETTINGS_ROUTE}?tab=config:model&aux=vision`)}
-              size="xs"
-              variant="textStrong"
+              size="sm"
+              variant="link"
             >
               {t.skills.visionModelLink}
             </Button>

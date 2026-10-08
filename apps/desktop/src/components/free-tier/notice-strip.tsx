@@ -68,7 +68,7 @@ export function FreeTierNoticeStrip() {
             onClick={() => consume(() => setModelPickerOpen(true))}
             size="micro"
             type="button"
-            variant="text"
+            variant="link"
           >
             {copy.openModelPicker}
           </Button>
@@ -77,7 +77,7 @@ export function FreeTierNoticeStrip() {
             onClick={() => consume(() => openFreeTierSignIn())}
             size="micro"
             type="button"
-            variant="text"
+            variant="link"
           >
             {copy.signIn}
           </Button>
@@ -89,7 +89,7 @@ export function FreeTierNoticeStrip() {
             }}
             size="micro"
             type="button"
-            variant="text"
+            variant="link"
           >
             {copy.dismiss}
           </Button>

@@ -105,7 +105,7 @@ export function LogTail({ className, emptyLabel, lines, search }: LogTailProps) 
                 aria-label={t.ui.logs[edge]}
                 className={cn(HOVER_CONTROL, 'text-muted-foreground hover:text-foreground')}
                 onClick={() => jump(edge)}
-                size="icon-xs"
+                size="icon"
                 variant="ghost"
               >
                 <Icon className="size-3" />
