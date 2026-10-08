@@ -260,8 +260,13 @@ blurred backdrop.
 
 ## Form controls
 
-- **`controlVariants`** (`src/components/ui/control.ts`) is the shared shape for
-  `Input` / `Textarea` / `SelectTrigger`. New text-entry controls compose it.
+- **`controlVariants`** (`src/components/ui/control.ts`) is the stock shadcn input
+  recipe (`h-9`, `border-input`, `rounded-md`, `--radius-scalar`-driven corners)
+  and the shared shape for `Input` / `Textarea` / `SelectTrigger`. New text-entry
+  controls compose it. `size` is an alias ladder (`xs`/`sm`/`default`/`lg`) kept
+  for existing call sites. It carries `focus-visible:border-ring` because the
+  global focus-ring reset kills Tailwind's ring utilities app-wide — a shadcn
+  primitive adopted here must supply a non-ring focus affordance.
 - **`SearchField`** — borderless, underline-on-focus, auto-width. The only
   search input. Don't build boxed search bars; don't wrap it in a bordered tile.
   Empty lists hide their search field.

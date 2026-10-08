@@ -1312,9 +1312,12 @@
 
 /* No focus rings, anywhere. Kills the native outline plus Tailwind's
    `focus-visible:ring-*` (a box-shadow driven by --tw-ring-*). Unlayered so it
-   beats the utilities layer without !important on the outline. The composer /
-   .desktop-input-chrome focus glow is untouched — those set `box-shadow`
-   directly rather than through the ring vars. */
+   beats the utilities layer without !important on the outline.
+
+   CONSEQUENCE for the shadcn layer: shadcn's `focus-visible:ring-*` classes are
+   INERT under this rule. Any primitive adopting stock shadcn source must also
+   carry a non-ring focus affordance (e.g. `focus-visible:border-ring`), or it
+   renders with no focus state at all — see components/ui/control.ts. */
 *:focus,
 *:focus-visible {
   outline: none;
@@ -1425,37 +1428,6 @@ code {
 
 .btn-arc:hover:not(:disabled) {
   filter: brightness(1.08) saturate(1.06);
-}
-
-/* Shared input chrome — mirrors composer hover/focus FX. Unlayered to beat Tailwind utilities. */
-/* Border strength is driven by the single --dt-input-border alpha knob (× the
-   theme's tuned ring color); hover doubles it and focus triples it. Only the
-   border-color animates — animating the translucent background over the window's
-   backdrop-blur flickers (badly on textareas), so the bg fill snaps instead.
-   (:focus is declared after :hover so a focused+hovered field shows focus.) */
-.desktop-input-chrome {
-  background: color-mix(in srgb, var(--dt-card) var(--dt-input-bg), transparent);
-  border-color: color-mix(in srgb, var(--dt-composer-ring) var(--dt-input-border), transparent);
-  box-shadow: var(--dt-input-inset);
-  transition: border-color 200ms ease-out;
-}
-
-.desktop-input-chrome:hover {
-  border-color: color-mix(in srgb, var(--dt-composer-ring) calc(var(--dt-input-border) * 2), transparent);
-}
-
-/* `[data-state='open']` keeps the trigger looking focused while its dropdown is
-   open — Radix moves focus into the list, so the trigger itself loses :focus. */
-.desktop-input-chrome:focus,
-.desktop-input-chrome:focus-within,
-.desktop-input-chrome[data-state='open'] {
-  border-color: var(--dt-composer-ring);
-  box-shadow: none;
-  outline: none;
-}
-
-.desktop-input-chrome[aria-invalid='true'] {
-  border-color: var(--dt-destructive);
 }
 
 /* Drag in progress (sash resize, console resize, tab drag): webview/iframe

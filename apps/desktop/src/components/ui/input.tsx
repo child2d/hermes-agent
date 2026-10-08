@@ -28,12 +28,12 @@ function Input({ className, containerClassName, prefix, suffix, size, type, ...p
       autoCorrect="off"
       className={cn(
         // When adorned, the wrapper owns the chrome (border/background/focus
-        // glow) and the input goes transparent so the whole thing reads as one
+        // ring) and the input goes transparent so the whole thing reads as one
         // box; otherwise the input carries the chrome itself.
         grouped
-          ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-xs leading-4 text-foreground outline-none placeholder:text-muted-foreground'
+          ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground outline-none placeholder:text-muted-foreground'
           : controlVariants({ size }),
-        'selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground',
+        'selection:bg-primary selection:text-primary-foreground',
         className
       )}
       data-slot="input"
@@ -50,10 +50,12 @@ function Input({ className, containerClassName, prefix, suffix, size, type, ...p
   return (
     <div
       className={cn(
-        // Same control chrome/sizing as a bare input; `.desktop-input-chrome`
-        // lights on `:focus-within` (styles.css) since the div never focuses.
+        // Same control chrome/sizing as a bare input; the outer div never
+        // focuses, so it mirrors the inner field's focus treatment via
+        // `focus-within`. The ring utilities are globally disabled (see
+        // control.ts) — the border-color change is the visible part.
         controlVariants({ size }),
-        'inline-flex items-center gap-1',
+        'inline-flex items-center gap-1 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring',
         props.disabled && 'cursor-not-allowed opacity-50',
         containerClassName
       )}
