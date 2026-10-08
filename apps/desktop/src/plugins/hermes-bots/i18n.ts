@@ -35,6 +35,9 @@ import { useMemo } from 'react'
 import { getPluginCtx } from './shared'
 
 type BotsMessages = {
+  /** The sidebar nav row beside Skills & Tools / Messaging, and the roster
+   *  page's own heading. */
+  nav: string
   /** Left rail: the bot + group-chat roster. */
   editor: {
     fullConfigHint: string
@@ -484,6 +487,7 @@ type BotsMessages = {
 }
 
 const en: BotsMessages = {
+  nav: 'Bots',
   editor: {
     fullConfigHint: 'Full configuration needs a newer gateway (restart it after updating Hermes).',
     liveCapabilities: 'Capabilities (applies immediately — skills, tools, MCP)',
@@ -920,6 +924,7 @@ const en: BotsMessages = {
 }
 
 const ja: BotsMessages = {
+  nav: 'ボット',
   editor: {
     fullConfigHint: 'すべての設定を使うには新しいゲートウェイが必要です（Hermes 更新後に再起動してください）。',
     liveCapabilities: '機能（即時適用 — スキル、ツール、MCP）',
@@ -1360,6 +1365,7 @@ const ja: BotsMessages = {
 }
 
 const zh: BotsMessages = {
+  nav: '机器人',
   editor: {
     fullConfigHint: '完整配置需要更新网关（更新 Hermes 后请重启网关）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',
@@ -1784,6 +1790,7 @@ const zh: BotsMessages = {
 }
 
 const zhHant: BotsMessages = {
+  nav: '機器人',
   editor: {
     fullConfigHint: '完整設定需要更新閘道（更新 Hermes 後請重新啟動閘道）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',

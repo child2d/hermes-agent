@@ -21,7 +21,11 @@ import {
   host,
   LocalizedTabTitle,
   PALETTE_AREA,
+  type RouteContribution,
+  ROUTES_AREA,
+  SIDEBAR_NAV_AREA,
   SIDEBAR_PROFILE_GROUP_HEADER_AREA,
+  type SidebarNavContribution,
   translateNow
 } from '@hermes/plugin-sdk'
 import type { ChatEmptyProps, PluginContext, ProfileGroupRoute } from '@hermes/plugin-sdk'
@@ -29,14 +33,17 @@ import type { ChatEmptyProps, PluginContext, ProfileGroupRoute } from '@hermes/p
 import { startFaceClock, stopFaceClock } from './avatar'
 import {
   $botChatFocused,
+  $botsPageActive,
   $botsPaneVisible,
   $focusedBotOwner,
   $openBotChat,
+  $pendingBotOpen,
   $selectedBot,
   $selectedRosterHydrated,
   $selectedRosterKey,
   focusedMentionProfile
 } from './bot-state'
+import { BotsPage } from './bots-page'
 import { isCanonicalChatOnScreen, openBotCanonicalChat } from './canonical-chat'
 import { BotChatEmpty } from './chat-empty'
 import { bindProfileSync, RoutinesPane } from './cron'
@@ -73,7 +80,6 @@ import { startBotRelay, stopBotRelay } from './relay'
 import { $activityToasts } from './roster-actions'
 import {
   botChatOwnsWorkspace,
-  BotsPane,
   releaseStaleOpenBotChat,
   selectedRosterBot,
   sessionOwnsWorkspace
@@ -82,7 +88,7 @@ import { botRosterMeta, botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './ro
 import { startScreenAutoRaise } from './screen-autoraise'
 import { ProfileGroupScreenPortal } from './screen-portal'
 import { startHideSweepScheduler } from './session-sweep'
-import { bumpBotOpenGeneration, getBotOpenGeneration, ID, setPluginCtx } from './shared'
+import { BOTS_PATH, bumpBotOpenGeneration, getBotOpenGeneration, ID, setPluginCtx } from './shared'
 import type { GroupChat, RosterRow } from './types'
 import { loadBotSections } from './user-sections'
 
@@ -439,62 +445,54 @@ export default {
       area: SIDEBAR_PROFILE_GROUP_HEADER_AREA,
       data: { render: (route: ProfileGroupRoute) => <ProfileGroupScreenPortal route={route} /> }
     })
+
+    // The 机器人 entry: a sidebar nav row beside Skills & Tools and Messaging,
+    // with a full workspace page behind it. Bot Mode used to be a PANE docked
+    // into the sessions zone, which grew a 会话 | 机器人 tab strip at the top of
+    // the sidebar and made the roster and the conversation list two tabs of one
+    // column. The roster is a nav-row surface now: the sidebar is always
+    // Sessions, and the page carries the roster at workspace width.
+    //
+    // The label is (re)registered on locale change, like kanban's: `ctx.i18n.t`
+    // read at register time freezes whatever locale was active at module
+    // import.
+    const registerBotsNav = () =>
+      ctx.register({
+        id: 'nav',
+        area: SIDEBAR_NAV_AREA,
+        // Below the core rows (new session / Skills & Tools / Messaging) and
+        // above the enterprise pages (40/41, 50): the roster is a first-party
+        // surface and belongs with that group.
+        order: 30,
+        data: { codicon: 'hubot', label: ctx.i18n.t('nav'), path: BOTS_PATH } satisfies SidebarNavContribution
+      })
+
     ctx.register({
-      id: 'pane',
-      area: 'panes',
-      // `title` is sampled at register (module import, before the locale has
-      // loaded) — the tab renders `tabTitle` below so BOTS follows the locale.
-      title: translateNow('common.bots'),
-      // dock: explicit adoption gesture — CENTER-STACK into the sessions zone
-      // so the sidebar grows a SESSIONS | BOTS tab strip instead of splitting
-      // two cramped panes down the column. Center is safe now: insertAtGroup
-      // pins the zone's header explicitly shown on a center gain (and it
-      // stays shown once the zone has stacked), so the sessions pane can
-      // never vanish behind a stripless Bots tab — the lone-pane auto-hide
-      // trap this dock used to work around with a 'bottom' split.
-      // enforce: standing invariant, not a one-shot migration — the pane
-      // re-homes into the sessions strip at EVERY boot it isn't already
-      // there, whatever tokens or user placement an older install persisted.
-      // The one-time heal ('sessions-tab-v1') burned its token even when its
-      // guards skipped the move, so exactly the users who had fought the old
-      // stacked layout (dragged panes → $userPlacedPanes) stayed stacked
-      // forever. Owner's order: SESSIONS | BOTS is always a tab strip.
-      // An intra-session drag still sticks until the next launch (the
-      // invariant runs at adoption time only — see enforceDockedPanes in the
-      // tree store).
-      // collapsible: the pane lives in the sessions zone, so it must LEAVE
-      // the grid with that zone below the sidebar-collapse breakpoint. The
-      // sessions pane collapses alone without this flag. The zone then keeps
-      // a stranded BOTS tab on screen. The narrow edge overlay mirrors the
-      // zone's tab strip, so the pane stays reachable while collapsed.
-      data: {
-        placement: 'left',
-        width: '260px',
-        collapsible: true,
-        hideOnly: true,
-        tabTitle: () => <LocalizedTabTitle select={t => t.common.bots} />,
-        tabTitleText: () => translateNow('common.bots'),
-        dock: {
-          pane: 'sessions',
-          pos: 'center',
-          enforce: true
-        }
-      },
-      render: () => <BotsPane />
+      id: 'page',
+      area: ROUTES_AREA,
+      data: { path: BOTS_PATH } satisfies RouteContribution,
+      render: () => <BotsPage />
+    })
+
+    let disposeBotsNav = registerBotsNav()
+    ctx.i18n.onLocaleChange(() => {
+      disposeBotsNav()
+      disposeBotsNav = registerBotsNav()
     })
 
     // Routines — its OWN tiling pane splitting the workspace's right edge
     // (NOT the collapsible right sidebar; placement 'right' is that sidebar's
     // role and hides the pane until "Show Right Sidebar").
     //
-    // Registered ONLY while Bot Mode is on screen: the pane exists while the
-    // Bots pane is visible (its zone's active tab, or a lone pane in a
-    // stacked pre-heal layout) and unregisters when the user tabs back to
-    // Sessions — no Cronjobs tile squatting beside the chat outside Bot Mode.
-    // `ctx.register` returns the disposer that makes this cheap; the tree
-    // keeps the pane's spot, so re-registering re-adopts it where it was.
-    // host.paneVisibility is feature-detected: older desktops without the SDK
-    // export keep the always-registered behavior.
+    // Registered ONLY while Bot Mode is on screen — the 机器人 page is up, or a
+    // bot chat owns the workspace — and unregistered on the way out, so no
+    // Scheduled-jobs tile squats beside the chat outside Bot Mode.
+    // `ctx.register` returns the disposer that makes this cheap; the tree keeps
+    // the pane's spot, so re-registering re-adopts it where it was.
+    // host.paneVisibility is still feature-detected below: the sync reads the
+    // tile's OWN pane visibility to avoid unregistering it out from under its
+    // own click, and older desktops without the SDK export keep the
+    // always-registered behavior.
     const registerRoutinesPane = (restoreDismissed: boolean) => {
       const dispose = ctx.register({
         id: 'routines',
@@ -537,14 +535,48 @@ export default {
       return dispose
     }
 
+    // Bot Mode's on-screen signal. It used to mirror the sidebar PANE's
+    // visibility; the pane is gone (the roster is a page now), so the signal is
+    // the union of the ways the user can be in the bots world:
+    //   - the 机器人 page is MOUNTED ($botsPageActive). Mounted, not fronted:
+    //     opening a bot chat stacks its tab over the page, and the page stays
+    //     alive behind it;
+    //   - a bot chat was opened from the roster ($openBotChat — ephemeral,
+    //     kept only while that chat holds focus);
+    //   - an open is still in flight ($pendingBotOpen). This is the window the
+    //     page cannot cover: the cold open NAVIGATES to the session, so the
+    //     page unmounts BEFORE the open publishes its claim. Without this leg
+    //     the route change would read as "left Bot Mode", bump the open
+    //     generation, and the open would cancel itself;
+    //   - the focused chat IS some bot's canonical Bot Chat. The reload case:
+    //     the open claim does not survive a window restart, the roster does.
+    // Everything downstream keeps reading $botsPaneVisible, so exactly this one
+    // derivation moved.
+    const focusedChatIsBotChat = () => {
+      const stored = host.state?.focusedStoredSessionId?.get?.()
+      const roster = cachedUnionRoster()?.profiles
+
+      return Boolean(stored && Array.isArray(roster) && roster.some(bot => isCanonicalChatOnScreen(bot, stored)))
+    }
+
+    const computeBotMode = () =>
+      $botsPageActive.get() || Boolean($openBotChat.get()) || Boolean($pendingBotOpen.get()) || focusedChatIsBotChat()
+
     if (typeof host.paneVisibility === 'function') {
-      // The contribution-scoped pane id (`register` prefixes `${ID}:`).
-      const $sidebarVisible = host.paneVisibility(`${ID}:pane`)
       let unregisterRoutines: null | (() => void) = null
-      // Armed by each Bots-tab entry, spent by the first registration after it.
+      // Armed by each entry into the bots world, spent by the first
+      // registration after it.
       let restoreDismissedOnRegister = true
+      let botMode = false
+      let disposed = false
 
       const syncRoutinesPane = () => {
+        // The deferred reconcile below can outlive a disable/reload; a pane
+        // registered for a torn-down plugin would be stranded with no owner.
+        if (disposed) {
+          return
+        }
+
         if (botChatOwnsWorkspace()) {
           if (!unregisterRoutines) {
             unregisterRoutines = registerRoutinesPane(restoreDismissedOnRegister)
@@ -567,47 +599,66 @@ export default {
         }
       }
 
-      const stopSidebarSync = $sidebarVisible.listen(visible => {
-        $botsPaneVisible.set(Boolean(visible))
+      /** Recompute Bot Mode, act on the EDGES — seat the workspace owner on the
+       *  way in, strand it on the way out — then reconcile the tile. Only the
+       *  edges act: a focus change inside the bots world must not re-seat an
+       *  owner the user is not asking for. */
+      const syncBotMode = () => {
+        const next = computeBotMode()
 
-        if (visible) {
-          restoreDismissedOnRegister = true
+        if (next !== botMode) {
+          botMode = next
+          $botsPaneVisible.set(next)
 
-          const group = $groupChatWorkspace.get()
-          const selected = selectedRosterBot($lastRoster.get(), $selectedRosterKey.get())
+          if (next) {
+            restoreDismissedOnRegister = true
 
-          // Owner routing only. With neither a group nor a selected bot there
-          // is no bot-owned surface to scope, so leave the workspace on
-          // whatever the user was already looking at — the roster-hydration
-          // effect in BotsPane scopes it the moment a real owner exists.
-          //
-          // This is where the Bots home used to claim the center and refuse a
-          // new chat with "Select a Bot or group first." Deleting the home
-          // deleted the dead end it was apologizing for: with nothing selected
-          // the center is an ordinary session and `+` works there. The refusal
-          // itself still stands for the cases that remain — a group room, and
-          // a selected row too orphaned to route (setBotsWorkspaceOwner's
-          // blocked target).
-          if (group) {
-            setBotsWorkspaceOwner(
-              groupWorkspaceOwnerKey(group),
-              null,
-              'New group conversations start in the group composer.'
-            )
-          } else if (selected) {
-            setBotsWorkspaceOwner(botWorkspaceOwnerKey(selected), selected)
+            const group = $groupChatWorkspace.get()
+            const selected = selectedRosterBot($lastRoster.get(), $selectedRosterKey.get())
+
+            // Owner routing only. With neither a group nor a selected bot there
+            // is no bot-owned surface to scope, so leave the workspace on
+            // whatever the user was already looking at — the roster-hydration
+            // effect in BotsPane scopes it the moment a real owner exists.
+            //
+            // This is where the Bots home used to claim the center and refuse a
+            // new chat with "Select a Bot or group first." Deleting the home
+            // deleted the dead end it was apologizing for: with nothing selected
+            // the center is an ordinary session and `+` works there. The refusal
+            // itself still stands for the cases that remain — a group room, and
+            // a selected row too orphaned to route (setBotsWorkspaceOwner's
+            // blocked target).
+            if (group) {
+              setBotsWorkspaceOwner(
+                groupWorkspaceOwnerKey(group),
+                null,
+                'New group conversations start in the group composer.'
+              )
+            } else if (selected) {
+              setBotsWorkspaceOwner(botWorkspaceOwnerKey(selected), selected)
+            }
+          } else {
+            // Strand any owner wake still dialing. Its SDK open will fail the
+            // workspace token too; this plugin generation prevents that
+            // expected cancellation from showing an error after the user
+            // deliberately left the bots world.
+            bumpBotOpenGeneration()
+            host.setWorkspaceScope?.('sessions')
           }
-        } else {
-          // Strand any owner wake still dialing. Its SDK open will fail the
-          // workspace token too; this plugin generation prevents that expected
-          // cancellation from showing an error after the user deliberately
-          // returned to Sessions.
-          bumpBotOpenGeneration()
-          host.setWorkspaceScope?.('sessions')
         }
 
         syncRoutinesPane()
-      })
+      }
+
+      // The page mounting IS the entry gesture the Bots tab used to be.
+      const stopPageSync = $botsPageActive.listen(syncBotMode)
+      // An open landing, or a claim released by another tab taking focus,
+      // moves the bots world in or out — the other half of the same edge.
+      const stopOpenChatSync = $openBotChat.listen(syncBotMode)
+      // An open in flight keeps Bot Mode on ACROSS the navigation it performs;
+      // its settle is what may take the mode back down (a failed open), so the
+      // clear must re-evaluate too or the mode sticks on with nothing on screen.
+      const stopPendingOpenSync = $pendingBotOpen.listen(syncBotMode)
 
       const stopGroupSync = $groupChatWorkspace.listen(syncRoutinesPane)
 
@@ -632,7 +683,9 @@ export default {
           ? focusStore.listen(id => {
               $botChatFocused.set(Boolean(id))
               releaseStaleOpenBotChat(id)
-              syncRoutinesPane()
+              // Focus decides the reload case: landing on a bot's canonical
+              // chat after a restart IS Bot Mode, and leaving it is not.
+              syncBotMode()
             })
           : null
 
@@ -701,18 +754,23 @@ export default {
             })
           : null
 
-      $botsPaneVisible.set(Boolean($sidebarVisible.get()))
+      // A persisted route can boot straight into the bots world (a bot chat on
+      // screen). Reconcile now, then once more after the layout mutation
+      // finishes.
+      botMode = computeBotMode()
+      $botsPaneVisible.set(botMode)
       $botChatFocused.set(sessionOwnsWorkspace())
-      // A persisted layout can boot directly into Bot Mode. Reconcile now,
-      // then once more after the layout mutation finishes.
       syncRoutinesPane()
       scheduleRoutinesSync()
 
       if (typeof ctx.onDispose === 'function') {
-        // The registration disposer is already tracked by ctx.register; only
+        // The registration disposers are already tracked by ctx.register; only
         // the listeners need explicit teardown or they survive plugin disable.
         ctx.onDispose(() => {
-          stopSidebarSync()
+          disposed = true
+          stopPageSync()
+          stopOpenChatSync()
+          stopPendingOpenSync()
           stopGroupSync()
           stopFocusSync?.()
           stopReclaimSync?.()

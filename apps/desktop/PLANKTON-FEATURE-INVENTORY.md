@@ -579,7 +579,7 @@
 | `M8-017` | 看板导出/导入 | 看板切换器 | 需开关 | `src/plugins/kanban/board-switcher.tsx:395` |
 | `M8-018` | 编排设置面板 | 看板编排设置 | 需开关 | `src/plugins/kanban/orchestration.tsx:134` |
 | `M8-019` | 任务模型覆盖 | 任务抽屉/新建 | 需开关 | `src/plugins/kanban/model-override.tsx:61` |
-| `M8-020` | 机器人名册面板 | Bot Mode 侧栏 pane | 默认可见 | `src/plugins/hermes-bots/roster-pane.tsx:231` |
+| `M8-020` | 机器人名册页面 | 主内容区 `/bots` 页面（侧栏导航行「机器人」，与「技能与工具」「消息平台」同级；不再是侧栏 pane / tab 条） | 默认可见 | `src/plugins/hermes-bots/bots-page.tsx:21; src/plugins/hermes-bots/roster-pane.tsx:231` |
 | `M8-021` | 机器人行 | 名册行 | 默认可见 | `src/plugins/hermes-bots/bot-row.tsx:116` |
 | `M8-022` | 分组行 | 名册分组 | 默认可见 | `src/plugins/hermes-bots/bot-row.tsx:511` |
 | `M8-023` | 名册工具栏 | 名册顶部 | 默认可见 | `src/plugins/hermes-bots/roster-pane-toolbar.tsx:48` |
@@ -603,12 +603,12 @@
 | `M8-041` | 新建 Routine | Routines 头部「新建」 | 默认可见 | `src/plugins/hermes-bots/cron.tsx:955` |
 | `M8-042` | Routine 详情检查器 | 点击 Routine 行 | 默认可见 | `src/plugins/hermes-bots/cron.tsx:428` |
 | `M8-043` | Routine 行操作 | Routines 列表行 | 默认可见 | `src/plugins/hermes-bots/cron.tsx:490` |
-| `M8-044` | Screen 门户 | 侧边栏/机器人面板 | 默认可见 | `src/plugins/hermes-bots/screen-portal.tsx:167` |
+| `M8-044` | Screen 门户 | 侧边栏/机器人页面 | 默认可见 | `src/plugins/hermes-bots/screen-portal.tsx:167` |
 | `M8-045` | 网关分组 Screen 门户 | Sessions 侧栏分组 | 默认可见 | `src/plugins/hermes-bots/screen-portal.tsx:214` |
 | `M8-046` | Screen 面板 | 打开机器人屏幕 | 默认可见 | `src/plugins/hermes-bots/screen-pane.tsx:81` |
 | `M8-047` | Screen 安装卡 | Screen 面板 | 需安装 | `src/plugins/hermes-bots/screen-install.tsx:28` |
 | `M8-048` | Screen hero | Routines/屏幕顶部 | 默认可见 | `src/plugins/hermes-bots/screen-hero.tsx:108` |
-| `M8-049` | 机器人 @提及补全 | 聊天输入框 | 默认可见 | `src/plugins/hermes-bots/plugin.tsx:144` |
+| `M8-049` | 机器人 @提及补全 | 聊天输入框 | 默认可见 | `src/plugins/hermes-bots/plugin.tsx:150` |
 | `M8-050` | 群聊保持状态/澄清 | 群聊 | 默认可见 | `src/plugins/hermes-bots/group-hold-status.tsx:16` |
 | `M8-051` | Radio 状态栏播放器 | 状态栏右侧 | 需开关 | `src/plugins/radio/plugin.js:696` |
 | `M8-052` | Radio 电台浏览与搜索 | Radio 面板 | 需开关 | `src/plugins/radio/plugin.js:589` |

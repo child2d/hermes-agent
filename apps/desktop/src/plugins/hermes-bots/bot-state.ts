@@ -44,7 +44,16 @@ export const $selectedBot = atom('default')
 export const $selectedRosterKey = atom('')
 export const $selectedRosterHydrated = atom(false)
 export const $rosterHydrated = atom(false)
-/** Mirrors host.paneVisibility('hermes-bots:pane') — wired in register(). */
+/** The 机器人 page is MOUNTED. Written by the page itself (one effect, cleared
+ *  on unmount) — a contributed route only renders while the router is on it,
+ *  so the mount IS the "user is looking at the roster" signal. */
+export const $botsPageActive = atom(false)
+/** Bot Mode context is on screen — wired in register() to the union of the
+ *  page being up, a bot chat having been opened, and the focused chat being
+ *  some bot's canonical Bot Chat. It replaces the old
+ *  `host.paneVisibility('hermes-bots:pane')` mirror now that the roster is a
+ *  page: the Routines tile, the workspace-owner seating and the roster's own
+ *  reconcile all key off "are we in the bots world", not off a pane. */
 export const $botsPaneVisible = atom(false)
 /** An explicit open landed: {key, openedRegistryId, openedSessionId}. The
  *  registry id is empty for the legacy newChat draft fallback and for a click

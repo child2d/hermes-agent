@@ -12,6 +12,12 @@ import { atom, type PluginContext } from '@hermes/plugin-sdk'
 
 export const ID = 'hermes-bots'
 
+/** The Bot Mode workspace page's route. The roster is a FULL PAGE in the
+ *  workspace pane (paired with a `sidebar.nav` row beside Skills & Tools /
+ *  Messaging), not a sidebar pane: the sidebar stays on Sessions and never
+ *  grows a 会话 | 机器人 tab strip. */
+export const BOTS_PATH = '/bots'
+
 /** Captured in register() so components can reach plugin storage. */
 let pluginCtx: PluginContext | null = null
 
