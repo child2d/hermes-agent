@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { ErrorBoundary } from '@/components/error-boundary'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/themes/context'
 
 import { QuickEntryApp } from './quick-entry-app'
@@ -28,11 +29,15 @@ export function mountQuickEntry(): void {
 
   createRoot(root).render(
     <StrictMode>
-      <ErrorBoundary label="quick-entry">
-        <ThemeProvider>
-          <QuickEntryApp />
-        </ThemeProvider>
-      </ErrorBoundary>
+      {/* Separate React root from main.tsx: stock Radix `Tooltip` throws with no
+          ancestor provider, so this window needs its own. */}
+      <TooltipProvider>
+        <ErrorBoundary label="quick-entry">
+          <ThemeProvider>
+            <QuickEntryApp />
+          </ThemeProvider>
+        </ErrorBoundary>
+      </TooltipProvider>
     </StrictMode>
   )
 }

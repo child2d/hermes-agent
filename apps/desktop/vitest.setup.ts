@@ -1,4 +1,7 @@
 import { configure } from '@testing-library/react'
+import type * as RtlModule from '@testing-library/react'
+import type { RenderOptions, RenderResult } from '@testing-library/react'
+import { vi } from 'vitest'
 
 import { InertResizeObserver } from './src/test/jsdom'
 
@@ -78,3 +81,38 @@ if ('Element' in globalThis) {
 // as the 15s testTimeout above it while still finishing below it, so a
 // genuinely hung await still surfaces as this assertion, not a test timeout.
 configure({ asyncUtilTimeout: 12_000 })
+
+// The app hoists ONE `TooltipProvider` to its root (main.tsx). Stock Radix throws
+// "`Tooltip` must be used within `TooltipProvider`" with no ancestor — the fork's
+// own `Tip` used to carry a private fallback provider, which is why isolated
+// renders never needed one before. Mock the library once here instead of wrapping
+// ~478 `render()` call sites: compose our provider around whatever `wrapper` a
+// test already passes.
+vi.mock('@testing-library/react', async (importOriginal: () => Promise<typeof RtlModule>) => {
+  const actual = await importOriginal()
+  const React = await import('react')
+  const { TooltipProvider } = await import('./src/components/ui/tooltip')
+
+  type Wrapper = React.ComponentType<{ children?: React.ReactNode }>
+
+  const withProviders = (inner?: Wrapper): Wrapper =>
+    function Providers({ children }) {
+      const nested = inner ? React.createElement(inner, null, children) : (children as React.ReactElement)
+
+      return React.createElement(TooltipProvider, null, nested)
+    }
+
+  return {
+    ...actual,
+    render: ((ui: React.ReactElement, options?: RenderOptions): RenderResult =>
+      actual.render(ui, {
+        ...options,
+        wrapper: withProviders(options?.wrapper as Wrapper | undefined)
+      })) as typeof actual.render,
+    renderHook: ((callback: () => unknown, options?: RenderOptions) =>
+      actual.renderHook(callback as never, {
+        ...options,
+        wrapper: withProviders(options?.wrapper as Wrapper | undefined)
+      })) as typeof actual.renderHook
+  }
+})
