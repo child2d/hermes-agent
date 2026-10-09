@@ -18,7 +18,7 @@ function RuntimeChip() {
         asChild: true,
         children: jsxs('span', {
           className: cn(
-            'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem]',
+            'inline-flex h-full items-center gap-1 px-1.5 text-2xs',
             'text-(--ui-text-tertiary)'
           ),
           children: [jsx('span', { 'aria-hidden': true, children: '⚡' }), jsx('span', { children: 'runtime' })]
