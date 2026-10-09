@@ -52,7 +52,7 @@ type DialogBannerTone = 'error' | 'warn' | 'info'
 const DIALOG_BANNER_TONES: Record<DialogBannerTone, string> = {
   error: 'bg-destructive/12 text-destructive',
   warn: 'bg-primary/12 text-primary',
-  info: 'bg-[color-mix(in_srgb,var(--ui-chat-bubble-background),white_30%)] text-[color-mix(in_srgb,var(--ui-chat-bubble-background),black_60%)] dark:bg-[color-mix(in_srgb,var(--ui-chat-bubble-background),black_20%)] dark:text-[color-mix(in_srgb,var(--ui-chat-bubble-background),white_60%)]'
+  info: 'bg-muted text-muted-foreground'
 }
 
 // Radix focuses the first focusable element inside Dialog.Content on open. In
@@ -79,7 +79,7 @@ function DialogCloseButton() {
     <DialogPrimitive.Close asChild data-slot="dialog-close-button">
       <Button
         aria-label={t.common.close}
-        className="absolute right-2.5 top-2.5 z-20 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground"
+        className="absolute right-2.5 top-2.5 z-20 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         size="icon"
         variant="ghost"
       >

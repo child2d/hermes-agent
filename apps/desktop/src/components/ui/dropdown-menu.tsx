@@ -201,7 +201,7 @@ function DropdownMenuSearch({
       <input
         autoFocus
         className={cn(
-          'h-4 w-full bg-transparent text-xs leading-none text-foreground placeholder:text-(--ui-text-tertiary) focus:outline-none',
+          'h-4 w-full bg-transparent text-xs leading-none text-foreground placeholder:text-muted-foreground focus:outline-none',
           className
         )}
         onChange={event => {
@@ -465,7 +465,7 @@ function DropdownMenuSubTrigger({
       {...hoverProps}
     >
       {children}
-      {!hideChevron && <Codicon className="ml-auto text-(--ui-text-tertiary)" name="chevron-right" size="1rem" />}
+      {!hideChevron && <Codicon className="ml-auto text-muted-foreground" name="chevron-right" size="1rem" />}
     </DropdownMenuPrimitive.SubTrigger>
   )
 }

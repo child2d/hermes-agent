@@ -46,12 +46,12 @@ function CommandInput({ className, right, ...props }: CommandInputProps) {
     // Same row as DropdownMenuSearch + its hairline: no icon, no box.
     return (
       <div
-        className="mb-1 flex items-center gap-2 border-b border-(--ui-stroke-tertiary) px-2 py-1.5"
+        className="mb-1 flex items-center gap-2 border-b border-border px-2 py-1.5"
         data-slot="command-input-wrapper"
       >
         <CommandPrimitive.Input
           className={cn(
-            'h-4 w-full bg-transparent text-xs leading-none text-foreground outline-none placeholder:text-(--ui-text-tertiary) disabled:cursor-not-allowed disabled:opacity-50',
+            'h-4 w-full bg-transparent text-xs leading-none text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50',
             className
           )}
           data-slot="command-input"
@@ -108,7 +108,7 @@ function CommandEmpty({ className, ...props }: React.ComponentProps<typeof Comma
     <CommandPrimitive.Empty
       className={cn(
         variant === 'menu'
-          ? 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)'
+          ? 'px-2 py-3 text-center text-xs text-muted-foreground'
           : 'py-6 text-center text-sm text-muted-foreground',
         className
       )}
@@ -127,7 +127,7 @@ function CommandGroup({ className, ...props }: React.ComponentProps<typeof Comma
         'overflow-hidden text-foreground **:[[cmdk-group-heading]]:sticky **:[[cmdk-group-heading]]:top-0 **:[[cmdk-group-heading]]:z-10',
         variant === 'menu'
           ? // menuLabelClass, spelled out so Tailwind can see it.
-            'p-0 **:[[cmdk-group-heading]]:bg-(--ui-bg-elevated) **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-(--ui-text-tertiary)'
+            'p-0 **:[[cmdk-group-heading]]:bg-popover **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-muted-foreground'
           : 'p-1 **:[[cmdk-group-heading]]:bg-popover **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-muted-foreground',
         className
       )}
@@ -142,7 +142,7 @@ function CommandSeparator({ className, ...props }: React.ComponentProps<typeof C
 
   return (
     <CommandPrimitive.Separator
-      className={cn('-mx-1 h-px', variant === 'menu' ? 'my-1 bg-(--ui-stroke-tertiary)' : 'bg-border', className)}
+      className={cn('-mx-1 h-px bg-border', variant === 'menu' && 'my-1', className)}
       data-slot="command-separator"
       {...props}
     />
