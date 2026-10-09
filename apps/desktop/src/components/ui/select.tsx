@@ -63,7 +63,7 @@ function SelectContent({
         className={cn(
           menuSurfaceClass,
           menuMotionClass,
-          'relative z-(--z-modal-popover) max-h-72 min-w-36 overflow-hidden p-0',
+          'relative z-(--z-modal-popover) max-h-96 min-w-[8rem] overflow-hidden p-0',
           position === 'popper' &&
             'max-h-[min(18rem,var(--radix-select-content-available-height))] origin-(--radix-select-content-transform-origin)',
           className
@@ -101,7 +101,7 @@ function SelectItem({ className, children, ...props }: React.ComponentProps<type
       className={cn(
         menuItemClass,
         menuItemFocusClass,
-        'w-full cursor-pointer pr-7 data-disabled:pointer-events-none data-disabled:cursor-default data-disabled:opacity-50',
+        'w-full cursor-pointer pr-8 data-disabled:pointer-events-none data-disabled:cursor-default data-disabled:opacity-50',
         className
       )}
       data-slot="select-item"
@@ -120,7 +120,7 @@ function SelectItem({ className, children, ...props }: React.ComponentProps<type
 function SelectSeparator({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Separator>) {
   return (
     <SelectPrimitive.Separator
-      className={cn('-mx-1 my-1 h-px bg-(--ui-stroke-tertiary)', className)}
+      className={cn('-mx-1 my-1 h-px bg-border', className)}
       data-slot="select-separator"
       {...props}
     />

@@ -64,8 +64,8 @@ function CommandInput({ className, right, ...props }: CommandInputProps) {
   }
 
   return (
-    <div className="flex h-11 items-center gap-2 border-b border-border px-3" data-slot="command-input-wrapper">
-      <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+    <div className="flex h-9 items-center gap-2 border-b px-3" data-slot="command-input-wrapper">
+      <SearchIcon className="size-4 shrink-0 opacity-50" />
       <CommandPrimitive.Input
         className={cn(
           'flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50',
@@ -91,7 +91,7 @@ function CommandList({ className, ...props }: React.ComponentProps<typeof Comman
     <CommandPrimitive.List
       className={cn(
         'overflow-y-auto overflow-x-hidden',
-        variant === 'menu' ? 'dt-portal-scrollbar max-h-72' : 'max-h-100',
+        variant === 'menu' ? 'dt-portal-scrollbar max-h-72' : 'max-h-[300px] scroll-py-1',
         pointerQuiet && 'pointer-events-none',
         className
       )}
@@ -158,7 +158,7 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
         variant === 'menu'
           ? cn(
               menuItemClass,
-              'cursor-pointer data-[selected=true]:bg-(--ui-control-active-background) data-[selected=true]:text-foreground'
+              'cursor-pointer data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground'
             )
           : 'relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground',
         'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',

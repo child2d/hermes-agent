@@ -1334,13 +1334,12 @@ button {
    attribute selectors out-specify the Tailwind utilities and silently override
    the variants. */
 
-/* Surface paint for the panels that are still on the fork's shell (dropdown
-   menu, select). Dialog content is NOT listed any more — it now carries stock
-   shadcn classes (`bg-background` / `border` / `shadow-lg`), and an attribute
-   selector out-specifies those utilities, so leaving it here would silently
-   pin the old paint over the stock look. */
-[data-slot='dropdown-menu-content'],
-[data-slot='select-content'],
+/* Surface paint for the panels still on the fork's shell
+   (`thread-timeline-popover`). Dialog content, dropdown menus and selects are
+   NOT listed any more — they carry stock shadcn classes (`bg-popover` /
+   `border` / `shadow-md`), and an attribute selector out-specifies those
+   utilities, so leaving them here would silently pin the old paint over the
+   stock look. */
 [data-slot='thread-timeline-popover'] {
   border-color: var(--ui-stroke-secondary);
   background: color-mix(in srgb, var(--ui-bg-elevated) 96%, transparent);

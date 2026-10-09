@@ -37,7 +37,7 @@ function searchHoldsFocus(row: HTMLElement): boolean {
   )
 }
 
-const searchHoverClass = 'data-[highlighted]:bg-(--ui-control-active-background) data-[highlighted]:text-foreground'
+const searchHoverClass = 'data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground'
 
 type RowPointerHandlers = Pick<React.HTMLAttributes<HTMLDivElement>, 'onPointerLeave' | 'onPointerMove'>
 
@@ -292,7 +292,7 @@ function DropdownMenuItem({
         menuItemClass,
         menuItemFocusClass,
         searchHoverClass,
-        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg:not([class*='text-'])]:text-(--ui-text-tertiary) data-[variant=destructive]:*:[svg]:text-destructive!",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg:not([class*='text-'])]:text-muted-foreground data-[variant=destructive]:*:[svg]:text-destructive!",
         className
       )}
       data-inset={inset}
@@ -375,7 +375,7 @@ function DropdownMenuLabel({
 }) {
   return (
     <DropdownMenuPrimitive.Label
-      className={cn(menuLabelClass, 'data-[inset]:pl-7', className)}
+      className={cn(menuLabelClass, 'data-[inset]:pl-8', className)}
       data-inset={inset}
       data-slot="dropdown-menu-label"
       {...props}
@@ -386,7 +386,7 @@ function DropdownMenuLabel({
 function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
   return (
     <DropdownMenuPrimitive.Separator
-      className={cn('-mx-1 my-1 h-px bg-(--ui-stroke-tertiary)', className)}
+      className={cn('-mx-1 my-1 h-px bg-border', className)}
       data-slot="dropdown-menu-separator"
       {...props}
     />
@@ -456,7 +456,7 @@ function DropdownMenuSubTrigger({
     <DropdownMenuPrimitive.SubTrigger
       className={cn(
         searchHoverClass,
-        "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none focus:bg-(--ui-control-active-background) focus:text-foreground data-[inset]:pl-7 data-[state=open]:bg-(--ui-control-active-background) data-[state=open]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='text-'])]:text-(--ui-text-tertiary)",
+        "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[inset]:pl-8 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className
       )}
       data-inset={inset}
