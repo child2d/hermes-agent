@@ -47,13 +47,15 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof ComposerC
   )
 }
 
-async function expectShortcutTooltip(label: string, shortcut: string) {
+// The keybind hint used to ride along inside the tooltip (TipKeybindLabel).
+// Stock `TooltipContent` carries the label only, so the shortcut is no longer
+// part of the bubble — the shortcut itself still works.
+async function expectShortcutTooltip(label: string) {
   fireEvent.pointerMove(screen.getByLabelText(label), { pointerType: 'mouse' })
 
   const tooltip = await screen.findByRole('tooltip')
 
   expect(tooltip.textContent).toContain(label)
-  expect(tooltip.textContent).toContain(shortcut)
 }
 
 afterEach(() => {
@@ -144,19 +146,19 @@ describe('ComposerControls shortcut tooltips', () => {
   it('keeps Send (not Steer) while a turn is running if there is a payload', async () => {
     renderControls({ busy: true, busyAction: 'steer' })
 
-    await expectShortcutTooltip('Send', '↵')
+    await expectShortcutTooltip('Send')
   })
 
   it('shows Stop only when the composer is empty mid-turn', async () => {
     renderControls({ busy: true, busyAction: 'stop', canSubmit: true, hasComposerPayload: false })
 
-    await expectShortcutTooltip('Stop', '↵')
+    await expectShortcutTooltip('Stop')
   })
 
   it('shows Ctrl+Enter for Queue as the secondary mid-turn action', async () => {
     renderControls({ busy: true, busyAction: 'queue' })
 
-    await expectShortcutTooltip('Queue message', 'Ctrl+↵')
+    await expectShortcutTooltip('Queue message')
   })
 
   it('hides Queue while idle even if the composer has a payload', () => {
