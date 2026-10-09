@@ -24,7 +24,10 @@ vi.mock('@hermes/plugin-sdk', async () => {
     ),
     Codicon: () => null,
     GlyphSpinner: () => null,
-    Tip: ({ children }: { children: ReactNode }) => <>{children}</>,
+    Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+    TooltipContent: () => null,
+    TooltipProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+    TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
     EmptyState: () => null,
     useValue: useStore,
     host: { onEvent: onGatewayEvent }

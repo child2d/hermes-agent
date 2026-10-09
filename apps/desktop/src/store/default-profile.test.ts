@@ -33,7 +33,13 @@ describe('default profile preference', () => {
       return read.promise
     })
 
-    vi.stubGlobal('window', { hermesDesktop: { profile: { getDefault, onDefaultChanged } } })
+    // Keep the real timers: the global test wrapper mounts a Radix
+    // TooltipProvider, and its unmount path calls window.clearTimeout.
+    vi.stubGlobal('window', {
+      clearTimeout: globalThis.clearTimeout,
+      hermesDesktop: { profile: { getDefault, onDefaultChanged } },
+      setTimeout: globalThis.setTimeout
+    })
     const { unmount } = renderHook(useDefaultProfilePreference)
 
     await act(async () => {
@@ -52,7 +58,12 @@ describe('default profile preference', () => {
     const read = deferred<typeof first>()
     const getDefault = vi.fn(() => read.promise)
     const setDefault = vi.fn(async () => second)
-    vi.stubGlobal('window', { hermesDesktop: { profile: { getDefault, setDefault } } })
+    // Same as above: keep the real timer functions on the stubbed window.
+    vi.stubGlobal('window', {
+      clearTimeout: globalThis.clearTimeout,
+      hermesDesktop: { profile: { getDefault, setDefault } },
+      setTimeout: globalThis.setTimeout
+    })
 
     const refreshing = preference.refreshDefaultProfile()
     await preference.setDefaultProfile(second)

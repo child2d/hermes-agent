@@ -51,7 +51,10 @@ vi.mock('@hermes/plugin-sdk', async () => {
     DialogHeader: Passthrough,
     DialogTitle: Passthrough,
     Input: () => null,
-    Tip: Passthrough,
+    Tooltip: Passthrough,
+    TooltipContent: () => null,
+    TooltipProvider: Passthrough,
+    TooltipTrigger: Passthrough,
     relativeTime: () => 'now',
     useI18n: () => ({ t: { common: { cancel: 'Cancel', save: 'Save' } } }),
     usePluginI18n: () => translateBots

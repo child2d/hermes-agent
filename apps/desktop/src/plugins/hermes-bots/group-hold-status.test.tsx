@@ -27,7 +27,10 @@ vi.mock('@hermes/plugin-sdk', async () => {
     Input: (props: React.ComponentProps<'input'>) => <input {...props} />,
     relativeTime: () => 'now',
     RowButton: (props: React.ComponentProps<'button'>) => <button type="button" {...props} />,
-    Tip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    TooltipContent: () => null,
+    TooltipProvider: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    TooltipTrigger: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     useI18n: () => ({ t: { common: { cancel: 'Cancel', save: 'Save' } } }),
     usePluginI18n: () => translateBots
   }

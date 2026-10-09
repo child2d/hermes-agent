@@ -45,7 +45,10 @@ vi.mock('@hermes/plugin-sdk', async () => {
         set <code data-testid="renderer-code">{text}</code> first
       </p>
     ),
-    Tip: ({ children }: { children: ReactNode }) => children,
+    Tooltip: ({ children }: { children: ReactNode }) => children,
+    TooltipContent: () => null,
+    TooltipProvider: ({ children }: { children: ReactNode }) => children,
+    TooltipTrigger: ({ children }: { children: ReactNode }) => children,
     relativeTime: () => 'now',
     useI18n: () => ({ t: { common: { cancel: 'Cancel', save: 'Save' } } }),
     usePluginI18n: () => translateBots

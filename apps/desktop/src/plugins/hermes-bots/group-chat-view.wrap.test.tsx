@@ -43,7 +43,10 @@ vi.mock('@hermes/plugin-sdk', async () => {
     // The room's Streamdown fallback renders a bare <pre> for fenced code —
     // wide content must wrap via the room wrapper, not scroll sideways.
     Streamdown: ({ children }: { children?: ReactNode }) => <pre>{children}</pre>,
-    Tip: ({ children }: { children: ReactNode }) => children,
+    Tooltip: ({ children }: { children: ReactNode }) => children,
+    TooltipContent: () => null,
+    TooltipProvider: ({ children }: { children: ReactNode }) => children,
+    TooltipTrigger: ({ children }: { children: ReactNode }) => children,
     relativeTime: () => 'now',
     useI18n: () => ({ t: { common: { cancel: 'Cancel', save: 'Save' } } }),
     usePluginI18n: () => translateBots
