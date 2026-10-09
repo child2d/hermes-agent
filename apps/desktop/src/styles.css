@@ -151,6 +151,14 @@
   --font-sans: var(--dt-font-sans);
   --font-mono: var(--dt-font-mono);
 
+  /* Typography ladder. Tailwind 4.3.3 bottoms out at `--text-xs` (12px), so
+     anything smaller had NO utility to use — which is why the app hand-wrote
+     ~32 near-duplicate sizes (0.4375–1rem, i.e. 7–16px) across 470+ places.
+     This adds the missing sub-xs rung so the whole UI can sit on one ladder
+     anchored at `--text-sm`: 11 / 12 / 14 / 16 / 18 / 20. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
   --spacing-mul: var(--dt-spacing-mul, 1);
 
   --radius-xs: calc(var(--radius-scalar) * 0.125rem);
@@ -509,7 +517,7 @@
 
     --composer-shell-pad-block-end: 0.625rem;
     --message-text-indent: 0.75rem;
-    --conversation-text-base-size: 0.8125rem;
+    --conversation-text-base-size: 0.875rem;
     --conversation-tool-base-size: 0.6875rem;
     --conversation-caption-base-size: 0.75rem;
     --conversation-base-line-height: 1.125rem;
@@ -804,7 +812,7 @@
     background: var(--ui-chat-surface-background);
     color: var(--dt-foreground);
     font-family: var(--dt-font-sans);
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     line-height: var(--dt-line-height, 1.55);
     letter-spacing: var(--dt-letter-spacing, 0);
     -webkit-user-select: none;
@@ -2379,7 +2387,7 @@ button[data-slot='aui_msg-reactions']:not([data-reacted])[data-state='open'] {
   border-radius: 9999px;
   background: transparent;
   padding: 0.1rem 0.55rem;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.1rem;
   color: color-mix(in srgb, var(--dt-destructive) 80%, var(--ui-text-secondary));
   cursor: pointer;
