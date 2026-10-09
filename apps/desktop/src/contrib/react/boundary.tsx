@@ -46,7 +46,7 @@ export function ContribBoundary({ children, id, variant = 'pane' }: ContribBound
         variant === 'chip' ? (
           <Tooltip><TooltipTrigger asChild>
             <button
-              className="inline-flex items-center gap-1 rounded px-1.5 text-[0.6875rem] text-destructive transition-colors hover:bg-(--chrome-action-hover)"
+              className="inline-flex items-center gap-1 rounded px-1.5 text-2xs text-destructive transition-colors hover:bg-(--chrome-action-hover)"
               onClick={reset}
               type="button"
             >

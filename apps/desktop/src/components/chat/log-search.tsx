@@ -84,7 +84,7 @@ export function LogSearchField({ containerClassName, onChange, placeholder, sear
             <span
               aria-live="polite"
               className={cn(
-                'mr-0.5 text-[0.6875rem] leading-none tabular-nums',
+                'mr-0.5 text-2xs leading-none tabular-nums',
                 search.hits.length ? 'text-(--ui-text-secondary)' : 'text-destructive'
               )}
             >

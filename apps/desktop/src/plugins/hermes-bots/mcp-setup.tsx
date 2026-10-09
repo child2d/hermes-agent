@@ -297,14 +297,14 @@ export function McpSetupButton({ profile, entry, onDone, ensureProfile }: McpSet
 
   if (supported === false) {
     return (
-      <span className="ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)">
+      <span className="ml-1.5 text-2xs text-(--ui-text-quaternary)">
         {b.tools.needsSetup(requires.join(', '))}
       </span>
     )
   }
 
   if (phase === 'done') {
-    return <span className="ml-1.5 text-[0.65rem] text-(--ui-success)">{b.tools.setUpDone}</span>
+    return <span className="ml-1.5 text-2xs text-(--ui-success)">{b.tools.setUpDone}</span>
   }
 
   if (phase === 'keys') {
@@ -312,7 +312,7 @@ export function McpSetupButton({ profile, entry, onDone, ensureProfile }: McpSet
       <div className="mt-1 grid gap-1">
         {requires.map(k => (
           <Input
-            className="h-6 text-[0.7rem]"
+            className="h-6 text-xs"
             key={k}
             onChange={e =>
               setKeyValues(prev => ({
@@ -338,16 +338,16 @@ export function McpSetupButton({ profile, entry, onDone, ensureProfile }: McpSet
   }
 
   if (phase === 'oauth') {
-    return <span className="ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)">{message || b.tools.authorizing}</span>
+    return <span className="ml-1.5 text-2xs text-(--ui-text-quaternary)">{message || b.tools.authorizing}</span>
   }
 
   if (phase === 'busy') {
-    return <span className="ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)">{b.tools.working}</span>
+    return <span className="ml-1.5 text-2xs text-(--ui-text-quaternary)">{b.tools.working}</span>
   }
 
   if (phase === 'error') {
     return (
-      <span className="ml-1.5 text-[0.65rem] text-(--ui-danger,#f87171)">
+      <span className="ml-1.5 text-2xs text-(--ui-danger,#f87171)">
         {(message || b.tools.setupFailed) + ' '}
         <Button className="underline h-auto p-0" onClick={() => setPhase('idle')} variant="link">
           {t.common.retry}
@@ -359,7 +359,7 @@ export function McpSetupButton({ profile, entry, onDone, ensureProfile }: McpSet
   // idle
   return (
     <Button
-      className="ml-1.5 text-[0.65rem] text-(--ui-accent) underline h-auto p-0"
+      className="ml-1.5 text-2xs text-(--ui-accent) underline h-auto p-0"
       onClick={() => void (isOAuth ? beginOAuth() : beginKeys())}
       variant="link"
     >

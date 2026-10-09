@@ -288,7 +288,7 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
             hasRunningTodo(group) ? (
               <GlyphSpinner
                 ariaLabel={t.statusStack.running}
-                className="text-[0.8rem] leading-none text-muted-foreground/80"
+                className="text-sm leading-none text-muted-foreground/80"
                 spinner="braille"
               />
             ) : undefined

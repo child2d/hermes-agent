@@ -133,7 +133,7 @@ export function QuickEntryApp() {
             style={{
               color: 'var(--muted-foreground, #8a8a8a)',
               flexShrink: 0,
-              fontSize: 15,
+              fontSize: 16,
               lineHeight: 1,
               userSelect: 'none'
             }}
@@ -171,7 +171,7 @@ export function QuickEntryApp() {
               color: 'var(--foreground, #eee)',
               flex: 1,
               fontFamily: 'inherit',
-              fontSize: 15,
+              fontSize: 16,
               minWidth: 0,
               opacity: state.connected ? 1 : 0.55,
               outline: 'none'

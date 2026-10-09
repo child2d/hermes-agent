@@ -283,23 +283,23 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
             </SidebarRowLead>
             {pinned ? (
               <Tooltip><TooltipTrigger asChild>
-                <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
+                <Codicon className="shrink-0 text-2xs text-(--ui-text-quaternary)" name="pinned" />
               </TooltipTrigger><TooltipContent>{b.roster.pinned}</TooltipContent></Tooltip>
             ) : null}
             {hidden ? (
               <Tooltip><TooltipTrigger asChild>
-                <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="eye-closed" />
+                <Codicon className="shrink-0 text-2xs text-(--ui-text-quaternary)" name="eye-closed" />
               </TooltipTrigger><TooltipContent>{b.roster.hiddenFromRoster}</TooltipContent></Tooltip>
             ) : null}
             <Tooltip><TooltipTrigger asChild>
-              <span className="min-w-0 truncate text-[0.8125rem] font-medium">{displayName(bot, meta)}</span>
+              <span className="min-w-0 truncate text-sm font-medium">{displayName(bot, meta)}</span>
             </TooltipTrigger><TooltipContent>{rowTooltip}</TooltipContent></Tooltip>
           </div>
           {attention ? (
             <Tooltip><TooltipTrigger asChild>
               <Codicon
                 aria-label={b.roster.needsAttention}
-                className="shrink-0 text-[0.6875rem] text-amber-600 dark:text-amber-300"
+                className="shrink-0 text-2xs text-amber-600 dark:text-amber-300"
                 name="warning"
               />
             </TooltipTrigger><TooltipContent>{botAttentionHint(attention.reason)}</TooltipContent></Tooltip>
@@ -308,7 +308,7 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
             <GlyphSpinner ariaLabel={b.bot.openingChat} className="shrink-0 text-xs text-(--ui-text-secondary)" />
           ) : null}
           {rowAgeTs ? (
-            <span className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)">
+            <span className="shrink-0 text-2xs text-(--ui-text-quaternary)">
               {rowAge(rowAgeTs * 1000, t.sidebar.row)}
             </span>
           ) : null}
@@ -316,7 +316,7 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
         {showDetailsRow ? (
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-(--ui-text-tertiary)">
             {showHandle ? (
-              <span className="shrink-0 font-mono text-[0.6875rem] text-(--ui-text-quaternary)">{`@${handle}`}</span>
+              <span className="shrink-0 font-mono text-2xs text-(--ui-text-quaternary)">{`@${handle}`}</span>
             ) : null}
             {showHandle && displayPreview ? <span className="shrink-0 text-(--ui-text-quaternary)">·</span> : null}
             {displayPreview ? (
@@ -599,10 +599,10 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{group}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{group}</span>
           {room.pinned ? (
             <Tooltip><TooltipTrigger asChild>
-              <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
+              <Codicon className="shrink-0 text-2xs text-(--ui-text-quaternary)" name="pinned" />
             </TooltipTrigger><TooltipContent>{b.roster.pinned}</TooltipContent></Tooltip>
           ) : null}
           {needsYou ? (
@@ -611,7 +611,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
             </TooltipTrigger><TooltipContent>{b.group.needsYourInput}</TooltipContent></Tooltip>
           ) : null}
           {lastAt ? (
-            <span className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)">
+            <span className="shrink-0 text-2xs text-(--ui-text-quaternary)">
               {rowAge(lastAt, t.sidebar.row)}
             </span>
           ) : null}

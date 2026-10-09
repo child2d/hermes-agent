@@ -202,7 +202,7 @@ function TaskMarkdown({ text }: { text: string }) {
 function MetaRow({ children, label }: { children: ReactNode; label: string }) {
   return (
     <Section label={label}>
-      <div className="min-w-0 text-[0.75rem] text-(--ui-text-secondary) [overflow-wrap:anywhere]">{children}</div>
+      <div className="min-w-0 text-xs text-(--ui-text-secondary) [overflow-wrap:anywhere]">{children}</div>
     </Section>
   )
 }
@@ -218,7 +218,7 @@ function WorkspaceValue({ kind, path }: { kind: null | string | undefined; path:
             {kind}
           </Badge>
         )}
-        <span className="font-mono text-[0.6875rem] leading-snug text-(--ui-text-tertiary)">{path}</span>
+        <span className="font-mono text-2xs leading-snug text-(--ui-text-tertiary)">{path}</span>
       </div>
       <CopyButton
         appearance="icon"
@@ -271,7 +271,7 @@ function Diagnostics({
             title={`${diag.title}${diag.count > 1 ? ` ×${diag.count}` : ''}`}
             tone={tone}
           >
-            <p className="whitespace-pre-wrap text-[0.6875rem] leading-relaxed text-(--ui-text-secondary)">
+            <p className="whitespace-pre-wrap text-2xs leading-relaxed text-(--ui-text-secondary)">
               {diag.detail}
             </p>
             {actions.length > 0 && (
@@ -392,7 +392,7 @@ function CommentComposer({
     <div className="flex flex-col gap-1.5">
       <div className="relative">
         <Textarea
-          className="field-sizing-content max-h-40 resize-none pr-9 text-[0.8125rem]"
+          className="field-sizing-content max-h-40 resize-none pr-9 text-sm"
           onChange={event => setBody(event.target.value)}
           onKeyDown={event => {
             if (isSubmitEnter(event) && !event.shiftKey) {
@@ -419,7 +419,7 @@ function CommentComposer({
       </div>
       {running && onRequeue && (
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[0.625rem] leading-tight text-(--ui-text-quaternary)">{k.deliveredLive}</span>
+          <span className="text-2xs leading-tight text-(--ui-text-quaternary)">{k.deliveredLive}</span>
           <Button className="shrink-0" disabled={empty} onClick={requeue} size="sm" variant="outline">
             <Codicon name="debug-restart" size="0.7rem" />
             {k.requeueWithNote}
@@ -455,7 +455,7 @@ function DescriptionSection({ body, onSave }: { body: null | string | undefined;
       {editing ? (
         <div className="flex flex-col gap-1.5">
           <Textarea
-            className="min-h-24 text-[0.75rem]"
+            className="min-h-24 text-xs"
             onChange={event => setDraft(event.target.value)}
             value={draft}
           />
@@ -474,7 +474,7 @@ function DescriptionSection({ body, onSave }: { body: null | string | undefined;
       ) : body ? (
         <TaskMarkdown text={body} />
       ) : (
-        <p className="text-[0.8125rem] text-(--ui-text-quaternary)">{k.noDescription}</p>
+        <p className="text-sm text-(--ui-text-quaternary)">{k.noDescription}</p>
       )}
     </Section>
   )
@@ -566,13 +566,13 @@ function AttachmentsSection({
       {attachments.length > 0 ? (
         <ul className="flex flex-col gap-1">
           {attachments.map(attachment => (
-            <li className="flex items-center gap-1.5 text-[0.75rem] text-(--ui-text-tertiary)" key={attachment.id}>
+            <li className="flex items-center gap-1.5 text-xs text-(--ui-text-tertiary)" key={attachment.id}>
               <AttachmentDownload attachment={attachment} onDownload={onDownload} />
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-[0.75rem] text-(--ui-text-quaternary)">{k.noAttachments}</p>
+        <p className="text-xs text-(--ui-text-quaternary)">{k.noAttachments}</p>
       )}
     </Section>
   )
@@ -606,7 +606,7 @@ function EstimateSection({ id }: { id: string }) {
     <Section label={k.estimate}>
       {result?.ok ? (
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-[0.8125rem]">
+          <div className="flex items-center gap-2 text-sm">
             <span className="font-medium tabular-nums text-(--ui-text-secondary)">
               ~{compactNumber(result.est_tokens)} {k.tokUnit}
             </span>
@@ -629,7 +629,7 @@ function EstimateSection({ id }: { id: string }) {
             </TooltipTrigger><TooltipContent>{k.reEstimate}</TooltipContent></Tooltip>
           </div>
           {result.rationale && (
-            <p className="text-[0.6875rem] leading-relaxed text-(--ui-text-quaternary)">{result.rationale}</p>
+            <p className="text-2xs leading-relaxed text-(--ui-text-quaternary)">{result.rationale}</p>
           )}
         </div>
       ) : (
@@ -639,7 +639,7 @@ function EstimateSection({ id }: { id: string }) {
             {est.isPending ? k.estimating : k.estimateEffort}
           </Button>
           <Tooltip><TooltipTrigger asChild>
-            <span className="text-[0.625rem] text-(--ui-text-quaternary)">{k.makesModelCall}</span>
+            <span className="text-2xs text-(--ui-text-quaternary)">{k.makesModelCall}</span>
           </TooltipTrigger><TooltipContent>{k.estimateTipLong}</TooltipContent></Tooltip>
         </div>
       )}
@@ -669,7 +669,7 @@ function LinkChips({
           <Tooltip><TooltipTrigger asChild>
             <button
               aria-label={label}
-              className="max-w-full truncate rounded bg-(--ui-bg-quaternary) px-1.5 py-0.5 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground"
+              className="max-w-full truncate rounded bg-(--ui-bg-quaternary) px-1.5 py-0.5 text-2xs text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground"
               onClick={() => onOpen(linked)}
               type="button"
             >
@@ -733,9 +733,9 @@ function FeedTabs({
             <ul className="flex flex-col gap-3">
               {detail.comments.map(comment => (
                 <li className="flex flex-col gap-0.5" key={comment.id}>
-                  <div className="flex items-baseline gap-2 text-[0.75rem]">
+                  <div className="flex items-baseline gap-2 text-xs">
                     <span className="font-medium text-(--ui-text-secondary)">{comment.author}</span>
-                    <span className="text-[0.625rem] text-(--ui-text-quaternary)">{ago(comment.created_at)}</span>
+                    <span className="text-2xs text-(--ui-text-quaternary)">{ago(comment.created_at)}</span>
                   </div>
                   <TaskMarkdown text={comment.body} />
                 </li>
@@ -752,10 +752,10 @@ function FeedTabs({
               const { detail: extra, label } = eventText(event, k)
 
               return (
-                <li className="flex items-baseline gap-2 text-[0.6875rem]" key={event.id}>
+                <li className="flex items-baseline gap-2 text-2xs" key={event.id}>
                   <span className="shrink-0 text-(--ui-text-secondary)">{label}</span>
                   {extra && (
-                    <span className="min-w-0 truncate text-[0.625rem] text-(--ui-text-quaternary)" title={extra}>
+                    <span className="min-w-0 truncate text-2xs text-(--ui-text-quaternary)" title={extra}>
                       {extra}
                     </span>
                   )}
@@ -773,7 +773,7 @@ function FeedTabs({
               const failed = ['crashed', 'failed', 'timed_out', 'gave_up'].includes(run.outcome ?? run.status)
 
               return (
-                <li className="flex flex-col gap-0.5 text-[0.6875rem]" key={run.id}>
+                <li className="flex flex-col gap-0.5 text-2xs" key={run.id}>
                   <div className="flex items-center gap-2">
                     <Badge variant={failed ? 'destructive' : 'secondary'}>
                       {run.outcome ?? run.status}
@@ -982,7 +982,7 @@ export function TaskDrawer({
               <span className="font-mono text-sm text-(--ui-text-tertiary)">{shortId(id)}</span>
             )}
             {task && (
-              <span className="font-mono text-[0.625rem] text-(--ui-text-quaternary)" data-selectable-text="true">
+              <span className="font-mono text-2xs text-(--ui-text-quaternary)" data-selectable-text="true">
                 {shortId(task.id)}
               </span>
             )}
@@ -1051,7 +1051,7 @@ export function TaskDrawer({
                 <div className="flex flex-col gap-5">
                   {task.status === 'ready' && !task.assignee && !defaultAssignee && (
                     <Callout title={k.readyUnassignedTitle} tone={SEVERITY_TONE.warning}>
-                      <p className="text-[0.6875rem] leading-relaxed text-(--ui-text-secondary)">
+                      <p className="text-2xs leading-relaxed text-(--ui-text-secondary)">
                         {k.readyUnassignedBody}
                       </p>
                     </Callout>
@@ -1134,7 +1134,7 @@ export function TaskDrawer({
                 )}
                 {task.last_failure_error && (
                   <MetaRow label={k.lastFailureError}>
-                    <span className="whitespace-pre-wrap font-mono text-[0.65rem] leading-snug text-(--ui-text-tertiary)">
+                    <span className="whitespace-pre-wrap font-mono text-2xs leading-snug text-(--ui-text-tertiary)">
                       {task.last_failure_error}
                     </span>
                   </MetaRow>

@@ -126,7 +126,7 @@ export function ShareControls({ imported = false, onImport, onResetMap, shareCod
             )}
           </div>
 
-          {error && <p className="text-[0.7rem] text-destructive">{error}</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
 
           <Button className="w-full" disabled={!canLoad} onClick={load} type="button">
             {t.starmap.importBtn}

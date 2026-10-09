@@ -197,7 +197,7 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
         />
       </div>
       <div className="flex shrink-0 items-center justify-between px-3 py-1.5">
-        <span className="text-[0.7rem] font-medium text-(--ui-text-tertiary)">{h.pickerTitle}</span>
+        <span className="text-xs font-medium text-(--ui-text-tertiary)">{h.pickerTitle}</span>
         <div className="flex items-center gap-1">
           <Button disabled={updating} onClick={updateAll} size="sm" variant="link">
             {updating && <Loader2 className="size-3 animate-spin" />}
@@ -247,7 +247,7 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
               title={h.pickerTitle}
             />
           </div>
-          <p className="shrink-0 px-1 text-[0.65rem] leading-4 text-(--ui-text-quaternary)">{h.pickerHint}</p>
+          <p className="shrink-0 px-1 text-2xs leading-4 text-(--ui-text-quaternary)">{h.pickerHint}</p>
         </div>
       )}
     </section>

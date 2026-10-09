@@ -69,7 +69,7 @@ export function ContextMenu({
           </DropdownMenuTrigger>
         </TooltipTrigger><TooltipContent>{state.tools.label}</TooltipContent></Tooltip>
         <DropdownMenuContent align="start" className={cn('w-60', composerPanelCard)} side="top" sideOffset={6}>
-          <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-(--ui-text-tertiary)">
+          <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-2xs font-semibold uppercase tracking-wider text-(--ui-text-tertiary)">
             {c.attachLabel}
           </DropdownMenuLabel>
           <ContextMenuItem disabled={!onPickFiles} icon={FileText} onSelect={onPickFiles}>
@@ -112,7 +112,7 @@ export function ContextMenu({
 
           <DropdownMenuSeparator />
 
-          <div className="px-2 py-1 text-[0.7rem] text-muted-foreground/80">
+          <div className="px-2 py-1 text-xs text-muted-foreground/80">
             {c.tipPre}
             <Kbd size="sm">@</Kbd>
             {c.tipPost}

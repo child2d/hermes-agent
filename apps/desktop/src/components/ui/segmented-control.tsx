@@ -43,7 +43,7 @@ export function SegmentedControl<T extends string>({
           <button
             aria-pressed={active}
             className={cn(
-              'flex items-center justify-center gap-1 rounded-sm px-2.5 py-0.5 text-[0.6875rem] font-medium transition-colors disabled:cursor-default',
+              'flex items-center justify-center gap-1 rounded-sm px-2.5 py-0.5 text-2xs font-medium transition-colors disabled:cursor-default',
               active ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             )}
             disabled={disabled}

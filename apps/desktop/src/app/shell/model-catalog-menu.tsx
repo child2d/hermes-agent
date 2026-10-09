@@ -95,7 +95,7 @@ function ModelPrice({ pricing }: { pricing: ModelPricing }) {
   const cache = pricing.cache || null
 
   if (pricing.free) {
-    return <span className="shrink-0 pl-2 text-[0.625rem] text-(--ui-green)">{copy.free}</span>
+    return <span className="shrink-0 pl-2 text-2xs text-(--ui-green)">{copy.free}</span>
   }
 
   if (!input && !output) {
@@ -107,7 +107,7 @@ function ModelPrice({ pricing }: { pricing: ModelPricing }) {
 
   return (
     <span
-      className="flex shrink-0 items-center gap-1.5 pl-2 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)"
+      className="flex shrink-0 items-center gap-1.5 pl-2 text-2xs tabular-nums text-(--ui-text-tertiary)"
       title={copy.priceTitle(input ?? '—', output ?? '—', cache ?? '')}
     >
       <span>
@@ -1122,7 +1122,7 @@ function ModelFamilyRow({
                 style={{ width: `${Math.max(2, loadProgress.percent)}%` }}
               />
             </span>
-            <span className="text-[0.62rem] tabular-nums text-(--ui-text-tertiary)">{loadProgress.percent}%</span>
+            <span className="text-2xs tabular-nums text-(--ui-text-tertiary)">{loadProgress.percent}%</span>
           </span>
         ) : null}
         {showPricing && pricing ? <ModelPrice pricing={pricing} /> : null}
@@ -1166,12 +1166,12 @@ const LOCAL_PROVIDER_SLUG = 'llamacpp'
 
 // Heading for every row group in the list (Favorites, providers, downloads).
 const catalogGroupLabel =
-  'px-2 pb-0.5 pt-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-(--ui-text-tertiary)'
+  'px-2 pb-0.5 pt-0.5 text-2xs font-semibold uppercase tracking-wider text-(--ui-text-tertiary)'
 
 // A provider inside a mixed Favorites section: the group heading's ink, set
 // in normal case and indented to the model names it labels, so it reads as
 // a sub-group rather than a sibling section.
-const favoriteProviderLabel = 'pt-1.5 pb-0 pr-2 pl-7.75 text-[0.625rem] text-(--ui-text-tertiary)'
+const favoriteProviderLabel = 'pt-1.5 pb-0 pr-2 pl-7.75 text-2xs text-(--ui-text-tertiary)'
 
 /** The picker's chips: a filled tag for what the model IS (its variant), an
  *  outlined one for how this row is SET (fast, effort), so the two read as
@@ -1240,7 +1240,7 @@ function DownloadingModelRow({
             style={{ width: `${Math.max(2, percent ?? 0)}%` }}
           />
         </span>
-        <span className="text-[0.62rem] tabular-nums text-(--ui-text-tertiary)">
+        <span className="text-2xs tabular-nums text-(--ui-text-tertiary)">
           {paused
             ? copyLocal.downloadPausedLabel
             : typeof percent === 'number'

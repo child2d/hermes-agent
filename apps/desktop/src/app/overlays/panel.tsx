@@ -187,7 +187,7 @@ export function PanelListRow({
   const row = (
     <div
       className={cn(
-        'group/row row-hover relative flex h-7 w-full items-center rounded-md text-[0.78rem] hover:text-foreground',
+        'group/row row-hover relative flex h-7 w-full items-center rounded-md text-sm hover:text-foreground',
         active ? 'bg-(--ui-row-active-background) text-foreground' : 'text-(--ui-text-secondary)'
       )}
       data-panel-row={rowKey}
@@ -204,7 +204,7 @@ export function PanelListRow({
           ) : null)}
         <span className="min-w-0 flex-1 truncate font-medium text-foreground/85">{title}</span>
       </RowButton>
-      {meta ? <span className="shrink-0 pr-2 text-[0.62rem] tabular-nums text-muted-foreground/45">{meta}</span> : null}
+      {meta ? <span className="shrink-0 pr-2 text-2xs tabular-nums text-muted-foreground/45">{meta}</span> : null}
       {menuItems ? (
         <div className="shrink-0 pr-1">
           <PanelRowMenu items={menuItems} label={menuLabel} />
@@ -313,7 +313,7 @@ export function PanelEmpty({ action, description, icon = 'inbox', title }: Panel
 
 export function PanelSectionLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('text-[0.6rem] font-medium uppercase tracking-wider text-muted-foreground/50', className)}>
+    <div className={cn('text-2xs font-medium uppercase tracking-wider text-muted-foreground/50', className)}>
       {children}
     </div>
   )
@@ -327,7 +327,7 @@ export interface PanelMetaRow {
 
 export function PanelMeta({ className, rows }: { className?: string; rows: PanelMetaRow[] }) {
   return (
-    <dl className={cn('grid grid-cols-[5rem_1fr] gap-x-2 gap-y-1 text-[0.7rem]', className)}>
+    <dl className={cn('grid grid-cols-[5rem_1fr] gap-x-2 gap-y-1 text-xs', className)}>
       {rows.map((row, i) => (
         <div className="contents" key={typeof row.label === 'string' ? row.label : i}>
           <dt className="truncate text-muted-foreground/55">{row.label}</dt>
@@ -344,7 +344,7 @@ export function PanelBlock({ children, className }: { children: ReactNode; class
   return (
     <pre
       className={cn(
-        'max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-foreground/5 p-2.5 text-[0.68rem] leading-relaxed text-foreground/80',
+        'max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-foreground/5 p-2.5 text-2xs leading-relaxed text-foreground/80',
         className
       )}
     >
@@ -366,7 +366,7 @@ export function PanelPill({ children, tone = 'muted' }: { children: ReactNode; t
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.62rem] font-medium capitalize',
+        'inline-flex items-center rounded-full px-1.5 py-0.5 text-2xs font-medium capitalize',
         PILL_TONE[tone]
       )}
     >

@@ -67,7 +67,7 @@ export function ConnectorRow({ action, connector, cue, mark, markLabel }: Connec
         </span>
         <ConnectorLogo className="size-6 rounded-md text-[0.6875rem]" connector={connector} />
         <span className="truncate leading-(--conversation-line-height)">{connector.title || connector.name}</span>
-        <span aria-hidden className="min-w-0 flex-1 truncate text-[0.6875rem] text-(--ui-text-tertiary)">
+        <span aria-hidden className="min-w-0 flex-1 truncate text-2xs text-(--ui-text-tertiary)">
           {cue}
         </span>
         <span className="flex w-22 shrink-0 justify-end">

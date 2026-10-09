@@ -898,7 +898,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         <span
           aria-label={availabilityLabel}
           className={cn(
-            'shrink-0 text-[0.65rem] text-(--ui-text-quaternary)',
+            'shrink-0 text-2xs text-(--ui-text-quaternary)',
             members.length > 0 && availableMembers < members.length && 'text-amber-600 dark:text-amber-300'
           )}
         >
@@ -998,10 +998,10 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         <RowButton
           aria-controls={`group-activity:${group}`}
           aria-expanded={activityOpen}
-          className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 py-1 text-left text-[0.7rem] text-(--ui-text-quaternary) transition-colors hover:text-foreground"
+          className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 py-1 text-left text-xs text-(--ui-text-quaternary) transition-colors hover:text-foreground"
           onClick={() => setActivityOpen(prev => !prev)}
         >
-          <Codicon className="shrink-0 text-[0.65rem]" name={activityOpen ? 'chevron-down' : 'chevron-right'} />
+          <Codicon className="shrink-0 text-2xs" name={activityOpen ? 'chevron-down' : 'chevron-right'} />
           <span className="shrink-0 font-medium">{b.group.activity}</span>
           {summaryActivity ? (
             <span
@@ -1027,15 +1027,15 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         <div className="grid gap-0.5 px-2.5 pb-1.5" id={`group-activity:${group}`}>
           {activityEvents.length ? (
             [...activityEvents].reverse().map((event, i) => (
-              <div className="flex items-center gap-1.5 text-[0.7rem]" key={`${event.at}:${i}`}>
+              <div className="flex items-center gap-1.5 text-xs" key={`${event.at}:${i}`}>
                 <Codicon
-                  className={cn('shrink-0 text-[0.65rem]', groupActivityTone(event.kind))}
+                  className={cn('shrink-0 text-2xs', groupActivityTone(event.kind))}
                   name={GROUP_ACTIVITY_GLYPHS[event.kind] || 'circle-outline'}
                 />
                 <span className={cn('min-w-0 flex-1 truncate', groupActivityTone(event.kind))}>
                   {groupActivityLabel(event, group)}
                 </span>
-                <span className="shrink-0 text-[0.625rem] text-(--ui-text-quaternary)">{relativeTime(event.at)}</span>
+                <span className="shrink-0 text-2xs text-(--ui-text-quaternary)">{relativeTime(event.at)}</span>
                 {room.running && event.kind === 'working' ? (
                   <Tooltip><TooltipTrigger asChild>
                     <Button
@@ -1051,7 +1051,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
               </div>
             ))
           ) : (
-            <div className="px-0.5 pb-0.5 text-[0.625rem] text-(--ui-text-quaternary)">{b.group.noActivityYet}</div>
+            <div className="px-0.5 pb-0.5 text-2xs text-(--ui-text-quaternary)">{b.group.noActivityYet}</div>
           )}
         </div>
       ) : null}
@@ -1145,13 +1145,13 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
           >
             {img.kind === 'pdf' || img.kind === 'file' ? (
               <Codicon
-                className="text-[0.9rem] text-(--ui-text-tertiary)"
+                className="text-base text-(--ui-text-tertiary)"
                 name={img.kind === 'pdf' ? 'file-pdf' : 'file'}
               />
             ) : (
               <img alt="" className="size-6 rounded object-cover" src={img.data} />
             )}
-            <span className="max-w-32 truncate text-[0.65rem] text-(--ui-text-tertiary)">{img.name || 'image'}</span>
+            <span className="max-w-32 truncate text-2xs text-(--ui-text-tertiary)">{img.name || 'image'}</span>
             <Tooltip><TooltipTrigger asChild>
               <Button
                 aria-label={b.group.removeAttachment}
@@ -1285,11 +1285,11 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {isUser ? (
-              <span className="text-[0.7rem] font-semibold text-foreground">{label}</span>
+              <span className="text-xs font-semibold text-foreground">{label}</span>
             ) : (
               <Tooltip><TooltipTrigger asChild>
                 <Button
-                  className="text-left text-[0.7rem] font-semibold text-(--ui-accent) h-auto p-0"
+                  className="text-left text-xs font-semibold text-(--ui-accent) h-auto p-0"
                   onClick={() => setRevealedSpeaker(revealed ? null : entryKey)}
                   variant="link"
                 >
@@ -1297,7 +1297,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
                 </Button>
               </TooltipTrigger><TooltipContent>{revealed ? 'Hide full handle' : 'Show full handle'}</TooltipContent></Tooltip>
             )}
-            <span className="text-[0.625rem] text-(--ui-text-quaternary)">{relativeTime(entry.at)}</span>
+            <span className="text-2xs text-(--ui-text-quaternary)">{relativeTime(entry.at)}</span>
             {entry.text.trim() || !isUser ? (
               <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
                 {isUser ? null : (
@@ -1341,11 +1341,11 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
               {entry.images.map((img, imgIndex) =>
                 img.kind === 'pdf' || img.kind === 'file' ? (
                   <div
-                    className="flex items-center gap-1 rounded-md border border-(--ui-stroke-secondary) px-1.5 py-1 text-[0.65rem] text-(--ui-text-tertiary)"
+                    className="flex items-center gap-1 rounded-md border border-(--ui-stroke-secondary) px-1.5 py-1 text-2xs text-(--ui-text-tertiary)"
                     key={`${entryKey}:img:${imgIndex}`}
                     title={img.name || 'attached file'}
                   >
-                    <Codicon className="text-[0.8rem]" name={img.kind === 'pdf' ? 'file-pdf' : 'file'} />
+                    <Codicon className="text-sm" name={img.kind === 'pdf' ? 'file-pdf' : 'file'} />
                     <span className="max-w-48 truncate">{img.name || 'attached file'}</span>
                   </div>
                 ) : (
@@ -1416,7 +1416,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         </form>
       ) : (
         <Button
-          className="w-fit px-2 pb-1 text-left text-[0.65rem] text-(--ui-accent) transition-colors h-auto p-0"
+          className="w-fit px-2 pb-1 text-left text-2xs text-(--ui-accent) transition-colors h-auto p-0"
           key={`replylink:${id}`}
           onClick={() => setReplyThread(id)}
           variant="link"
@@ -1485,7 +1485,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
             />
           ))}
           {room.running ? (
-            <div className="px-2 py-1 text-[0.7rem] italic text-(--ui-text-quaternary)" key={'working'}>
+            <div className="px-2 py-1 text-xs italic text-(--ui-text-quaternary)" key={'working'}>
               {roomClarifies.length
                 ? b.group.waitingForAnswer
                 : room.turn
