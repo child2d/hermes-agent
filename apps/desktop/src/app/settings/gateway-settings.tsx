@@ -8,7 +8,11 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type {
   DesktopCloudAgent,
   DesktopCloudOrg,
@@ -148,14 +152,14 @@ function ModeCard({
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 text-[length:var(--conversation-text-font-size)] font-medium">{title}</span>
         {hint ? (
-          <Tip label={hint}>
+          <Tooltip><TooltipTrigger asChild>
             <span
               className="grid size-3.5 shrink-0 cursor-help place-items-center text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)"
               onClick={event => event.stopPropagation()}
             >
               <HelpCircle className="size-3.5" />
             </span>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{hint}</TooltipContent></Tooltip>
         ) : null}
         {active ? <Check className="ml-auto size-3.5 shrink-0 text-primary" /> : null}
       </div>

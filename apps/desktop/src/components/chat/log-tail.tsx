@@ -4,7 +4,11 @@ import { CodeCardBody } from '@/components/chat/code-card'
 import type { LogSearch } from '@/components/chat/log-search'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { ArrowBarToDown, ArrowBarToUp } from '@/lib/icons'
 import { logLineSegments, logLineSeverity, type LogSearchHit, type LogSeverity } from '@/lib/log-search'
@@ -100,7 +104,7 @@ export function LogTail({ className, emptyLabel, lines, search }: LogTailProps) 
           const Icon = edge === 'top' ? ArrowBarToUp : ArrowBarToDown
 
           return (
-            <Tip key={edge} label={t.ui.logs[edge]}>
+            <Tooltip><TooltipTrigger asChild>
               <Button
                 aria-label={t.ui.logs[edge]}
                 className={cn(HOVER_CONTROL, 'text-muted-foreground hover:text-foreground')}
@@ -110,7 +114,7 @@ export function LogTail({ className, emptyLabel, lines, search }: LogTailProps) 
               >
                 <Icon className="size-3" />
               </Button>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{t.ui.logs[edge]}</TooltipContent></Tooltip>
           )
         })}
         <CopyButton

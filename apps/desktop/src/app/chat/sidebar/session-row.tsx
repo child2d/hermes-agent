@@ -12,7 +12,11 @@ import { formatMessageTimestamp } from '@/components/assistant-ui/thread/timesta
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { RowButton } from '@/components/ui/row-button'
-import { OverflowTip, Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type { SessionInfo } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
@@ -231,7 +235,7 @@ function SidebarSessionRowImpl({
           <span className={cn('inline-block text-right', TAIL_HIDES)}>
             {head && sep}
             {showAge ? (
-              <Tip label={absoluteAge} side="top">
+              <Tooltip><TooltipTrigger asChild>
                 <time
                   aria-label={`${age}, ${absoluteAge}`}
                   className="pointer-events-auto focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
@@ -240,7 +244,7 @@ function SidebarSessionRowImpl({
                 >
                   {age}
                 </time>
-              </Tip>
+              </TooltipTrigger><TooltipContent side="top">{absoluteAge}</TooltipContent></Tooltip>
             ) : (
               figures.at(-1)
             )}
@@ -517,13 +521,13 @@ function SidebarSessionRowImpl({
 
             const handoffBadge =
               handoffSource && handoffLabel ? (
-                <Tip label={r.handoffOrigin(handoffLabel)}>
+                <Tooltip><TooltipTrigger asChild>
                   <PlatformAvatar
                     className="-mt-px size-4 shrink-0 rounded-[4px] text-[0.5rem] [&_svg]:size-2.5"
                     platformId={handoffSource}
                     platformName={handoffLabel}
                   />
-                </Tip>
+                </TooltipTrigger><TooltipContent>{r.handoffOrigin(handoffLabel)}</TooltipContent></Tooltip>
               ) : null
 
             // A projected continuation renders as a plain top-level row, which
@@ -533,14 +537,14 @@ function SidebarSessionRowImpl({
             // automatic rotation is legible as one.
             const continuationBadge =
               session.continuation_kind === 'compression' ? (
-                <Tip label={r.continuationOrigin}>
+                <Tooltip><TooltipTrigger asChild>
                   <Codicon
                     aria-hidden="true"
                     className="size-3.5 shrink-0 text-(--ui-text-quaternary)"
                     name="layers"
                     size="0.75rem"
                   />
-                </Tip>
+                </TooltipTrigger><TooltipContent>{r.continuationOrigin}</TooltipContent></Tooltip>
               ) : null
 
             if (!card) {
@@ -560,7 +564,7 @@ function SidebarSessionRowImpl({
                         OverflowTip stays on the truncating label so its
                         scrollWidth measurement is unchanged. */}
                     <RowButton className="block w-full text-left">
-                      <OverflowTip label={title} placement="row">
+                      <Tooltip><TooltipTrigger asChild>
                         <SidebarRowLabel
                           className="hover-marquee block font-normal group-hover:text-foreground group-data-[working=true]:text-foreground/90"
                           onPointerEnter={armMarquee}
@@ -568,7 +572,7 @@ function SidebarSessionRowImpl({
                         >
                           <span className="hover-marquee-inner">{title}</span>
                         </SidebarRowLabel>
-                      </OverflowTip>
+                      </TooltipTrigger><TooltipContent>{title}</TooltipContent></Tooltip>
                     </RowButton>
                     {/* Session-list density (#68119): comfortable adds one
                         deterministic metadata line; detailed adds the initial
@@ -629,7 +633,7 @@ function SidebarSessionRowImpl({
                       button (same contract as the flat row: no onClick of its
                       own — the click bubbles to the body div's resolver). */}
                   <RowButton className="block w-full text-left">
-                    <OverflowTip label={title} placement="row">
+                    <Tooltip><TooltipTrigger asChild>
                       <SidebarRowLabel
                         className={cn(
                           'hover-marquee text-[0.8125rem] font-medium text-(--ui-text-primary) group-data-[working=true]:text-foreground',
@@ -640,7 +644,7 @@ function SidebarSessionRowImpl({
                       >
                         <span className="hover-marquee-inner">{title}</span>
                       </SidebarRowLabel>
-                    </OverflowTip>
+                    </TooltipTrigger><TooltipContent>{title}</TooltipContent></Tooltip>
                   </RowButton>
                   {session.preview && rowMeta.includes('preview') ? (
                     <span

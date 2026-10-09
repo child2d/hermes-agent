@@ -7,7 +7,11 @@ import { Codicon } from '@/components/ui/codicon'
 import { GenerateButton } from '@/components/ui/generate-button'
 import { SplitButton } from '@/components/ui/split-button'
 import { Textarea } from '@/components/ui/textarea'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { isSubmitEnter } from '@/lib/ime'
 import { formatCombo } from '@/lib/keybinds/combo'
@@ -157,7 +161,7 @@ export function ReviewShipBar() {
         >
           <span className="truncate underline underline-offset-2">{c.agentShip}</span>
         </Button>
-        <Tip label={ship.ghReady ? prLabel : c.ghMissing}>
+        <Tooltip><TooltipTrigger asChild>
           <span className="absolute inset-y-0 right-0 flex items-center">
             <Button
               aria-label={prLabel}
@@ -170,7 +174,7 @@ export function ReviewShipBar() {
               <Codicon name="git-pull-request" size={ICON} />
             </Button>
           </span>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{ship.ghReady ? prLabel : c.ghMissing}</TooltipContent></Tooltip>
       </div>
     </div>
   )

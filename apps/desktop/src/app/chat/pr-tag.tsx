@@ -1,5 +1,9 @@
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type { HermesBranchPullRequest } from '@/global'
 import { cn } from '@/lib/utils'
 import { pullRequestBucket } from '@/store/pull-requests'
@@ -37,7 +41,7 @@ export function PrTag({
   const style = PR_STYLE[pullRequestBucket(pr)] ?? PR_STYLE.open
 
   return (
-    <Tip label={`#${pr.number} ${pr.title}`}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={`Open pull request #${pr.number}`}
         // A flex box doesn't pass text-decoration down to its items, so the
@@ -65,6 +69,6 @@ export function PrTag({
         {/* Without the glyph the number needs the `#` to still read as a PR. */}
         <span className="underline-offset-1 group-hover/pr:underline">{showIcon ? pr.number : `#${pr.number}`}</span>
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{`#${pr.number} ${pr.title}`}</TooltipContent></Tooltip>
   )
 }

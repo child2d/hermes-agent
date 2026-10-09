@@ -4,7 +4,11 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ErrorState } from '@/components/ui/error-state'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 
 interface ContribBoundaryProps {
   children: ReactNode
@@ -40,7 +44,7 @@ export function ContribBoundary({ children, id, variant = 'pane' }: ContribBound
     <ErrorBoundary
       fallback={({ error, reset }) =>
         variant === 'chip' ? (
-          <Tip label={`${id}: ${error.message}`}>
+          <Tooltip><TooltipTrigger asChild>
             <button
               className="inline-flex items-center gap-1 rounded px-1.5 text-[0.6875rem] text-destructive transition-colors hover:bg-(--chrome-action-hover)"
               onClick={reset}
@@ -49,7 +53,7 @@ export function ContribBoundary({ children, id, variant = 'pane' }: ContribBound
               <Codicon name="warning" size="0.7rem" />
               {id}
             </button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{`${id}: ${error.message}`}</TooltipContent></Tooltip>
         ) : (
           <div className="grid h-full place-items-center p-6">
             <ErrorState description={error.message} title={`“${id}” failed to render`}>

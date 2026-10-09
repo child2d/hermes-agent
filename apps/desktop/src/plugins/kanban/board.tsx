@@ -43,7 +43,9 @@ import {
   SelectValue,
   Switch,
   Textarea,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useGrabScroll,
   useMutation,
   useQuery,
@@ -171,17 +173,7 @@ function CardFooter({ arc, task }: { arc: ArcState | null; task: KanbanTask }) {
       {arc === 'queued' && attached ? (
         // WHO is coming for the card. The arc only animates once the agent is
         // actually working; while queued, the named chip carries "attached".
-        <Tip
-          label={
-            task.status === 'review'
-              ? k.reviewChecking
-              : task.assignee
-                ? k.attachedTip(attached)
-                : task.status === 'triage'
-                  ? k.orchestratorTip(attached)
-                  : k.autoAssignTip(attached)
-          }
-        >
+        <Tooltip><TooltipTrigger asChild>
           <span className="inline-flex min-w-0 cursor-help items-center gap-1 font-medium" style={{ color: meta.tone }}>
             <Avatar name={attached} size="1.125rem" />
             <span className="truncate">
@@ -189,39 +181,47 @@ function CardFooter({ arc, task }: { arc: ArcState | null; task: KanbanTask }) {
               {attached}
             </span>
           </span>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{
+            task.status === 'review'
+              ? k.reviewChecking
+              : task.assignee
+                ? k.attachedTip(attached)
+                : task.status === 'triage'
+                  ? k.orchestratorTip(attached)
+                  : k.autoAssignTip(attached)
+          }</TooltipContent></Tooltip>
       ) : task.assignee ? (
         <Avatar name={task.assignee} size="1.125rem" />
       ) : null}
       {arc === 'running' && (
-        <Tip label={k.arcRunning}>
+        <Tooltip><TooltipTrigger asChild>
           <span className="shrink-0 cursor-help">
             <RunClock task={task} />
           </span>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{k.arcRunning}</TooltipContent></Tooltip>
       )}
       {arc === 'stale' && (
-        <Tip label={k.arcStale}>
+        <Tooltip><TooltipTrigger asChild>
           <span className="shrink-0 cursor-help font-medium text-amber-500">{k.noHeartbeat}</span>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{k.arcStale}</TooltipContent></Tooltip>
       )}
       {task.status === 'blocked' && task.block_kind && (
         // #124391: say WHY the card is blocked — the kind arrives on every
         // card payload; without it every blocked card reads identically.
-        <Tip label={k.blockKindTip(task.block_kind)}>
+        <Tooltip><TooltipTrigger asChild>
           <span className="inline-flex shrink-0 cursor-help items-center gap-1 text-destructive">
             <Codicon name="debug-breakpoint-data-unverified" size="0.7rem" />
             {task.block_kind}
           </span>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{k.blockKindTip(task.block_kind)}</TooltipContent></Tooltip>
       )}
       {unassignedReady && !fallback && (
-        <Tip label={k.wontRunTip}>
+        <Tooltip><TooltipTrigger asChild>
           <span className="inline-flex shrink-0 cursor-help items-center gap-1 text-amber-500">
             <Codicon name="debug-disconnect" size="0.7rem" />
             {k.wontRun}
           </span>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{k.wontRunTip}</TooltipContent></Tooltip>
       )}
       <div className="ml-auto flex min-w-0 shrink items-center gap-2">
         {typeof task.priority === 'number' && task.priority > 0 && <PriorityGlyph priority={task.priority} />}
@@ -456,11 +456,11 @@ function Column({
     >
       <header className="mb-1.5 flex h-5 items-center gap-1.5 px-1">
         <span className="size-1.5 rounded-full" style={{ backgroundColor: meta.tone }} />
-        <Tip label={columnHelp(k, column.name)}>
+        <Tooltip><TooltipTrigger asChild>
           <span className="cursor-help text-[0.6875rem] font-medium uppercase tracking-wide text-(--ui-text-tertiary)">
             {label}
           </span>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{columnHelp(k, column.name)}</TooltipContent></Tooltip>
         <span className="text-[0.625rem] tabular-nums text-(--ui-text-quaternary)">{column.tasks.length}</span>
         <button
           aria-label={k.collapse(label)}
@@ -800,13 +800,13 @@ function NewTaskDialog({
           <div className="mr-auto flex items-center gap-1 text-[0.75rem] text-(--ui-text-tertiary)">
             {estimate?.ok ? (
               <>
-                <Tip label={estimate.rationale || k.roughEstimate}>
+                <Tooltip><TooltipTrigger asChild>
                   <span className="font-medium tabular-nums text-(--ui-text-secondary)">
                     ~{compactNumber(estimate.est_tokens)} {k.tokUnit}
                     {estimate.complexity ? ` · ${k.complexity[estimate.complexity] ?? estimate.complexity}` : ''}
                   </span>
-                </Tip>
-                <Tip label={k.reEstimate}>
+                </TooltipTrigger><TooltipContent>{estimate.rationale || k.roughEstimate}</TooltipContent></Tooltip>
+                <Tooltip><TooltipTrigger asChild>
                   <Button
                     aria-label={k.reEstimate}
                     disabled={!title.trim() || estMut.isPending}
@@ -816,10 +816,10 @@ function NewTaskDialog({
                   >
                     <Codicon name="refresh" size="0.7rem" spinning={estMut.isPending} />
                   </Button>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{k.reEstimate}</TooltipContent></Tooltip>
               </>
             ) : (
-              <Tip label={k.estimateTip}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   disabled={!title.trim() || estMut.isPending}
                   onClick={() => estMut.mutate()}
@@ -833,7 +833,7 @@ function NewTaskDialog({
                   />
                   {estMut.isPending ? k.estimating : k.estimate}
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{k.estimateTip}</TooltipContent></Tooltip>
             )}
           </div>
           <Button onClick={onClose} variant="link">
@@ -1079,11 +1079,11 @@ function SelectionBar({
           {k.delete}
         </Button>
 
-        <Tip label={k.clearSelection}>
+        <Tooltip><TooltipTrigger asChild>
           <Button aria-label={k.clearSelection} onClick={onClear} size="icon" variant="ghost">
             <Codicon name="close" size="0.8rem" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{k.clearSelection}</TooltipContent></Tooltip>
       </div>
     </div>
   )
@@ -1358,7 +1358,7 @@ export function KanbanBoardPage() {
         )}
         <SearchField aria-label={k.filterCards} onChange={setSearch} placeholder={k.filterCards} value={search} />
         <div className="ml-auto flex items-center gap-1">
-          <Tip label={k.orchestrationSettings}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={k.orchestrationSettings}
               className={cn(settingsOpen && 'bg-(--ui-control-active-background) text-foreground')}
@@ -1368,7 +1368,7 @@ export function KanbanBoardPage() {
             >
               <Codicon name="organization" size="0.85rem" />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{k.orchestrationSettings}</TooltipContent></Tooltip>
           <Button onClick={() => setAddStatus('triage')} size="sm">
             <Codicon name="add" size="0.8rem" />
             {k.newTask}

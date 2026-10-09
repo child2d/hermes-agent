@@ -7,7 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { RowButton } from '@/components/ui/row-button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { $sidebarRowMeta } from '@/store/layout'
 import type { TileDock } from '@/store/session-states'
@@ -73,7 +77,7 @@ export function SidebarSectionAddButton({
   onPlainClick: () => void
 }) {
   return (
-    <Tip label={ariaLabel}>
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={ariaLabel}
         className={HEADER_ACTION_BTN}
@@ -99,7 +103,7 @@ export function SidebarSectionAddButton({
       >
         <Codicon name="add" size="0.75rem" />
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{ariaLabel}</TooltipContent></Tooltip>
   )
 }
 
@@ -298,7 +302,7 @@ export function SidebarGroupRow({
         {lead}
         {label}
         {toggle ? (
-          <Tip label={toggle.ariaLabel}>
+          <Tooltip><TooltipTrigger asChild>
             <button
               aria-label={toggle.ariaLabel}
               className="flex flex-1 items-center self-stretch bg-transparent p-0"
@@ -311,7 +315,7 @@ export function SidebarGroupRow({
                 open={toggle.open}
               />
             </button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{toggle.ariaLabel}</TooltipContent></Tooltip>
         ) : (
           <span className="flex-1" />
         )}

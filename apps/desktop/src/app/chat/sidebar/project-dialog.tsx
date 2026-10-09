@@ -15,7 +15,11 @@ import {
 import { GenerateButton } from '@/components/ui/generate-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { isSubmitEnter } from '@/lib/ime'
 import { type ProjectIdeaTemplate, randomIdeaTemplates } from '@/lib/project-idea-templates'
@@ -247,7 +251,7 @@ export function ProjectDialog() {
                         {p.primaryBadge}
                       </span>
                     )}
-                    <Tip label={p.removeFolder}>
+                    <Tooltip><TooltipTrigger asChild>
                       <Button
                         aria-label={p.removeFolder}
                         className="size-5 shrink-0 text-(--ui-text-quaternary) hover:text-foreground"
@@ -258,7 +262,7 @@ export function ProjectDialog() {
                       >
                         <Codicon name="close" size="0.75rem" />
                       </Button>
-                    </Tip>
+                    </TooltipTrigger><TooltipContent>{p.removeFolder}</TooltipContent></Tooltip>
                   </li>
                 ))}
               </ul>
@@ -310,7 +314,7 @@ export function ProjectDialog() {
                   {template.label}
                 </button>
               ))}
-              <Tip label={p.ideaShuffle}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   aria-label={p.ideaShuffle}
                   className="size-5 text-(--ui-text-quaternary) hover:text-foreground"
@@ -322,7 +326,7 @@ export function ProjectDialog() {
                 >
                   <Codicon name="refresh" size="0.75rem" />
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{p.ideaShuffle}</TooltipContent></Tooltip>
             </div>
           </div>
         )}

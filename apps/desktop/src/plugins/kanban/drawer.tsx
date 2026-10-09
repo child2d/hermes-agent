@@ -28,7 +28,9 @@ import {
   MessageTextContent,
   SegmentedControl,
   Textarea,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useI18n,
   useMutation,
   useQuery,
@@ -401,7 +403,7 @@ function CommentComposer({
           placeholder={running ? k.messageWorker : k.addComment}
           value={body}
         />
-        <Tip label={sendLabel}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={sendLabel}
             className="absolute top-1 right-1 text-muted-foreground/80 hover:text-foreground"
@@ -413,7 +415,7 @@ function CommentComposer({
           >
             <Codicon name="arrow-up" size="0.85rem" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{sendLabel}</TooltipContent></Tooltip>
       </div>
       {running && onRequeue && (
         <div className="flex items-center justify-between gap-2">
@@ -501,7 +503,7 @@ function AttachmentDownload({
 
   // Long names truncate in the narrow sidebar; the tip reveals the full name.
   return (
-    <Tip label={attachment.filename} placement="row">
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={`${t.fileMenu.download} ${attachment.filename}`}
         className="max-w-full justify-start font-normal h-auto p-0"
@@ -512,7 +514,7 @@ function AttachmentDownload({
         <Codicon name={download.isPending ? 'sync' : 'cloud-download'} size="0.75rem" spinning={download.isPending} />
         <span className="truncate">{attachment.filename}</span>
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{attachment.filename}</TooltipContent></Tooltip>
   )
 }
 
@@ -613,7 +615,7 @@ function EstimateSection({ id }: { id: string }) {
                 · {k.complexity[result.complexity] ?? result.complexity}
               </span>
             )}
-            <Tip label={k.reEstimate}>
+            <Tooltip><TooltipTrigger asChild>
               <Button
                 aria-label={k.reEstimate}
                 className="ml-auto"
@@ -624,7 +626,7 @@ function EstimateSection({ id }: { id: string }) {
               >
                 <Codicon name="refresh" size="0.75rem" spinning={est.isPending} />
               </Button>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{k.reEstimate}</TooltipContent></Tooltip>
           </div>
           {result.rationale && (
             <p className="text-[0.6875rem] leading-relaxed text-(--ui-text-quaternary)">{result.rationale}</p>
@@ -636,9 +638,9 @@ function EstimateSection({ id }: { id: string }) {
             <Codicon name={est.isPending ? 'loading' : 'dashboard'} size="0.75rem" spinning={est.isPending} />
             {est.isPending ? k.estimating : k.estimateEffort}
           </Button>
-          <Tip label={k.estimateTipLong}>
+          <Tooltip><TooltipTrigger asChild>
             <span className="text-[0.625rem] text-(--ui-text-quaternary)">{k.makesModelCall}</span>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{k.estimateTipLong}</TooltipContent></Tooltip>
         </div>
       )}
     </Section>
@@ -664,7 +666,7 @@ function LinkChips({
 
         // Chips truncate in the narrow sidebar; the tip reveals the full title.
         return (
-          <Tip key={linked} label={label} placement="row">
+          <Tooltip><TooltipTrigger asChild>
             <button
               aria-label={label}
               className="max-w-full truncate rounded bg-(--ui-bg-quaternary) px-1.5 py-0.5 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground"
@@ -673,7 +675,7 @@ function LinkChips({
             >
               {label}
             </button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
         )
       })}
     </div>
@@ -716,11 +718,11 @@ function FeedTabs({
   )
 
   const help = (
-    <Tip label={running ? k.commentsHelpRunning : k.commentsHelp}>
+    <Tooltip><TooltipTrigger asChild>
       <span className="grid size-5 place-items-center rounded text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)">
         <Codicon name="question" size="0.8rem" />
       </span>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{running ? k.commentsHelpRunning : k.commentsHelp}</TooltipContent></Tooltip>
   )
 
   const body = (
@@ -1115,16 +1117,16 @@ export function TaskDrawer({
                     while the card sits in the blocked column. */}
                 {task.status === 'blocked' && task.block_kind && (
                   <MetaRow label={k.blockReason}>
-                    <Tip label={k.blockKindTip(task.block_kind)}>
+                    <Tooltip><TooltipTrigger asChild>
                       <span className="cursor-help text-destructive">{task.block_kind}</span>
-                    </Tip>
+                    </TooltipTrigger><TooltipContent>{k.blockKindTip(task.block_kind)}</TooltipContent></Tooltip>
                   </MetaRow>
                 )}
                 {typeof task.block_recurrences === 'number' && task.block_recurrences > 0 && (
                   <MetaRow label={k.blockRecurrences}>
-                    <Tip label={k.blockRecurrencesTip}>
+                    <Tooltip><TooltipTrigger asChild>
                       <span className="cursor-help">×{task.block_recurrences}</span>
-                    </Tip>
+                    </TooltipTrigger><TooltipContent>{k.blockRecurrencesTip}</TooltipContent></Tooltip>
                   </MetaRow>
                 )}
                 {typeof task.consecutive_failures === 'number' && task.consecutive_failures > 0 && (

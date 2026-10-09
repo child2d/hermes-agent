@@ -31,7 +31,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import {
   runSessionControlAction,
@@ -411,7 +415,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                             leading={<StatusPendingIcon />}
                             trailing={
                               <div className="flex shrink-0 items-center gap-0.5">
-                                <Tip label={ctrl.copyCriterion(index)}>
+                                <Tooltip><TooltipTrigger asChild>
                                   <Button
                                     aria-label={ctrl.copyCriterion(index)}
                                     className="size-6 rounded text-muted-foreground/60 hover:text-foreground/90"
@@ -422,7 +426,7 @@ export const SessionControlGoalSection = memo(function SessionControlGoalSection
                                   >
                                     <Codicon name="copy" size="0.7rem" />
                                   </Button>
-                                </Tip>
+                                </TooltipTrigger><TooltipContent>{ctrl.copyCriterion(index)}</TooltipContent></Tooltip>
                                 <Button
                                   aria-label={ctrl.removeCriterion(index)}
                                   className="size-6 rounded text-muted-foreground/60 hover:text-destructive"

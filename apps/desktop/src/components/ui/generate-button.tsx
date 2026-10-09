@@ -2,7 +2,11 @@ import type * as React from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { Square } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
@@ -40,7 +44,7 @@ export function GenerateButton({
   const cancellable = generating && !!onCancel
 
   return (
-    <Tip label={tip}>
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={tip}
         className={cn('text-muted-foreground/80 hover:text-foreground', className)}
@@ -57,6 +61,6 @@ export function GenerateButton({
           <Codicon name="sparkle" size={iconSize} spinning={generating} />
         )}
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{tip}</TooltipContent></Tooltip>
   )
 }

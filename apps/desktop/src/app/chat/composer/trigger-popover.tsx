@@ -4,7 +4,11 @@ import { Fragment, useEffect, useRef } from 'react'
 import { referenceKind, referenceStyle } from '@/components/assistant-ui/reference-kinds'
 import { Codicon } from '@/components/ui/codicon'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -200,7 +204,7 @@ export function ComposerTriggerPopover({
           return (
             <Fragment key={item.id}>
               {showHeader && <div className={cn(GROUP_HEADER_CLASS, isFirstHeader ? 'pt-0.5' : 'pt-2')}>{group}</div>}
-              <Tip delayDuration={400} label={kind === '/' ? description : undefined} placement="row" sideOffset={4}>
+              <Tooltip><TooltipTrigger asChild>
                 <button
                   className={ROW_CLASS}
                   data-highlighted={active ? '' : undefined}
@@ -231,7 +235,7 @@ export function ComposerTriggerPopover({
                     </>
                   )}
                 </button>
-              </Tip>
+              </TooltipTrigger><TooltipContent sideOffset={4}>{kind === '/' ? description : undefined}</TooltipContent></Tooltip>
             </Fragment>
           )
         })

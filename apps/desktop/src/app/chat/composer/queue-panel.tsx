@@ -4,7 +4,11 @@ import { StatusRow } from '@/components/chat/status-row'
 import { StatusSection } from '@/components/chat/status-section'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { type Translations, useI18n } from '@/i18n'
 import { CornerDownLeft, iconSize, Pencil, SteeringWheel } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -72,7 +76,7 @@ export function QueuePanel({
     <StatusSection
       accessory={
         parked ? (
-          <Tip label={c.queueResumeTip}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               className="text-muted-foreground/75 hover:text-foreground/90 h-auto px-1 py-0 text-xs leading-4 font-normal"
               onClick={onResume}
@@ -81,7 +85,7 @@ export function QueuePanel({
             >
               {c.queueResume}
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{c.queueResumeTip}</TooltipContent></Tooltip>
         ) : undefined
       }
       icon={<Codicon className="text-muted-foreground/70" name={parked ? 'debug-pause' : 'layers'} size="0.8rem" />}
@@ -109,7 +113,7 @@ export function QueuePanel({
             trailing={
               <>
                 {canExpand && (
-                  <Tip label={isExpanded ? c.queueCollapse : c.queueExpand}>
+                  <Tooltip><TooltipTrigger asChild>
                     <Button
                       aria-expanded={isExpanded}
                       aria-label={isExpanded ? c.queueCollapse : c.queueExpand}
@@ -125,9 +129,9 @@ export function QueuePanel({
                         size={iconSize.xs}
                       />
                     </Button>
-                  </Tip>
+                  </TooltipTrigger><TooltipContent>{isExpanded ? c.queueCollapse : c.queueExpand}</TooltipContent></Tooltip>
                 )}
-                <Tip label={c.queueEdit}>
+                <Tooltip><TooltipTrigger asChild>
                   <Button
                     aria-label={c.queueEdit}
                     className="size-5 rounded-md"
@@ -139,9 +143,9 @@ export function QueuePanel({
                   >
                     <Pencil className={iconSize.xs} />
                   </Button>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{c.queueEdit}</TooltipContent></Tooltip>
                 {canSteer && (
-                  <Tip label={c.queueSteer}>
+                  <Tooltip><TooltipTrigger asChild>
                     <Button
                       aria-label={c.queueSteer}
                       className="size-5 rounded-md"
@@ -153,9 +157,9 @@ export function QueuePanel({
                     >
                       <SteeringWheel className={iconSize.xs} />
                     </Button>
-                  </Tip>
+                  </TooltipTrigger><TooltipContent>{c.queueSteer}</TooltipContent></Tooltip>
                 )}
-                <Tip label={busy ? c.queueSendNext : c.queueSend}>
+                <Tooltip><TooltipTrigger asChild>
                   <Button
                     aria-label={busy ? c.queueSendNext : c.queueSend}
                     className="size-5 rounded-md"
@@ -167,7 +171,7 @@ export function QueuePanel({
                   >
                     <CornerDownLeft className={iconSize.xs} />
                   </Button>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{busy ? c.queueSendNext : c.queueSend}</TooltipContent></Tooltip>
               </>
             }
             trailingVisible={isEditing}

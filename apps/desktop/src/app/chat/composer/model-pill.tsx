@@ -9,7 +9,11 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { releaseTypingFocus } from '@/components/ui/keyboard-first'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { ChevronDown } from '@/lib/icons'
 import { formatModelPillLabel, providerDisplayName } from '@/lib/model-status-label'
@@ -173,7 +177,7 @@ export function ModelPill({
 
   if (!model.modelMenuContent) {
     return (
-      <Tip label={pinnedOverride ? `${copy.openModelPicker} — ${copy.modelPinned}` : copy.openModelPicker} side="top">
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label={copy.openModelPicker}
           className={pillClass}
@@ -185,7 +189,7 @@ export function ModelPill({
         >
           {label}
         </Button>
-      </Tip>
+      </TooltipTrigger><TooltipContent side="top">{pinnedOverride ? `${copy.openModelPicker} — ${copy.modelPinned}` : copy.openModelPicker}</TooltipContent></Tooltip>
     )
   }
 
@@ -202,7 +206,7 @@ export function ModelPill({
 
   return (
     <DropdownMenu onOpenChange={setMenuOpen} open={open}>
-      <Tip label={title} side="top">
+      <Tooltip><TooltipTrigger asChild>
         <DropdownMenuTrigger asChild>
           <Button
             aria-label={title}
@@ -215,7 +219,7 @@ export function ModelPill({
             {label}
           </Button>
         </DropdownMenuTrigger>
-      </Tip>
+      </TooltipTrigger><TooltipContent side="top">{title}</TooltipContent></Tooltip>
       <DropdownMenuContent
         align="end"
         className="w-72 p-0"

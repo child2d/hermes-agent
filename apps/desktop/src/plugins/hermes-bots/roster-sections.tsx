@@ -7,7 +7,16 @@
  * without either half knowing about a bot row.
  */
 
-import { cn, Codicon, ConnectionGlyph, DisclosureCaret, RowButton, Tip } from '@hermes/plugin-sdk'
+import {
+  cn,
+  Codicon,
+  ConnectionGlyph,
+  DisclosureCaret,
+  RowButton,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@hermes/plugin-sdk'
 import type { ReactNode } from 'react'
 
 import { botHandle, botRosterKey, botSourceStatus, filterBots } from './data'
@@ -280,7 +289,7 @@ export function RosterSectionHeader({
     </RowButton>
   )
 
-  const heading = tip ? <Tip label={tip}>{button}</Tip> : button
+  const heading = tip ? <Tooltip><TooltipTrigger asChild>{button}</TooltipTrigger><TooltipContent>{tip}</TooltipContent></Tooltip> : button
 
   // With a trailing action, heading and action share one hover group so the
   // action can reveal on hover of the whole row.

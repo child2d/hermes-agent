@@ -3,7 +3,11 @@ import { memo, useState } from 'react'
 
 import { StatusRow } from '@/components/chat/status-row'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode } from '@/lib/desktop-fs'
 import { normalizeOrLocalPreviewTarget, openPreviewTargetInBrowser } from '@/lib/local-preview'
@@ -101,18 +105,15 @@ export const PreviewStatusRow = memo(function PreviewStatusRow({ item, onDismiss
         }
       }}
     >
-      <Tip
-        label={
+      <Tooltip><TooltipTrigger asChild>
+        <span className="min-w-0 truncate text-[0.73rem] leading-4 text-foreground/92">{item.label}</span>
+      </TooltipTrigger><TooltipContent>{
           <>
             {item.target}
             <br />
             <span className="opacity-70">{t.preview.linkHint}</span>
           </>
-        }
-        placement="row"
-      >
-        <span className="min-w-0 truncate text-[0.73rem] leading-4 text-foreground/92">{item.label}</span>
-      </Tip>
+        }</TooltipContent></Tooltip>
     </StatusRow>
   )
 })

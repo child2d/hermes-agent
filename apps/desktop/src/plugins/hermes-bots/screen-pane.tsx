@@ -12,7 +12,17 @@
  * attaches is bounded to a few rapid retries before the error state.
  */
 
-import { Button, Codicon, EmptyState, GlyphSpinner, host, Tip, useValue } from '@hermes/plugin-sdk'
+import {
+  Button,
+  Codicon,
+  EmptyState,
+  GlyphSpinner,
+  host,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  useValue
+} from '@hermes/plugin-sdk'
 import type { RpcEvent } from '@hermes/plugin-sdk'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -514,11 +524,11 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
         ) : (
           <>
             {humanOther ? (
-              <Tip label={t.screen.handBackForceHint}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button disabled={busy} onClick={() => void handBack(true)} size="sm" variant="secondary">
                   <Codicon name="debug-continue" /> {t.screen.handBackForce}
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{t.screen.handBackForceHint}</TooltipContent></Tooltip>
             ) : null}
             {/* The lease is granted to a server-minted viewer id; until `display.observe` has
                 minted one for this attach a Take over could only send an empty id and dead-end
@@ -528,7 +538,7 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
             </Button>
           </>
         )}
-        <Tip label={t.screen.reconnect}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={t.screen.reconnect}
             disabled={conn === 'attaching'}
@@ -538,7 +548,7 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
           >
             <Codicon name="refresh" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{t.screen.reconnect}</TooltipContent></Tooltip>
       </div>
       <div
         className={

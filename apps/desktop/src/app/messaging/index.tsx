@@ -12,7 +12,11 @@ import { ErrorBanner } from '@/components/ui/error-state'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { ResponsiveTabs } from '@/components/ui/tab-dropdown'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import {
   approvePairing,
   getMessagingPlatforms,
@@ -1040,16 +1044,16 @@ function MessagingField({
             value={edits[field.key] || ''}
           />
           {field.url && (
-            <Tip label={m.openDocs}>
+            <Tooltip><TooltipTrigger asChild>
               <Button asChild className="size-8 shrink-0" variant="ghost">
                 <a href={field.url} rel="noreferrer" target="_blank">
                   <ExternalLink className="size-3.5" />
                 </a>
               </Button>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{m.openDocs}</TooltipContent></Tooltip>
           )}
           {field.is_set && (
-            <Tip label={m.clearField(field.key)}>
+            <Tooltip><TooltipTrigger asChild>
               <Button
                 className="size-8 shrink-0"
                 disabled={saving === `clear:${field.key}`}
@@ -1058,7 +1062,7 @@ function MessagingField({
               >
                 <Trash2 className="size-3.5" />
               </Button>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{m.clearField(field.key)}</TooltipContent></Tooltip>
           )}
         </div>
       }

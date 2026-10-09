@@ -3,7 +3,11 @@ import './drawer.css'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 
 interface StatusDrawerContentProps {
@@ -40,7 +44,7 @@ export function StatusDrawerToggle({ collapsed, controls, onToggle }: StatusDraw
   const label = collapsed ? t.statusStack.showStack : t.statusStack.hideStack
 
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-controls={controls}
         aria-expanded={!collapsed}
@@ -53,6 +57,6 @@ export function StatusDrawerToggle({ collapsed, controls, onToggle }: StatusDraw
       >
         <span aria-hidden className="h-0.75 w-7 rounded-full bg-current" />
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }

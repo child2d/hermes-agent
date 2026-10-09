@@ -4,7 +4,11 @@ import { type RefObject, useRef } from 'react'
 import { CodeEditor, type CodeEditorApi } from '@/components/chat/code-editor'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -56,7 +60,7 @@ export function JsonDocumentEditor({
           <span className="flex min-w-0 items-center gap-1.5 text-[0.68rem] text-(--ui-text-tertiary)">{header}</span>
         ) : null}
         <div className="ml-auto flex items-center gap-1">
-          <Tip label={t.common.formatJson}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={t.common.formatJson}
               className={ICON_BUTTON}
@@ -73,7 +77,7 @@ export function JsonDocumentEditor({
             >
               <Codicon name="json" size="0.8125rem" />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{t.common.formatJson}</TooltipContent></Tooltip>
           {trailing}
         </div>
       </div>

@@ -2,7 +2,11 @@ import { type KeyboardEventHandler, type ReactNode, type RefObject, useState } f
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { Loader2, Search } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -93,7 +97,7 @@ export function SearchField({
       {loading ? (
         <Loader2 className="pointer-events-none size-3.5 shrink-0 animate-spin text-muted-foreground/70" />
       ) : value ? (
-        <Tip label={t.ui.search.clear}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={t.ui.search.clear}
             className="shrink-0 text-muted-foreground/85 hover:bg-accent/60 hover:text-foreground"
@@ -103,7 +107,7 @@ export function SearchField({
           >
             <Codicon name="close" size="0.875rem" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{t.ui.search.clear}</TooltipContent></Tooltip>
       ) : null}
     </div>
   )

@@ -3,7 +3,11 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { Check, Copy, Maximize, RefreshCw, X, ZoomIn, ZoomOut } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
@@ -191,7 +195,7 @@ function Divider() {
 
 function ToolbarButton({ children, label, onClick }: { children: ReactNode; label: string; onClick: () => void }) {
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={label}
         className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -200,6 +204,6 @@ function ToolbarButton({ children, label, onClick }: { children: ReactNode; labe
       >
         {children}
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }

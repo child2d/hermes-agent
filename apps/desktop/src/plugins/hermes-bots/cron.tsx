@@ -31,7 +31,9 @@ import {
   SelectValue,
   Switch,
   Textarea,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   translateNow,
   useI18n,
   useQuery,
@@ -571,7 +573,7 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
           disabled={busy || legacyUnsafe}
           onCheckedChange={value => act(value ? 'resume' : 'pause')}
         />
-        <Tip label={t.common.delete}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={t.common.delete}
             className="opacity-0 transition-opacity group-hover:opacity-100"
@@ -582,7 +584,7 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
           >
             <Codicon name="trash" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{t.common.delete}</TooltipContent></Tooltip>
       </div>
       {/* The schedule pill and the next-run label keep their words: when the
           pane can't fit both on one line the next-run label wraps to a second
@@ -1276,11 +1278,11 @@ export function RoutinesPane() {
           </div>
           <div className="text-[0.65rem] uppercase tracking-wider text-(--ui-text-quaternary)">{c.title}</div>
         </div>
-        <Tip label={c.newCron}>
+        <Tooltip><TooltipTrigger asChild>
           <Button aria-label={c.newCron} onClick={openCreate} size="icon" variant="ghost">
             <Codicon name="add" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{c.newCron}</TooltipContent></Tooltip>
       </div>
       <div className="mx-3 border-t border-(--ui-stroke-secondary)" />
       {staleNotice ? (

@@ -1,6 +1,10 @@
 import { Codicon } from '@/components/ui/codicon'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 
 interface SidebarLoadMoreRowProps {
@@ -19,7 +23,7 @@ export function SidebarLoadMoreRow({ step, onClick, loading = false }: SidebarLo
   const label = loading ? t.sidebar.loading : step > 0 ? t.sidebar.loadCount(step) : t.sidebar.loadMore
 
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={label}
         className="mr-2 ml-auto grid size-5 place-items-center rounded-sm bg-transparent text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-(--ui-text-tertiary)"
@@ -33,6 +37,6 @@ export function SidebarLoadMoreRow({ step, onClick, loading = false }: SidebarLo
           <Codicon name="ellipsis" size="0.75rem" />
         )}
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }

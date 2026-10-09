@@ -10,7 +10,11 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { Upload } from '@/lib/icons'
 
@@ -76,7 +80,7 @@ export function ShareControls({ imported = false, onImport, onResetMap, shareCod
         }}
         open={open}
       >
-        <Tip label={t.starmap.shareTitle}>
+        <Tooltip><TooltipTrigger asChild>
           <DialogTrigger asChild>
             <Button
               aria-label={t.starmap.shareTitle}
@@ -87,7 +91,7 @@ export function ShareControls({ imported = false, onImport, onResetMap, shareCod
               <Upload className="size-3.5" />
             </Button>
           </DialogTrigger>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{t.starmap.shareTitle}</TooltipContent></Tooltip>
 
         <DialogContent className="max-w-md">
           <DialogHeader>

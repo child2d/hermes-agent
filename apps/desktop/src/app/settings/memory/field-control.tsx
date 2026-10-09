@@ -2,7 +2,11 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { Check, Info } from '@/lib/icons'
 import type { MemoryProviderField } from '@/types/hermes'
 
@@ -20,9 +24,9 @@ export function FieldTitle({ field }: { field: MemoryProviderField }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       {field.label}
-      <Tip className="max-w-60 font-normal leading-snug whitespace-normal" label={field.info}>
+      <Tooltip><TooltipTrigger asChild>
         <Info aria-label={`About ${field.label}`} className="size-3.5 text-muted-foreground/70" />
-      </Tip>
+      </TooltipTrigger><TooltipContent className="max-w-60 font-normal leading-snug whitespace-normal">{field.info}</TooltipContent></Tooltip>
     </span>
   )
 }

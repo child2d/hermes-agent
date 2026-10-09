@@ -3,7 +3,11 @@
 import { type ComponentPropsWithRef, forwardRef } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export interface TooltipIconButtonProps extends ComponentPropsWithRef<typeof Button> {
@@ -14,7 +18,7 @@ export interface TooltipIconButtonProps extends ComponentPropsWithRef<typeof But
 export const TooltipIconButton = forwardRef<HTMLButtonElement, TooltipIconButtonProps>(
   ({ children, tooltip, side, className, ...rest }, ref) => {
     return (
-      <Tip label={tooltip} side={side}>
+      <Tooltip><TooltipTrigger asChild>
         <Button
           size="icon"
           variant="ghost"
@@ -25,7 +29,7 @@ export const TooltipIconButton = forwardRef<HTMLButtonElement, TooltipIconButton
         >
           {children}
         </Button>
-      </Tip>
+      </TooltipTrigger><TooltipContent side={side}>{tooltip}</TooltipContent></Tooltip>
     )
   }
 )

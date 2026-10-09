@@ -10,7 +10,11 @@ import { Input } from '@/components/ui/input'
 import { SearchField } from '@/components/ui/search-field'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Download, Loader2, PawPrint, Pencil, Trash2 } from '@/lib/icons'
@@ -359,7 +363,7 @@ function PetAction({
   onClick: () => void
 }) {
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={label}
         className={cn(
@@ -371,6 +375,6 @@ function PetAction({
       >
         {icon}
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }

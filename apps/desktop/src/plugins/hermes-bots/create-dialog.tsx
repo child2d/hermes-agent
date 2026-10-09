@@ -33,7 +33,9 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useI18n,
   useValue
 } from '@hermes/plugin-sdk'
@@ -1258,7 +1260,7 @@ export function CreateGroupChatDialog({ open, roster, onClose, onCreated }: Crea
                 key={botRosterKey(bot)}
                 variant="secondary"
               >
-                <Tip label={b.group.removeFromSelection}>
+                <Tooltip><TooltipTrigger asChild>
                   <RowButton
                     onClick={() =>
                       setChecked(prev => ({
@@ -1270,7 +1272,7 @@ export function CreateGroupChatDialog({ open, roster, onClose, onCreated }: Crea
                     {displayName(bot, botRosterMeta(bot, allMeta))}
                     <Codicon className="text-[0.6rem]" name="close" />
                   </RowButton>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{b.group.removeFromSelection}</TooltipContent></Tooltip>
               </Badge>
             ))}
           </div>

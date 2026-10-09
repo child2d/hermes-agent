@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { RowButton } from '@/components/ui/row-button'
 import { SearchField } from '@/components/ui/search-field'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { translateNow } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -383,7 +387,7 @@ export function PanelAddButton({
   onClick: () => void
 }) {
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={label}
         className="h-7 w-full shrink-0 justify-center text-muted-foreground/70 hover:bg-(--ui-row-hover-background) hover:text-foreground"
@@ -393,7 +397,7 @@ export function PanelAddButton({
       >
         <Codicon name={icon} size="0.875rem" />
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }
 

@@ -30,7 +30,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { HighlightMatches } from '@/components/ui/highlight-matches'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tip, TipHintLabel } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
@@ -1077,7 +1081,7 @@ function ModelFamilyRow({
             outline otherwise. Its click never reaches the row, so starring
             neither selects the model nor closes the menu. Not a tab stop —
             the search field owns keyboard focus (Shift+Enter stars). */}
-        <Tip label={<TipHintLabel hint={favorite ? undefined : copy.favoriteShortcut} text={favoriteLabel} />}>
+        <Tooltip><TooltipTrigger asChild>
           <button
             aria-label={favoriteLabel}
             aria-pressed={favorite}
@@ -1097,7 +1101,7 @@ function ModelFamilyRow({
           >
             <Codicon name={favorite ? 'star-full' : 'star-empty'} size="0.75rem" />
           </button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{favoriteLabel}</TooltipContent></Tooltip>
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           {decoration.icon !== undefined ? <ModelMenuRowIcon icon={decoration.icon} /> : null}
           <span className="min-w-0 truncate">

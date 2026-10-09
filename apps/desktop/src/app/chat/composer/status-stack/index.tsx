@@ -16,7 +16,11 @@ import { SharedMetricsConsentStrip } from '@/components/shared-metrics/consent-s
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
-import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { type Translations, useI18n } from '@/i18n'
 import { todoTree } from '@/lib/todos'
 import { useSessionSlice, useStoreSelector } from '@/lib/use-session-slice'
@@ -268,7 +272,7 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
         <StatusSection
           accessory={
             group.type === 'subagent' ? (
-              <Tip label={<TipKeybindLabel actionId="nav.agents" text={t.statusStack.agents} />}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   className="text-muted-foreground/75 hover:text-foreground/90 h-auto px-1 py-0 text-xs leading-4 font-normal"
                   onClick={openAgents}
@@ -277,7 +281,7 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
                 >
                   {t.statusStack.agents}
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{t.statusStack.agents}</TooltipContent></Tooltip>
             ) : undefined
           }
           collapsedIndicator={

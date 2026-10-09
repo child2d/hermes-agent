@@ -21,7 +21,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem
 } from '@/components/ui/sidebar'
-import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/hermes'
 import { useI18n } from '@/i18n'
@@ -1669,7 +1673,7 @@ export function ChatSidebar({
                       item.keybindActionId
                         ? {
                             children: (
-                              <TipKeybindLabel actionId={item.keybindActionId} text={s.nav[item.id] ?? item.label} />
+                              s.nav[item.id] ?? item.label
                             )
                           }
                         : (s.nav[item.id] ?? item.label)
@@ -1878,7 +1882,7 @@ export function ChatSidebar({
                   // the middle as a blank 24px hole until hover.
                   <div className="flex shrink-0 items-center gap-0.5">
                     {unreadCount > 0 && (
-                      <Tip label={s.markAllRead}>
+                      <Tooltip><TooltipTrigger asChild>
                         <Button
                           aria-label={s.markAllRead}
                           className={HEADER_ACTION_BTN}
@@ -1894,7 +1898,7 @@ export function ChatSidebar({
                         >
                           <Codicon name="check-all" size="0.75rem" />
                         </Button>
-                      </Tip>
+                      </TooltipTrigger><TooltipContent>{s.markAllRead}</TooltipContent></Tooltip>
                     )}
                     {inProject && enteredProject ? (
                       <div className="group/workspace flex shrink-0 items-center gap-0.5">
@@ -1909,7 +1913,7 @@ export function ChatSidebar({
                           />
                         )}
                         <div className="grid size-6 place-items-center">
-                          <Tip label={s.showProjects}>
+                          <Tooltip><TooltipTrigger asChild>
                             <Button
                               aria-label={s.showProjects}
                               className={HEADER_NAV_BTN}
@@ -1922,7 +1926,7 @@ export function ChatSidebar({
                             >
                               <Codicon name="list-unordered" size="0.75rem" />
                             </Button>
-                          </Tip>
+                          </TooltipTrigger><TooltipContent>{s.showProjects}</TooltipContent></Tooltip>
                         </div>
                       </div>
                     ) : (

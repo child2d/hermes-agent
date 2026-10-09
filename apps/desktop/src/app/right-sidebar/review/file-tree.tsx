@@ -13,7 +13,11 @@ import {
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { DiffCount } from '@/components/ui/diff-count'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type { HermesReviewFile } from '@/global'
 import { useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode } from '@/lib/desktop-fs'
@@ -421,7 +425,7 @@ function ReviewFileRow({ node, depth }: { node: ReviewTreeNode; depth: number })
         </span>
 
         <span className="hidden shrink-0 items-center gap-0.5 group-hover/review-row:flex">
-          <Tip label={file.staged ? c.unstage : c.stage}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={file.staged ? c.unstage : c.stage}
               className="size-4 rounded text-muted-foreground/70 hover:text-foreground"
@@ -434,8 +438,8 @@ function ReviewFileRow({ node, depth }: { node: ReviewTreeNode; depth: number })
             >
               <Codicon name={file.staged ? 'remove' : 'add'} size="0.7rem" />
             </Button>
-          </Tip>
-          <Tip label={c.revert}>
+          </TooltipTrigger><TooltipContent>{file.staged ? c.unstage : c.stage}</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={c.revert}
               className="size-4 rounded text-muted-foreground/70 hover:text-(--ui-red)"
@@ -448,7 +452,7 @@ function ReviewFileRow({ node, depth }: { node: ReviewTreeNode; depth: number })
             >
               <Codicon name="discard" size="0.7rem" />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{c.revert}</TooltipContent></Tooltip>
         </span>
 
         <DiffCount

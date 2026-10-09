@@ -26,7 +26,7 @@ import App from './app'
 import { PlanktonAuthGate } from './app/plankton-auth-gate'
 import { RootErrorBoundary } from './components/error-boundary'
 import { HapticsProvider } from './components/haptics-provider'
-import { RootTooltipProvider } from './components/ui/tooltip'
+import { TooltipProvider } from './components/ui/tooltip'
 import { ProfileI18nProvider as I18nProvider } from './i18n/profile-provider'
 import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
@@ -99,7 +99,7 @@ if (winParam === 'overlay') {
                     dominated unrelated interactions (52,784 TooltipProvider
                     renders in a single sash drag). Radix's provider holds only
                     refs and stable callbacks, so hoisting is what it's for. */}
-                <RootTooltipProvider>
+                <TooltipProvider>
                   {/* useTransitions={false}: react-router v7's HashRouter wraps every
                     route state update in React.startTransition() by default. In
                     React 19's concurrent renderer, transitions are non-urgent — React
@@ -118,7 +118,7 @@ if (winParam === 'overlay') {
                       <App />
                     </PlanktonAuthGate>
                   </HashRouter>
-                </RootTooltipProvider>
+                </TooltipProvider>
               </HapticsProvider>
             </ThemeProvider>
           </I18nProvider>

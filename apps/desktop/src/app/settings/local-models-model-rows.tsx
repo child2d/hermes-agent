@@ -1,7 +1,11 @@
 import { type ReactElement, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { Check, CheckCircle2, Cpu, Download, Eject, Loader2, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { runningDownloadFor } from '@/store/local-runtime-jobs'
@@ -59,14 +63,14 @@ function ResidencyPills({ residency }: ResidencyPillsProps): ReactElement {
   return (
     <>
       {isLoaded && livePlacement && (
-        <Tip label={livePlacement.spilled ? copy.placementSpilledTip : copy.placementResidentTip}>
+        <Tooltip><TooltipTrigger asChild>
           <Pill tone={livePlacement.spilled ? 'warn' : 'success'}>
             <Cpu className="mr-1 size-3" />
             {livePlacement.granted_window_label ?? livePlacement.window_label ?? ''}
             {' · '}
             {livePlacement.spilled ? copy.placementSpilled : copy.placementResident}
           </Pill>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{livePlacement.spilled ? copy.placementSpilledTip : copy.placementResidentTip}</TooltipContent></Tooltip>
       )}
       {isLoaded && !livePlacement && <Pill>{copy.loadedPill}</Pill>}
 
@@ -88,11 +92,11 @@ function EjectModelButton({ modelId }: ModelIdProps): ReactElement {
   const scope: LocalModelsActionScope = useLocalModelsActionScope()
 
   return (
-    <Tip label={scope.copy.ejectTip}>
+    <Tooltip><TooltipTrigger asChild>
       <Button onClick={() => void ejectModel(scope, modelId)} size="icon" variant="ghost">
         <Eject />
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{scope.copy.ejectTip}</TooltipContent></Tooltip>
   )
 }
 
@@ -115,7 +119,7 @@ function DeleteModelButton({ modelId }: ModelIdProps): ReactElement {
   }
 
   return (
-    <Tip label={scope.copy.deleteAction}>
+    <Tooltip><TooltipTrigger asChild>
       <Button
         className={cn(deleting && '[&_svg]:animate-spin')}
         onClick={() => void handleDelete()}
@@ -124,7 +128,7 @@ function DeleteModelButton({ modelId }: ModelIdProps): ReactElement {
       >
         {deleting ? <Loader2 /> : <Trash2 />}
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{scope.copy.deleteAction}</TooltipContent></Tooltip>
   )
 }
 
@@ -155,12 +159,12 @@ export function CatalogModelRow({ model, status, jobs }: CatalogModelRowProps): 
             <ResidencyPills residency={residency} />
 
             {isActive ? (
-              <Tip label={copy.activeDetail}>
+              <Tooltip><TooltipTrigger asChild>
                 <Pill tone="primary">
                   <Check className="mr-1 size-3" />
                   {copy.activePill}
                 </Pill>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{copy.activeDetail}</TooltipContent></Tooltip>
             ) : (
               <Button
                 className={cn(activating && '[&_svg]:animate-spin')}
@@ -210,26 +214,26 @@ export function CatalogModelRow({ model, status, jobs }: CatalogModelRowProps): 
                 slower); red = doesn't fit this machine at all.
                 Detail prose lives in the tooltip. */}
             {!model.fits ? (
-              <Tip label={model.fit_detail ?? model.fit_summary}>
+              <Tooltip><TooltipTrigger asChild>
                 <Pill tone="destructive">
                   <Cpu className="mr-1 size-3" />
                   {copy.pillTooBig}
                 </Pill>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{model.fit_detail ?? model.fit_summary}</TooltipContent></Tooltip>
             ) : model.spilled ? (
-              <Tip label={model.quant_reason ?? model.fit_summary}>
+              <Tooltip><TooltipTrigger asChild>
                 <Pill tone="warn">
                   <Cpu className="mr-1 size-3" />
                   {copy.pillUsesRam}
                 </Pill>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{model.quant_reason ?? model.fit_summary}</TooltipContent></Tooltip>
             ) : (
-              <Tip label={model.quant_reason ?? model.fit_summary}>
+              <Tooltip><TooltipTrigger asChild>
                 <Pill tone="success">
                   <Cpu className="mr-1 size-3" />
                   {copy.pillFitsGpu}
                 </Pill>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{model.quant_reason ?? model.fit_summary}</TooltipContent></Tooltip>
             )}
 
             {/* Context: one pill. Green 'Full X context' only when
@@ -242,15 +246,15 @@ export function CatalogModelRow({ model, status, jobs }: CatalogModelRowProps): 
             {model.fits &&
               model.start_window_label &&
               (model.start_window && model.start_window >= model.native_context ? (
-                <Tip label={copy.pillFullContextTip}>
+                <Tooltip><TooltipTrigger asChild>
                   <Pill tone={model.spilled ? 'muted' : 'success'}>
                     {copy.pillFullContext(model.native_context_label)}
                   </Pill>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{copy.pillFullContextTip}</TooltipContent></Tooltip>
               ) : (
-                <Tip label={copy.pillGrowsTip}>
+                <Tooltip><TooltipTrigger asChild>
                   <Pill>{copy.pillUpTo(model.native_context_label)}</Pill>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{copy.pillGrowsTip}</TooltipContent></Tooltip>
               ))}
 
             {!model.fits && <Pill>{copy.pillUpTo(model.native_context_label)}</Pill>}
@@ -272,9 +276,9 @@ export function CatalogModelRow({ model, status, jobs }: CatalogModelRowProps): 
               // The why, straight from the resolver: the tooltip is
               // the branch that picked this model, so the shown
               // rationale can never drift from the actual decision.
-              <Tip label={copy.recommendedReason[model.recommended_reason]}>
+              <Tooltip><TooltipTrigger asChild>
                 <Pill tone="primary">{copy.recommended}</Pill>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{copy.recommendedReason[model.recommended_reason]}</TooltipContent></Tooltip>
             ) : (
               <Pill tone="primary">{copy.recommended}</Pill>
             ))}

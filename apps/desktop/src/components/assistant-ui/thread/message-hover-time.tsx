@@ -2,7 +2,11 @@ import { useAuiState } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
 import type { FC } from 'react'
 
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { DAY, fmtFullDateTime, relativeTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -54,7 +58,7 @@ export const MessageHoverTime: FC<{ className?: string }> = ({ className }) => {
   const date = new Date(seconds * 1000)
 
   return (
-    <Tip label={<HoverTimeDetail ms={date.getTime()} />} side="top">
+    <Tooltip><TooltipTrigger asChild>
       <time
         className={cn(
           'pointer-events-auto cursor-default select-none whitespace-nowrap text-[0.6875rem] leading-5 tabular-nums text-(--ui-text-tertiary)',
@@ -64,6 +68,6 @@ export const MessageHoverTime: FC<{ className?: string }> = ({ className }) => {
       >
         {formatMessageTimestamp(date, { today: clockOnly, yesterday: t.assistant.thread.yesterday })}
       </time>
-    </Tip>
+    </TooltipTrigger><TooltipContent side="top">{<HoverTimeDetail ms={date.getTime()} />}</TooltipContent></Tooltip>
   )
 }

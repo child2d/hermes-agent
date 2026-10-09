@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef } from 'react'
 
 import { requestComposerInsert } from '@/app/chat/composer/focus'
 import { CopyButton } from '@/components/ui/copy-button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { PanelBottom, Send, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -85,7 +89,7 @@ function ConsoleRow({ copyText, log, onSend, onToggleSelect, selected }: Console
         selected && 'border-border/60 bg-accent/40'
       )}
     >
-      <Tip label={selected ? copy.deselect : copy.select}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           className={cn(
             'mt-0.5 text-left uppercase opacity-70 transition-colors hover:opacity-100',
@@ -96,7 +100,7 @@ function ConsoleRow({ copyText, log, onSend, onToggleSelect, selected }: Console
         >
           {consoleLevelLabel[log.level] || 'log'}
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{selected ? copy.deselect : copy.select}</TooltipContent></Tooltip>
       <div className="min-w-0" data-selectable-text="true">
         <span className={cn('block wrap-break-word', consoleLevelClass[log.level] ?? consoleLevelClass[0])}>
           {log.message}
@@ -118,7 +122,7 @@ function ConsoleRow({ copyText, log, onSend, onToggleSelect, selected }: Console
           showLabel={false}
           text={copyText}
         />
-        <Tip label={copy.sendEntry}>
+        <Tooltip><TooltipTrigger asChild>
           <button
             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={onSend}
@@ -126,7 +130,7 @@ function ConsoleRow({ copyText, log, onSend, onToggleSelect, selected }: Console
           >
             <Send className="size-3" />
           </button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{copy.sendEntry}</TooltipContent></Tooltip>
       </span>
     </div>
   )

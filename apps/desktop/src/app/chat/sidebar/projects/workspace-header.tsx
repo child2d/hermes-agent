@@ -3,7 +3,11 @@ import type * as React from 'react'
 import { ActionsContextMenu, ActionsMenu, type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
 import { Codicon } from '@/components/ui/codicon'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode } from '@/lib/desktop-fs'
 import { cn } from '@/lib/utils'
@@ -53,7 +57,7 @@ export function WorkspaceAddButton({
   onPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void
 }) {
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={label}
         className="grid size-4 shrink-0 place-items-center rounded-sm bg-transparent text-(--ui-text-quaternary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground group-hover/workspace:opacity-100"
@@ -63,7 +67,7 @@ export function WorkspaceAddButton({
       >
         <Codicon name="add" size="0.75rem" />
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }
 
@@ -115,7 +119,7 @@ export function WorkspaceShowMoreButton({
   const text = t.sidebar.showMoreIn(count, label)
 
   return (
-    <Tip label={text}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={text}
         className="mr-2 ml-auto grid size-5 place-items-center rounded-sm bg-transparent text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
@@ -124,7 +128,7 @@ export function WorkspaceShowMoreButton({
       >
         <Codicon name="ellipsis" size="0.75rem" />
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{text}</TooltipContent></Tooltip>
   )
 }
 
@@ -220,7 +224,7 @@ export function StartWorkButton({ repoPath }: { repoPath: string }) {
   const p = t.sidebar.projects
 
   return (
-    <Tip label={p.startWork}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={p.startWork}
         className="grid size-4 shrink-0 place-items-center rounded-sm bg-transparent text-(--ui-text-quaternary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground group-hover/section:opacity-100 focus-visible:opacity-100"
@@ -231,7 +235,7 @@ export function StartWorkButton({ repoPath }: { repoPath: string }) {
       >
         <Codicon name="git-branch" size="0.75rem" />
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{p.startWork}</TooltipContent></Tooltip>
   )
 }
 

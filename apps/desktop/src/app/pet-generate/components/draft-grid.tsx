@@ -1,7 +1,11 @@
 import { PixelEggSprite } from '@/components/pet/pixel-egg-sprite'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { PawPrint } from '@/lib/icons'
 import { selectableCardClass } from '@/lib/selectable-card'
@@ -84,7 +88,7 @@ export function DraftGrid({
 
               {/* Remix: branch a new round off this look. Revealed on hover/focus. */}
               {draft != null && !generating && (
-                <Tip label={copy.remix}>
+                <Tooltip><TooltipTrigger asChild>
                   <Button
                     aria-label={copy.remix}
                     className={cn(
@@ -102,7 +106,7 @@ export function DraftGrid({
                   >
                     <Codicon name="git-branch" size={12} />
                   </Button>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{copy.remix}</TooltipContent></Tooltip>
               )}
             </div>
           )

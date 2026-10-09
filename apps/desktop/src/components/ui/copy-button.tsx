@@ -3,7 +3,11 @@ import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { ContextMenuItem } from '@/components/ui/context-menu'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Check, Copy, X } from '@/lib/icons'
@@ -49,7 +53,7 @@ export interface CopyButtonProps {
   onCopyError?: (error: unknown) => void
   preventDefault?: boolean
   showLabel?: boolean
-  side?: React.ComponentProps<typeof Tip>['side']
+  side?: React.ComponentProps<typeof TooltipContent>['side']
   stopPropagation?: boolean
   text: CopyPayload
   title?: string
@@ -182,7 +186,7 @@ export function CopyButton({
 
   if (appearance === 'inline') {
     return (
-      <Tip label={feedbackLabel} side={side}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           aria-label={ariaLabel}
           className={cn(
@@ -195,13 +199,13 @@ export function CopyButton({
         >
           {content}
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent side={side}>{feedbackLabel}</TooltipContent></Tooltip>
     )
   }
 
   if (appearance === 'tool-row') {
     return (
-      <Tip label={feedbackLabel}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           aria-label={ariaLabel}
           className={cn(
@@ -214,7 +218,7 @@ export function CopyButton({
         >
           {icon}
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{feedbackLabel}</TooltipContent></Tooltip>
     )
   }
 
@@ -234,9 +238,9 @@ export function CopyButton({
 
   // Only icon-only buttons need a tooltip; the text variant already shows its label.
   return appearance === 'icon' ? (
-    <Tip label={feedbackLabel} side={side ?? 'bottom'}>
+    <Tooltip><TooltipTrigger asChild>
       {button}
-    </Tip>
+    </TooltipTrigger><TooltipContent side={side ?? 'bottom'}>{feedbackLabel}</TooltipContent></Tooltip>
   ) : (
     button
   )

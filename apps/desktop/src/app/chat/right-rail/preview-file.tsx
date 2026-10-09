@@ -20,7 +20,11 @@ import { FileDiffPanel } from '@/components/chat/diff-lines'
 import { chunkTextLines, useFixedRowWindow } from '@/components/chat/fixed-row-window'
 import { LazyShiki as ShikiHighlighter } from '@/components/chat/shiki-highlighter'
 import { PageLoader } from '@/components/page-loader'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { translateNow, useI18n } from '@/i18n'
 import {
   desktopFileDiff,
@@ -1261,7 +1265,7 @@ export function LocalFilePreview({
           onSelect={selectMode}
           trailing={
             canEdit ? (
-              <Tip label={`${t.preview.edit} (e)`}>
+              <Tooltip><TooltipTrigger asChild>
                 <button
                   className="flex items-center gap-1 text-[0.625rem] font-bold text-muted-foreground underline-offset-4 transition-colors hover:text-foreground"
                   onClick={beginEdit}
@@ -1270,7 +1274,7 @@ export function LocalFilePreview({
                   <Pencil className="size-3" />
                   {t.preview.edit}
                 </button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{`${t.preview.edit} (e)`}</TooltipContent></Tooltip>
             ) : null
           }
         />

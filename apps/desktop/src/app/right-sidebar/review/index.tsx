@@ -7,7 +7,11 @@ import { Codicon } from '@/components/ui/codicon'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DiffCount } from '@/components/ui/diff-count'
 import { SegmentedControl } from '@/components/ui/segmented-control'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type { HermesReviewScope } from '@/global'
 import { useDelayedTrue } from '@/hooks/use-delayed-true'
 import { useI18n } from '@/i18n'
@@ -103,7 +107,7 @@ export function ReviewPane() {
             ]}
             value={scope}
           />
-          <Tip label={treeMode === 'tree' ? c.viewAsList : c.viewAsTree}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={treeMode === 'tree' ? c.viewAsList : c.viewAsTree}
               className={ACTION_BTN}
@@ -114,8 +118,8 @@ export function ReviewPane() {
             >
               <Codicon name={treeMode === 'tree' ? 'list-flat' : 'list-tree'} size="0.8125rem" />
             </Button>
-          </Tip>
-          <Tip label={c.stageAll}>
+          </TooltipTrigger><TooltipContent>{treeMode === 'tree' ? c.viewAsList : c.viewAsTree}</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={c.stageAll}
               className={ACTION_BTN}
@@ -126,8 +130,8 @@ export function ReviewPane() {
             >
               <Codicon name="add" size="0.8125rem" />
             </Button>
-          </Tip>
-          <Tip label={c.revertAll}>
+          </TooltipTrigger><TooltipContent>{c.stageAll}</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={c.revertAll}
               className={ACTION_BTN}
@@ -138,8 +142,8 @@ export function ReviewPane() {
             >
               <Codicon name="discard" size="0.8125rem" />
             </Button>
-          </Tip>
-          <Tip label={t.rightSidebar.refreshTree}>
+          </TooltipTrigger><TooltipContent>{c.revertAll}</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={t.rightSidebar.refreshTree}
               className={ACTION_BTN}
@@ -149,7 +153,7 @@ export function ReviewPane() {
             >
               <Codicon name="refresh" size="0.8125rem" spinning={loading} />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{t.rightSidebar.refreshTree}</TooltipContent></Tooltip>
           <Button aria-label={c.close} className={ACTION_BTN} onClick={closeReview} size="icon" variant="ghost">
             <Codicon name="close" size="0.8125rem" />
           </Button>
@@ -183,7 +187,7 @@ export function ReviewPane() {
             </span>
             <DiffCount added={selectedFile.added} className="text-[0.64rem] leading-4" removed={selectedFile.removed} />
             {isUncommitted && (
-              <Tip label={selectedFile.staged ? c.unstage : c.stage}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   aria-label={selectedFile.staged ? c.unstage : c.stage}
                   className={ACTION_BTN}
@@ -197,7 +201,7 @@ export function ReviewPane() {
                 >
                   <Codicon name={selectedFile.staged ? 'remove' : 'add'} size="0.8rem" />
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{selectedFile.staged ? c.unstage : c.stage}</TooltipContent></Tooltip>
             )}
             <Button
               aria-label={c.close}

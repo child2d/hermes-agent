@@ -1,6 +1,10 @@
 import { Codicon } from '@/components/ui/codicon'
 import { ColorSwatches } from '@/components/ui/color-swatches'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { PROFILE_SWATCHES } from '@/lib/profile-color'
 import { cn } from '@/lib/utils'
 
@@ -62,7 +66,7 @@ export function ProjectAppearancePicker({ color, icon, noColorLabel, onColor, on
           profile picker's width (icons flex to fill, not fixed-width). */}
       <div className="mt-2 grid grid-cols-6 gap-1.5">
         {PROJECT_ICONS.map(name => (
-          <Tip key={name} label={name}>
+          <Tooltip><TooltipTrigger asChild>
             <button
               aria-label={name}
               className={cn(
@@ -75,7 +79,7 @@ export function ProjectAppearancePicker({ color, icon, noColorLabel, onColor, on
             >
               <Codicon name={name} size="0.8125rem" />
             </button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{name}</TooltipContent></Tooltip>
         ))}
       </div>
     </>

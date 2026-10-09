@@ -25,7 +25,9 @@ import {
   SIDEBAR_NAV_AREA,
   type SidebarNavContribution,
   STATUSBAR_AREAS,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useQuery,
   useValue
 } from '@hermes/plugin-sdk'
@@ -62,7 +64,7 @@ function KanbanCount() {
   }
 
   return (
-    <Tip label={k.countTip(count('running'), count('ready'))}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         className={cn(
           'inline-flex h-full items-center gap-1 rounded-none px-1.5 text-[0.6875rem] tabular-nums transition-colors',
@@ -74,7 +76,7 @@ function KanbanCount() {
         <Codicon name="project" size="0.7rem" />
         <span>{active}</span>
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{k.countTip(count('running'), count('ready'))}</TooltipContent></Tooltip>
   )
 }
 

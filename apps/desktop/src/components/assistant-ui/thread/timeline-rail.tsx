@@ -3,7 +3,11 @@ import './timeline.css'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 
 import { timelineBarWidth, type TimelineEntry } from './timeline-data'
 
@@ -163,13 +167,7 @@ export function TimelineRail({ activeIndex, entries, loadingId, onJump }: Timeli
           const entry = entries[item.index]
 
           return (
-            <Tip
-              key={entry.id}
-              label={entry.preview}
-              placement="right-rail"
-              sideOffset={8}
-              style={{ textAlign: 'right' }}
-            >
+            <Tooltip><TooltipTrigger asChild>
               <button
                 aria-busy={loadingId === entry.id || undefined}
                 aria-current={item.index === activeIndex ? 'location' : undefined}
@@ -188,7 +186,7 @@ export function TimelineRail({ activeIndex, entries, loadingId, onJump }: Timeli
               >
                 <span aria-hidden data-index={item.index} data-slot="timeline-bar" />
               </button>
-            </Tip>
+            </TooltipTrigger><TooltipContent sideOffset={8}>{entry.preview}</TooltipContent></Tooltip>
           )
         })}
       </div>

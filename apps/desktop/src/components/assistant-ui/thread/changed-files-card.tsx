@@ -8,7 +8,11 @@ import { WIDGET_SHELL_CLASS } from '@/components/chat/widget-shell'
 import { DiffCount } from '@/components/ui/diff-count'
 import { FadeScroll } from '@/components/ui/fade-scroll'
 import { FileTypeIcon } from '@/components/ui/file-type-icon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { displayPath } from '@/lib/display-path'
 import { cn } from '@/lib/utils'
@@ -58,7 +62,7 @@ export const ChangedFilesCard: FC<{ parts: readonly unknown[] }> = ({ parts }) =
       </div>
       <FadeScroll className="-mx-1.5 mt-1.5 flex flex-col overscroll-y-auto px-1.5" maxHeight={MAX_ROWS_HEIGHT}>
         {files.map(file => (
-          <Tip key={file.path} label={displayPath(file.path)}>
+          <Tooltip><TooltipTrigger asChild>
             <button
               className="row-hover flex shrink-0 items-center gap-2 rounded-md px-1.5 py-1 text-left"
               onClick={() => void openReviewForPath(file.path, scopeCwd, composerScope.target)}
@@ -68,7 +72,7 @@ export const ChangedFilesCard: FC<{ parts: readonly unknown[] }> = ({ parts }) =
               <span className="min-w-0 flex-1 truncate text-(--ui-text-secondary)">{file.name}</span>
               <DiffCount added={file.added} removed={file.removed} />
             </button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{displayPath(file.path)}</TooltipContent></Tooltip>
         ))}
       </FadeScroll>
     </div>

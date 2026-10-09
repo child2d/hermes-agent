@@ -1,6 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { AudioLines, ChevronDown, iconSize } from '@/lib/icons'
@@ -34,7 +38,7 @@ export function StartVoiceButton({
 
   return (
     <span className="flex items-center">
-      <Tip label={engine ? `${label} — ${engine}` : label} placement="control">
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label={label}
           className={cn(PRIMARY_ICON_BTN, engine && 'rounded-r-none')}
@@ -49,10 +53,10 @@ export function StartVoiceButton({
         >
           <AudioLines className={iconSize.sm} />
         </Button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{engine ? `${label} — ${engine}` : label}</TooltipContent></Tooltip>
       {engine ? (
         <DropdownMenu>
-          <Tip label={t.composer.voiceEngine} placement="control">
+          <Tooltip><TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button
                 aria-label={t.composer.voiceEngine}
@@ -65,7 +69,7 @@ export function StartVoiceButton({
                 <ChevronDown className={iconSize.xs} />
               </Button>
             </DropdownMenuTrigger>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{t.composer.voiceEngine}</TooltipContent></Tooltip>
           <DropdownMenuContent align="end" className="min-w-52">
             <VoiceEngineRows disabled={disabled} />
           </DropdownMenuContent>

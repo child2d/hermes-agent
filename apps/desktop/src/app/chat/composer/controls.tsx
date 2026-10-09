@@ -2,7 +2,11 @@ import { useStore } from '@nanostores/react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Ear, EarOff, iconSize, Layers3, Loader2, Square } from '@/lib/icons'
@@ -127,7 +131,7 @@ export function ComposerControls({
         </>
       )}
       {showQueueButton ? (
-        <Tip label={<TipKeybindLabel actionId="composer.queue" text={c.queueMessage} />} placement="control">
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={c.queueMessage}
             className={GHOST_ICON_BTN}
@@ -139,21 +143,12 @@ export function ComposerControls({
           >
             <Layers3 className={iconSize.sm} />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{c.queueMessage}</TooltipContent></Tooltip>
       ) : null}
       {showVoicePrimary ? (
         <StartVoiceButton disabled={disabled} label={c.startVoice} onStart={conversation.onStart} />
       ) : (
-        <Tip
-          label={
-            showStop ? (
-              <TipKeybindLabel actionId="composer.send" text={c.stop} />
-            ) : (
-              <TipKeybindLabel actionId="composer.send" text={c.send} />
-            )
-          }
-          placement="control"
-        >
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={showStop ? c.stop : c.send}
             className={PRIMARY_ICON_BTN}
@@ -167,7 +162,13 @@ export function ComposerControls({
               <Codicon name="arrow-up" size="0.875rem" />
             )}
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{
+            showStop ? (
+              c.stop
+            ) : (
+              c.send
+            )
+          }</TooltipContent></Tooltip>
       )}
       {/* The way out of HUD mode, riding the controls row rather than floating
           above the bar. The old chip lived in a 26px transparent strip reserved
@@ -186,7 +187,7 @@ function HudWindowButtons() {
 
   return (
     <>
-      <Tip label={t.titlebar.resetHudLayout} placement="toolbar">
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label={t.titlebar.resetHudLayout}
           className={cn(GHOST_ICON_BTN, 'p-0')}
@@ -197,8 +198,8 @@ function HudWindowButtons() {
         >
           <Codicon name="discard" size="0.875rem" />
         </Button>
-      </Tip>
-      <Tip label={t.titlebar.exitHud} placement="toolbar">
+      </TooltipTrigger><TooltipContent>{t.titlebar.resetHudLayout}</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label={t.titlebar.exitHud}
           className={cn(GHOST_ICON_BTN, 'p-0')}
@@ -209,7 +210,7 @@ function HudWindowButtons() {
         >
           <Codicon name="screen-normal" size="0.875rem" />
         </Button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{t.titlebar.exitHud}</TooltipContent></Tooltip>
     </>
   )
 }
@@ -244,7 +245,7 @@ function ConversationPill({
       {/* Keep the ear visible during voice chat — shown paused, since the
           conversation holds the mic (the one time wake must not listen). */}
       <WakeWordButton disabled={disabled} pausedForVoice />
-      <Tip label={muted ? c.unmuteMic : c.muteMic} placement="control">
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label={muted ? c.unmuteMic : c.muteMic}
           aria-pressed={muted}
@@ -260,7 +261,7 @@ function ConversationPill({
         >
           <Codicon name={muted ? 'mic-off' : 'mic'} size="1rem" />
         </Button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{muted ? c.unmuteMic : c.muteMic}</TooltipContent></Tooltip>
       {listening && (
         <Button
           aria-label={c.stopListening}
@@ -349,7 +350,7 @@ function WakeWordButton({ disabled, pausedForVoice = false }: { disabled: boolea
   const tooltip = !pausedForVoice && wake.notice ? `${label} — ${wake.notice}` : label
 
   return (
-    <Tip label={tooltip} placement="control">
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={label}
         aria-pressed={wake.listening && !pausedForVoice}
@@ -365,6 +366,6 @@ function WakeWordButton({ disabled, pausedForVoice = false }: { disabled: boolea
       >
         {wake.listening && !pausedForVoice ? <Ear className={iconSize.sm} /> : <EarOff className={iconSize.sm} />}
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{tooltip}</TooltipContent></Tooltip>
   )
 }

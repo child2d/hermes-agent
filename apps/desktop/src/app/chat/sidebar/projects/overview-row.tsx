@@ -4,7 +4,11 @@ import { useRef, useState } from 'react'
 
 import { type NewSessionSplitHandler, startNewSessionDrag } from '@/app/chat/new-session-drag'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type { SessionInfo } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -242,7 +246,7 @@ export function ProjectOverviewRow({
       }
       className={cn(dragging && 'cursor-grabbing bg-(--ui-sidebar-surface-background)')}
       data-glass-opaque={dragging ? '' : undefined}
-      label={project.isAuto ? <Tip label={s.projects.autoDiscovered}>{labelLink}</Tip> : labelLink}
+      label={project.isAuto ? <Tooltip><TooltipTrigger asChild>{labelLink}</TooltipTrigger><TooltipContent>{s.projects.autoDiscovered}</TooltipContent></Tooltip> : labelLink}
       lead={lead}
       // The label is grab surface too, not just the lead's grabber — the
       // pointer activator only (the full handle stays on the grabber, see

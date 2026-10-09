@@ -11,7 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { AudioLines, Ear, EarOff, iconSize, Loader2, Square, Volume2, VolumeX } from '@/lib/icons'
@@ -79,7 +83,7 @@ export function VoiceMenu({
 
   return (
     <DropdownMenu>
-      <Tip label={wake.notice && !dictating ? `${triggerLabel} — ${wake.notice}` : triggerLabel} placement="control">
+      <Tooltip><TooltipTrigger asChild>
         <DropdownMenuTrigger asChild>
           <Button
             aria-label={triggerLabel}
@@ -100,7 +104,7 @@ export function VoiceMenu({
             )}
           </Button>
         </DropdownMenuTrigger>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{wake.notice && !dictating ? `${triggerLabel} — ${wake.notice}` : triggerLabel}</TooltipContent></Tooltip>
       <DropdownMenuContent align="end" className="min-w-52">
         <DropdownMenuItem
           className={dropdownMenuRow}

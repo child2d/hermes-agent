@@ -26,7 +26,9 @@ import {
   RowButton,
   SessionStatusDot,
   SidebarRowLead,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useI18n,
   useValue
 } from '@hermes/plugin-sdk'
@@ -280,27 +282,27 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
               <SessionStatusDot storedSessionId={canonicalSessionId} />
             </SidebarRowLead>
             {pinned ? (
-              <Tip label={b.roster.pinned}>
+              <Tooltip><TooltipTrigger asChild>
                 <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
-              </Tip>
+              </TooltipTrigger><TooltipContent>{b.roster.pinned}</TooltipContent></Tooltip>
             ) : null}
             {hidden ? (
-              <Tip label={b.roster.hiddenFromRoster}>
+              <Tooltip><TooltipTrigger asChild>
                 <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="eye-closed" />
-              </Tip>
+              </TooltipTrigger><TooltipContent>{b.roster.hiddenFromRoster}</TooltipContent></Tooltip>
             ) : null}
-            <Tip label={rowTooltip}>
+            <Tooltip><TooltipTrigger asChild>
               <span className="min-w-0 truncate text-[0.8125rem] font-medium">{displayName(bot, meta)}</span>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{rowTooltip}</TooltipContent></Tooltip>
           </div>
           {attention ? (
-            <Tip label={botAttentionHint(attention.reason)}>
+            <Tooltip><TooltipTrigger asChild>
               <Codicon
                 aria-label={b.roster.needsAttention}
                 className="shrink-0 text-[0.6875rem] text-amber-600 dark:text-amber-300"
                 name="warning"
               />
-            </Tip>
+            </TooltipTrigger><TooltipContent>{botAttentionHint(attention.reason)}</TooltipContent></Tooltip>
           ) : null}
           {isOpening ? (
             <GlyphSpinner ariaLabel={b.bot.openingChat} className="shrink-0 text-xs text-(--ui-text-secondary)" />
@@ -585,28 +587,28 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
           </span>
         )}
         {members.length > 0 && availableMembers < members.length ? (
-          <Tip label={availabilityLabel}>
+          <Tooltip><TooltipTrigger asChild>
             <span
               aria-label={availabilityLabel}
               className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-(--ui-bg-primary) text-[0.625rem] text-amber-600 ring-1 ring-(--ui-stroke-tertiary) dark:text-amber-300"
             >
               <Codicon name="debug-disconnect" />
             </span>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{availabilityLabel}</TooltipContent></Tooltip>
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{group}</span>
           {room.pinned ? (
-            <Tip label={b.roster.pinned}>
+            <Tooltip><TooltipTrigger asChild>
               <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
-            </Tip>
+            </TooltipTrigger><TooltipContent>{b.roster.pinned}</TooltipContent></Tooltip>
           ) : null}
           {needsYou ? (
-            <Tip label={b.group.needsYourInput}>
+            <Tooltip><TooltipTrigger asChild>
               <Codicon aria-label={b.roster.needsInput} className="shrink-0 text-(--ui-accent)" name="question" />
-            </Tip>
+            </TooltipTrigger><TooltipContent>{b.group.needsYourInput}</TooltipContent></Tooltip>
           ) : null}
           {lastAt ? (
             <span className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)">

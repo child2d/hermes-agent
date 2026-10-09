@@ -1,6 +1,10 @@
 import { selectableClass } from '@/components/onboarding-chat/chip'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { IS_MAC } from '@/lib/keybinds/combo'
 import { cn } from '@/lib/utils'
 import type { InterfaceMode } from '@/store/interface-mode'
@@ -73,7 +77,7 @@ export function AccentSwatch({
   }
 
   return (
-    <Tip label={name}>
+    <Tooltip><TooltipTrigger asChild>
       {onColorChange ? (
         <label className={cn(className, 'focus-within:outline-2 focus-within:outline-ring')} style={style}>
           <span className="flex" style={{ color: readableInk(hex) }}>
@@ -97,7 +101,7 @@ export function AccentSwatch({
           type="button"
         />
       )}
-    </Tip>
+    </TooltipTrigger><TooltipContent>{name}</TooltipContent></Tooltip>
   )
 }
 

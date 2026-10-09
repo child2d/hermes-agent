@@ -16,7 +16,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { RowButton } from '@/components/ui/row-button'
 import { SearchField } from '@/components/ui/search-field'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { disconnectOAuthProvider, listOAuthProviders } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronRight, KeyRound, Loader2, Terminal, Trash2 } from '@/lib/icons'
@@ -325,7 +329,7 @@ function ConnectedProviderRow({
           </Button>
         )}
         {terminalDisconnect && (
-          <Tip label={copy.disconnectInTerminal}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={`${copy.disconnect} ${title}`}
               onClick={() => onTerminalDisconnect(provider)}
@@ -335,7 +339,7 @@ function ConnectedProviderRow({
             >
               <Trash2 className="size-3" />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{copy.disconnectInTerminal}</TooltipContent></Tooltip>
         )}
       </div>
     </div>

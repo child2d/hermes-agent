@@ -1,5 +1,9 @@
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -8,7 +12,7 @@ export function CatalogMark({ className }: { className?: string }) {
   const label = t.connectorsPage.card.inCatalog
 
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <span
         aria-label={label}
         className={cn('relative z-10 flex shrink-0 items-center text-(--ui-text-quaternary)', className)}
@@ -16,6 +20,6 @@ export function CatalogMark({ className }: { className?: string }) {
       >
         <Codicon name="verified-filled" size="0.75rem" />
       </span>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }

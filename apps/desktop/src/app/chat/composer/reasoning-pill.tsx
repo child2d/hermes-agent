@@ -8,7 +8,11 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { releaseTypingFocus } from '@/components/ui/keyboard-first'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { ChevronDown } from '@/lib/icons'
 import { reasoningEffortClamp, reasoningEffortLabel } from '@/lib/reasoning-effort'
@@ -72,7 +76,7 @@ export function ReasoningPill({ disabled, model }: { disabled: boolean; model: C
 
   return (
     <DropdownMenu onOpenChange={setMenuOpen} open={open}>
-      <Tip label={title} side="top">
+      <Tooltip><TooltipTrigger asChild>
         <DropdownMenuTrigger asChild>
           <Button
             aria-label={title}
@@ -86,7 +90,7 @@ export function ReasoningPill({ disabled, model }: { disabled: boolean; model: C
             <ChevronDown className="size-2.5 shrink-0 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-      </Tip>
+      </TooltipTrigger><TooltipContent side="top">{title}</TooltipContent></Tooltip>
       <DropdownMenuContent align="end" className="w-52 p-0" side="top" sideOffset={8}>
         <ModelMenuCloseContext.Provider value={() => setMenuOpen(false)}>
           {model.reasoningMenuContent}

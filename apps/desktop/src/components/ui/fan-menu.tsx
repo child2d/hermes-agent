@@ -12,7 +12,11 @@ import { createPortal } from 'react-dom'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export type FanDirection = 'horizontal' | 'vertical' | 'arc'
@@ -252,7 +256,7 @@ export function FanMenu({ direction = 'vertical', gap = 4, hint = true, hub, ite
         onPointerLeave={hideSoon}
         ref={anchorRef}
       >
-        <Tip label={hub.label} side={tipAnchor ?? (open ? OPEN_HUB_TIP_SIDE[direction] : 'top')}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-expanded={open}
             aria-haspopup="true"
@@ -267,7 +271,7 @@ export function FanMenu({ direction = 'vertical', gap = 4, hint = true, hub, ite
           >
             {hub.icon}
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent side={tipAnchor ?? (open ? OPEN_HUB_TIP_SIDE[direction] : 'top')}>{hub.label}</TooltipContent></Tooltip>
         {hint ? (
           <Codicon
             className={cn(
@@ -376,7 +380,7 @@ const FanCluster = memo(function FanCluster({
       style={{ height: rect.height, left: rect.left, top: rect.top, width: rect.width }}
     >
       {items.map((item, index) => (
-        <Tip key={item.id} label={item.label} side={tipAnchor ?? fanTipSide(direction, offsets[index])}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={item.label}
             aria-pressed={item.active}
@@ -394,7 +398,7 @@ const FanCluster = memo(function FanCluster({
           >
             {item.icon}
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent side={tipAnchor ?? fanTipSide(direction, offsets[index])}>{item.label}</TooltipContent></Tooltip>
       ))}
     </div>
   )

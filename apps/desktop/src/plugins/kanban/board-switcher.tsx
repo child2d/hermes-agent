@@ -27,7 +27,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useI18n,
   useMutation,
   useQuery,
@@ -342,7 +344,7 @@ export function BoardSwitcher() {
   return (
     <>
       <DropdownMenu>
-        <Tip label={k.switchBoard}>
+        <Tooltip><TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <Button
               aria-label={`${k.board}: ${label}`}
@@ -359,7 +361,7 @@ export function BoardSwitcher() {
               <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="chevron-down" size="0.8125rem" />
             </Button>
           </DropdownMenuTrigger>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{k.switchBoard}</TooltipContent></Tooltip>
         <DropdownMenuContent align="center">
           {boards.boards.map(meta => (
             <DropdownMenuItem

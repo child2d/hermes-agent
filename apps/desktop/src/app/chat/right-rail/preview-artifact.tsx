@@ -3,7 +3,11 @@ import DOMPurify from 'dompurify'
 import { useEffect, useMemo, useState } from 'react'
 
 import { CopyButton } from '@/components/ui/copy-button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { artifactDownloadName, type ArtifactKind } from '@/lib/artifact-detect'
 import { downloadTextFile } from '@/lib/download-text'
@@ -125,7 +129,7 @@ function VersionStepper({
 
   return (
     <>
-      <Tip label={copy.olderVersion}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           aria-label={copy.olderVersion}
           className={HEADER_BUTTON_CLASS}
@@ -135,11 +139,11 @@ function VersionStepper({
         >
           <ChevronLeft className="size-3" />
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{copy.olderVersion}</TooltipContent></Tooltip>
       <span className="text-[0.625rem] font-bold tabular-nums text-muted-foreground">
         {copy.versionOf(current + 1, total)}
       </span>
-      <Tip label={copy.newerVersion}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           aria-label={copy.newerVersion}
           className={HEADER_BUTTON_CLASS}
@@ -149,7 +153,7 @@ function VersionStepper({
         >
           <ChevronRight className="size-3" />
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{copy.newerVersion}</TooltipContent></Tooltip>
       {current < total - 1 && (
         <button
           className="text-[0.625rem] font-bold text-muted-foreground underline decoration-current/25 underline-offset-4 transition-colors hover:text-foreground"
@@ -224,7 +228,7 @@ export function ArtifactPreview({ onClose, target }: { onClose?: () => void; tar
               showLabel={false}
               text={version.content}
             />
-            <Tip label={copy.download}>
+            <Tooltip><TooltipTrigger asChild>
               <button
                 aria-label={copy.download}
                 className={HEADER_BUTTON_CLASS}
@@ -239,9 +243,9 @@ export function ArtifactPreview({ onClose, target }: { onClose?: () => void; tar
               >
                 <Download className="size-3" />
               </button>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{copy.download}</TooltipContent></Tooltip>
             {record.kind === 'html' && window.hermesDesktop && (
-              <Tip label={copy.openInBrowser}>
+              <Tooltip><TooltipTrigger asChild>
                 <button
                   aria-label={copy.openInBrowser}
                   className={HEADER_BUTTON_CLASS}
@@ -252,7 +256,7 @@ export function ArtifactPreview({ onClose, target }: { onClose?: () => void; tar
                 >
                   <ExternalLink className="size-3" />
                 </button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{copy.openInBrowser}</TooltipContent></Tooltip>
             )}
           </>
         }

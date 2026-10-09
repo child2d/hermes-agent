@@ -2,7 +2,11 @@ import type { ReactNode } from 'react'
 
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { Switch } from '@/components/ui/switch'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { Lock } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -55,11 +59,11 @@ export function ToolRow({ expanded, on, onExpand, onToggle, preview = false, rea
 
       <span className="flex shrink-0 items-center gap-1.5 text-[0.65rem] text-(--ui-text-quaternary)">
         {tool.facet === 'unclassified' ? null : (
-          <Tip label={facetCopy.long}>
+          <Tooltip><TooltipTrigger asChild>
             <span className={cn('whitespace-nowrap', locked ? 'text-(--ui-text-quaternary)' : TONE_CLASS[facet.tone])}>
               {facetCopy.label}
             </span>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{facetCopy.long}</TooltipContent></Tooltip>
         )}
 
         {locked ? (

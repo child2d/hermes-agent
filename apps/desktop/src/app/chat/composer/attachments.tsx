@@ -4,7 +4,11 @@ import { useState } from 'react'
 import { useSessionView } from '@/app/chat/session-view'
 import { ImageLightbox } from '@/components/chat/zoomable-image'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useImageDownload } from '@/hooks/use-image-download'
 import { useI18n } from '@/i18n'
 import { readDesktopFileDataUrlLocalFirst } from '@/lib/desktop-fs'
@@ -144,7 +148,7 @@ function AttachmentPill({ attachment, onRemove }: { attachment: ComposerAttachme
 
   return (
     <>
-      <Tip label={attachment.path || attachment.detail || attachment.label}>
+      <Tooltip><TooltipTrigger asChild>
         <div className="group/attachment relative min-w-0 shrink-0">
           <button
             aria-busy={isUploading || undefined}
@@ -208,7 +212,7 @@ function AttachmentPill({ attachment, onRemove }: { attachment: ComposerAttachme
             </button>
           )}
         </div>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{attachment.path || attachment.detail || attachment.label}</TooltipContent></Tooltip>
       {lightboxSrc && (
         <ImageLightbox
           alt={attachment.label}

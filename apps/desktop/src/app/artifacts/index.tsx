@@ -17,7 +17,11 @@ import {
   PaginationPrevious
 } from '@/components/ui/pagination'
 import { RowButton } from '@/components/ui/row-button'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { getSessionMessages, listAllProfileSessions } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { resolveBrandIcon } from '@/lib/brand-icon'
@@ -328,7 +332,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       searchHints={searchHints}
       searchPlaceholder={a.search}
       searchTrailingAction={
-        <Tip label={refreshing ? a.refreshing : a.refresh}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={refreshing ? a.refreshing : a.refresh}
             className="text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground"
@@ -339,7 +343,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
           >
             {refreshing ? <TitlebarIcon name="loading" spinning /> : <TitlebarIcon name="refresh" />}
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{refreshing ? a.refreshing : a.refresh}</TooltipContent></Tooltip>
       }
       searchValue={query}
       tabs={[
@@ -619,7 +623,7 @@ const LocationCell = memo(function LocationCell({ artifact }: { artifact: Artifa
 
   return (
     <div className="group/location flex min-w-0 items-center gap-1.5">
-      <Tip label={artifact.value}>
+      <Tooltip><TooltipTrigger asChild>
         <div
           className={cn(
             'min-w-0 flex-1 truncate text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)',
@@ -628,7 +632,7 @@ const LocationCell = memo(function LocationCell({ artifact }: { artifact: Artifa
         >
           {value}
         </div>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{artifact.value}</TooltipContent></Tooltip>
       <CopyButton
         appearance="icon"
         buttonSize="icon"

@@ -3,7 +3,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { restoreListedSession } from '@/app/session/hooks/use-session-actions/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import {
   deleteSession,
   getHermesConfigRecord,
@@ -183,7 +187,7 @@ function ArchivedSessionsSettings({ includeDefaultDirectory }: { includeDefaultD
                         {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArchiveOff className="size-3.5" />}
                         <span>{s.unarchive}</span>
                       </Button>
-                      <Tip label={s.deletePermanently}>
+                      <Tooltip><TooltipTrigger asChild>
                         <Button
                           aria-label={s.deletePermanently}
                           className="text-muted-foreground hover:text-destructive"
@@ -195,7 +199,7 @@ function ArchivedSessionsSettings({ includeDefaultDirectory }: { includeDefaultD
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
-                      </Tip>
+                      </TooltipTrigger><TooltipContent>{s.deletePermanently}</TooltipContent></Tooltip>
                     </div>
                   }
                   description={session.preview || undefined}

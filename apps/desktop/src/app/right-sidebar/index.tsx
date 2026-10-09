@@ -5,7 +5,11 @@ import { TreeSkeleton } from '@/components/chat/skeletons'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useDelayedTrue } from '@/hooks/use-delayed-true'
 import { useI18n } from '@/i18n'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
@@ -188,7 +192,7 @@ function FilesystemTab({
         <div className="flex min-w-0 flex-1">
           <SidebarPanelLabel>{cwdName}</SidebarPanelLabel>
         </div>
-        <Tip label={showIgnored ? r.hideIgnored : r.showIgnored}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={showIgnored ? r.hideIgnored : r.showIgnored}
             aria-pressed={showIgnored}
@@ -201,8 +205,8 @@ function FilesystemTab({
           >
             <Codicon name={showIgnored ? 'eye' : 'eye-closed'} size="0.8125rem" />
           </Button>
-        </Tip>
-        <Tip label={r.refreshTree}>
+        </TooltipTrigger><TooltipContent>{showIgnored ? r.hideIgnored : r.showIgnored}</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={r.refreshTree}
             className={HEADER_ACTION_LABEL_REVEAL}
@@ -213,8 +217,8 @@ function FilesystemTab({
           >
             <Codicon name="refresh" size="0.8125rem" spinning={loading} />
           </Button>
-        </Tip>
-        <Tip label={r.collapseAll}>
+        </TooltipTrigger><TooltipContent>{r.refreshTree}</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={r.collapseAll}
             className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
@@ -225,7 +229,7 @@ function FilesystemTab({
           >
             <Codicon name="collapse-all" size="0.8125rem" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{r.collapseAll}</TooltipContent></Tooltip>
       </RightSidebarSectionHeader>
       <FileTreeBody
         collapseNonce={collapseNonce}

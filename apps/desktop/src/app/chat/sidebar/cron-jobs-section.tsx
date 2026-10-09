@@ -8,7 +8,11 @@ import { Codicon } from '@/components/ui/codicon'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { SidebarGroup, SidebarGroupContent } from '@/components/ui/sidebar'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { deleteCronJob, getCronJobRuns, pauseCronJob, resumeCronJob, type SessionInfo } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { fmtDayTime, relativeTime } from '@/lib/time'
@@ -333,7 +337,7 @@ function CronJobSidebarRow({
                 {meta}
               </span>
               <div className="hidden items-center gap-0.5 group-hover/cron:flex">
-                <Tip label={c.triggerNow}>
+                <Tooltip><TooltipTrigger asChild>
                   <button
                     aria-label={c.triggerNow}
                     className="grid size-5 place-items-center rounded-sm text-(--ui-text-tertiary) hover:bg-(--ui-control-hover-background) hover:text-foreground disabled:cursor-wait disabled:opacity-60"
@@ -347,8 +351,8 @@ function CronJobSidebarRow({
                       <Codicon name="zap" size="0.75rem" />
                     )}
                   </button>
-                </Tip>
-                <Tip label={c.manage}>
+                </TooltipTrigger><TooltipContent>{c.triggerNow}</TooltipContent></Tooltip>
+                <Tooltip><TooltipTrigger asChild>
                   <button
                     aria-label={c.manage}
                     className="grid size-5 place-items-center rounded-sm text-(--ui-text-tertiary) hover:bg-(--ui-control-hover-background) hover:text-foreground"
@@ -357,7 +361,7 @@ function CronJobSidebarRow({
                   >
                     <Codicon name="watch" size="0.75rem" />
                   </button>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{c.manage}</TooltipContent></Tooltip>
               </div>
             </div>
           }
@@ -365,7 +369,7 @@ function CronJobSidebarRow({
         >
           {/* The caret sits next to the label (matching the other sidebar
               disclosures) and the whole label area toggles the run peek. */}
-          <Tip label={label}>
+          <Tooltip><TooltipTrigger asChild>
             <SidebarRowBody
               aria-expanded={expanded}
               aria-label={expanded ? c.hideRuns : c.showRuns}
@@ -391,7 +395,7 @@ function CronJobSidebarRow({
                 open={expanded}
               />
             </SidebarRowBody>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
         </SidebarRowShell>
       </ActionsContextMenu>
       {expanded && <CronJobSidebarRuns jobId={job.id} onOpenRun={onOpenRun} />}

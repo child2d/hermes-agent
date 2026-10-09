@@ -2,7 +2,11 @@ import { type KeyboardEvent, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { SearchField } from '@/components/ui/search-field'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { findBarKeyAction, formatMatchLabel } from '@/lib/find-in-page'
 import { ChevronDown, ChevronUp } from '@/lib/icons'
@@ -90,7 +94,7 @@ export function LogSearchField({ containerClassName, onChange, placeholder, sear
               const Icon = direction === 'next' ? ChevronDown : ChevronUp
 
               return (
-                <Tip key={direction} label={t.findInPage[direction]}>
+                <Tooltip><TooltipTrigger asChild>
                   <Button
                     aria-label={t.findInPage[direction]}
                     className="size-5 shrink-0 text-muted-foreground/85 hover:bg-accent/60 hover:text-foreground"
@@ -101,7 +105,7 @@ export function LogSearchField({ containerClassName, onChange, placeholder, sear
                   >
                     <Icon className="size-3.5" />
                   </Button>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{t.findInPage[direction]}</TooltipContent></Tooltip>
               )
             })}
           </span>

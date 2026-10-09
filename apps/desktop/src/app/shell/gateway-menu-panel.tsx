@@ -3,7 +3,11 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { StatusDot } from '@/components/status-dot'
 import { Button } from '@/components/ui/button'
 import { LogView } from '@/components/ui/log-view'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { getLogs } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { LayoutDashboard, Power, RefreshCw } from '@/lib/icons'
@@ -164,7 +168,7 @@ export function GatewayMenuPanel({
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {/* An open transport can still be wedged; recovery must remain reachable. */}
-          <Tip label={copy.reconnectGateway}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={copy.reconnectGateway}
               className="text-muted-foreground hover:text-foreground"
@@ -175,8 +179,8 @@ export function GatewayMenuPanel({
             >
               <RefreshCw className={cn(reconnecting && 'animate-spin')} />
             </Button>
-          </Tip>
-          <Tip label={copy.openSystem}>
+          </TooltipTrigger><TooltipContent>{copy.reconnectGateway}</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={copy.openSystem}
               className="text-muted-foreground hover:text-foreground"
@@ -186,12 +190,12 @@ export function GatewayMenuPanel({
             >
               <LayoutDashboard />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{copy.openSystem}</TooltipContent></Tooltip>
           {/* Restart is the heavy, disruptive action: keep it visually distinct
               (power icon, destructive hover) and separated from the benign
               reconnect/system buttons so it can't be hit by mistake. */}
           <span aria-hidden className="mx-1 h-4 w-px bg-border/70" />
-          <Tip label={t.commandCenter.restartGateway}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={t.commandCenter.restartGateway}
               className="text-muted-foreground hover:text-destructive"
@@ -201,7 +205,7 @@ export function GatewayMenuPanel({
             >
               <Power />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{t.commandCenter.restartGateway}</TooltipContent></Tooltip>
         </div>
       </div>
 

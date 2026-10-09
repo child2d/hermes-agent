@@ -12,7 +12,12 @@ import {
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Tip, TipKeybindLabel, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { ContribRender } from '@/contrib/react/boundary'
 import { useI18n } from '@/i18n'
 import { useKeybindHint } from '@/lib/keybinds/use-keybind-hint'
@@ -231,7 +236,7 @@ const StatusbarItemView = memo(function StatusbarItemView({
     return <ContribRender render={item.render} />
   }
 
-  const tooltipLabel = item.actionId ? <TipKeybindLabel actionId={item.actionId} text={item.title} /> : item.title
+  const tooltipLabel = item.actionId ? item.title : item.title
 
   const content = (
     <>
@@ -317,7 +322,7 @@ const StatusbarItemView = memo(function StatusbarItemView({
 
   if (item.variant === 'text' && !item.onSelect && !item.to && !item.href) {
     return (
-      <Tip label={tooltipLabel}>
+      <Tooltip><TooltipTrigger asChild>
         <div
           className={cn(
             'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary)',
@@ -326,22 +331,22 @@ const StatusbarItemView = memo(function StatusbarItemView({
         >
           {content}
         </div>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{tooltipLabel}</TooltipContent></Tooltip>
     )
   }
 
   if (item.href || item.variant === 'link') {
     return (
-      <Tip label={tooltipLabel}>
+      <Tooltip><TooltipTrigger asChild>
         <a className={cn(STATUSBAR_ACTION_CLASS, item.className)} href={item.href} rel="noreferrer" target="_blank">
           {content}
         </a>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{tooltipLabel}</TooltipContent></Tooltip>
     )
   }
 
   return (
-    <Tip label={tooltipLabel}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         className={cn(STATUSBAR_ACTION_CLASS, item.className)}
         disabled={item.disabled}
@@ -356,6 +361,6 @@ const StatusbarItemView = memo(function StatusbarItemView({
       >
         {content}
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{tooltipLabel}</TooltipContent></Tooltip>
   )
 })

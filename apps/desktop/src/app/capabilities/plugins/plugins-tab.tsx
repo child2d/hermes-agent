@@ -15,7 +15,11 @@ import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Switch } from '@/components/ui/switch'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { $pluginRecords, type PluginRecord, setPluginEnabled } from '@/contrib/plugins-store'
 import { discoverRuntimePlugins, uninstallDiskPlugin } from '@/contrib/runtime-loader'
 import type { ProfileScope } from '@/hermes'
@@ -185,23 +189,23 @@ function ProvenancePill({ pkg }: { pkg: PluginPackage }) {
 
   if (pkg.agent?.catalog_name) {
     return (
-      <Tip label={p.catalogProvenance(pkg.agent.installed_sha?.slice(0, 8) ?? '')}>
+      <Tooltip><TooltipTrigger asChild>
         <span>
           <Pill>{pkg.agent.catalog_tier === 'official' ? p.tierOfficial : p.tierCommunity}</Pill>
         </span>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{p.catalogProvenance(pkg.agent.installed_sha?.slice(0, 8) ?? '')}</TooltipContent></Tooltip>
     )
   }
 
   if (pkg.agent?.pinned_sha) {
     return (
-      <Tip label={p.pinnedProvenance(pkg.agent.pinned_sha.slice(0, 8))}>
+      <Tooltip><TooltipTrigger asChild>
         <span>
           <Pill>
             <span className="font-mono">{p.pinnedBadge(pkg.agent.pinned_sha.slice(0, 8))}</span>
           </Pill>
         </span>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{p.pinnedProvenance(pkg.agent.pinned_sha.slice(0, 8))}</TooltipContent></Tooltip>
     )
   }
 
@@ -387,18 +391,18 @@ function PackageRow({
             this row has a folder to reveal (bundled plugins have none). */}
           <span className="flex size-7 shrink-0 items-center justify-center">
             {desktop?.file && (
-              <Tip label={d.reveal}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button onClick={() => reveal(desktop.file!)} size="icon" variant="ghost">
                   <Codicon name="folder-opened" size="0.85rem" />
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{d.reveal}</TooltipContent></Tooltip>
             )}
           </span>
           {/* Fixed slot for the settings gear: only plugins whose manifest declares
             a config_schema get one. */}
           <span className="flex size-7 shrink-0 items-center justify-center">
             {hasSettings && (
-              <Tip label={p.settingsToggle(pkg.name)}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   aria-expanded={settingsOpen}
                   aria-label={p.settingsToggle(pkg.name)}
@@ -409,7 +413,7 @@ function PackageRow({
                 >
                   <Codicon name="settings-gear" size="0.85rem" />
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{p.settingsToggle(pkg.name)}</TooltipContent></Tooltip>
             )}
           </span>
           {/* Same fixed-slot treatment for Uninstall: present on every row so the
@@ -417,7 +421,7 @@ function PackageRow({
             the row is a standalone desktop plugin. */}
           <span className="flex size-7 shrink-0 items-center justify-center">
             {agent && agentRemovable ? (
-              <Tip label={p.uninstallTip(pkg.name, scopeLabel)}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   aria-label={`${p.uninstall}: ${pkg.name}`}
                   className="text-(--ui-text-tertiary) hover:text-(--ui-danger,#f87171)"
@@ -428,9 +432,9 @@ function PackageRow({
                 >
                   <Trash2 className="size-3.5" />
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{p.uninstallTip(pkg.name, scopeLabel)}</TooltipContent></Tooltip>
             ) : desktop && desktopRemovable ? (
-              <Tip label={p.uninstallDesktopTip(pkg.name)}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   aria-label={`${p.uninstall}: ${pkg.name}`}
                   className="text-(--ui-text-tertiary) hover:text-(--ui-danger,#f87171)"
@@ -440,7 +444,7 @@ function PackageRow({
                 >
                   <Trash2 className="size-3.5" />
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{p.uninstallDesktopTip(pkg.name)}</TooltipContent></Tooltip>
             ) : null}
           </span>
         </div>
@@ -461,11 +465,11 @@ function PackageRow({
               }}
             />
           ) : pkg.desktopMissing ? (
-            <Tip label={remoteBackend ? p.desktopHalfRemoteTip : p.desktopHalfPendingTip}>
+            <Tooltip><TooltipTrigger asChild>
               <span className="text-[0.65rem] text-(--ui-text-tertiary)">
                 {remoteBackend ? p.desktopHalfRemote : p.desktopHalfPending}
               </span>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{remoteBackend ? p.desktopHalfRemoteTip : p.desktopHalfPendingTip}</TooltipContent></Tooltip>
           ) : (
             <Dash />
           )}
@@ -494,15 +498,15 @@ function PackageRow({
                   onCheckedChange={on => onAgentToggle(agent, on)}
                 />
               ) : (
-                <Tip label={p.legacyBackend}>
+                <Tooltip><TooltipTrigger asChild>
                   <span>
                     <Switch aria-label={`${p.halfAgent}: ${pkg.name}`} checked={agentOn} disabled />
                   </span>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{p.legacyBackend}</TooltipContent></Tooltip>
               )}
             </>
           ) : pkg.agentMissingInProfile && desktop ? (
-            <Tip label={desktop.packageOrigin?.repo ? p.installAgentHereTip(scopeLabel) : p.installAgentHereNoOrigin}>
+            <Tooltip><TooltipTrigger asChild>
               <span>
                 <Button
                   className="h-5 px-1.5 text-[0.65rem]"
@@ -514,7 +518,7 @@ function PackageRow({
                   {p.installAgentHere}
                 </Button>
               </span>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{desktop.packageOrigin?.repo ? p.installAgentHereTip(scopeLabel) : p.installAgentHereNoOrigin}</TooltipContent></Tooltip>
           ) : (
             <Dash />
           )}
@@ -685,7 +689,7 @@ export const PluginsTab = memo(function PluginsTab({
             >
               {d.installModal.installFromGit}
             </Button>
-            <Tip label={d.openFolder}>
+            <Tooltip><TooltipTrigger asChild>
               <Button
                 aria-label={d.openFolder}
                 onClick={() => void revealPluginsDir()}
@@ -695,8 +699,8 @@ export const PluginsTab = memo(function PluginsTab({
               >
                 <FolderOpen className="size-3.5" />
               </Button>
-            </Tip>
-            <Tip label={d.rescan}>
+            </TooltipTrigger><TooltipContent>{d.openFolder}</TooltipContent></Tooltip>
+            <Tooltip><TooltipTrigger asChild>
               <Button
                 aria-label={d.rescan}
                 onClick={() => {
@@ -709,7 +713,7 @@ export const PluginsTab = memo(function PluginsTab({
               >
                 <RefreshCw className="size-3.5" />
               </Button>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{d.rescan}</TooltipContent></Tooltip>
           </div>
         </div>
 
@@ -740,9 +744,9 @@ export const PluginsTab = memo(function PluginsTab({
               <div className="min-w-0 flex-1" role="columnheader" />
               <div className={HALF_COL} role="columnheader">
                 <Monitor aria-hidden className="size-3.5 shrink-0" />
-                <Tip label={p.halfDesktopHint}>
+                <Tooltip><TooltipTrigger asChild>
                   <span className="font-medium">{p.halfDesktop}</span>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{p.halfDesktopHint}</TooltipContent></Tooltip>
               </div>
               <div className={HALF_COL} role="columnheader">
                 <Package aria-hidden className="size-3.5 shrink-0" />

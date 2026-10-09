@@ -1,4 +1,10 @@
-import { Button, Codicon, Tip } from '@hermes/plugin-sdk'
+import {
+  Button,
+  Codicon,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@hermes/plugin-sdk'
 import type { ComponentProps } from 'react'
 
 import { GroupRow } from './bot-row'
@@ -63,7 +69,7 @@ export function RosterGroupRowView({
       />
       <div className="flex flex-col">
         {([-1, 1] as const).map(delta => (
-          <Tip key={delta} label={delta === -1 ? b.sections.moveUp : b.sections.moveDown}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={`${rowProps.group}: ${delta === -1 ? b.sections.moveUp : b.sections.moveDown}`}
               disabled={!reorderGroupRows(sortedGroupRows, rowProps.group, delta)}
@@ -73,7 +79,7 @@ export function RosterGroupRowView({
             >
               <Codicon name={delta === -1 ? 'chevron-up' : 'chevron-down'} />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{delta === -1 ? b.sections.moveUp : b.sections.moveDown}</TooltipContent></Tooltip>
         ))}
       </div>
     </div>

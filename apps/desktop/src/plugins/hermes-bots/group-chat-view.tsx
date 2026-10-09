@@ -29,8 +29,10 @@ import {
   queryClient,
   relativeTime,
   RowButton,
-  Tip,
   ToggleRow,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useI18n,
   useValue
 } from '@hermes/plugin-sdk'
@@ -510,7 +512,7 @@ function GroupChatSettingsDialog({
               return (
                 <li className="flex items-center justify-between gap-2 text-sm" key={key}>
                   <span className="truncate">{displayName(member, botRosterMeta(member, $botMeta.get()))}</span>
-                  <Tip label={b.group.compressHistoryHint(member.name)}>
+                  <Tooltip><TooltipTrigger asChild>
                     <Button
                       aria-label={`${b.group.compressHistory}: ${member.name}`}
                       disabled={compressing !== null}
@@ -521,7 +523,7 @@ function GroupChatSettingsDialog({
                       <Codicon name={compressing === key ? 'loading' : 'fold'} spinning={compressing === key} />
                       {b.group.compressHistory}
                     </Button>
-                  </Tip>
+                  </TooltipTrigger><TooltipContent>{b.group.compressHistoryHint(member.name)}</TooltipContent></Tooltip>
                 </li>
               )
             })}
@@ -892,7 +894,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         </span>
       )}
       <div className="min-w-0 flex-1 truncate text-sm font-semibold">{group}</div>
-      <Tip label={memberNames}>
+      <Tooltip><TooltipTrigger asChild>
         <span
           aria-label={availabilityLabel}
           className={cn(
@@ -904,8 +906,8 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
             ? availabilityLabel
             : b.group.memberCount(members.length)}
         </span>
-      </Tip>
-      <Tip label={b.group.settingsHint(group)}>
+      </TooltipTrigger><TooltipContent>{memberNames}</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label={b.group.settingsLabel(group)}
           className="shrink-0 text-(--ui-text-tertiary) hover:text-foreground"
@@ -915,8 +917,8 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         >
           <Codicon name="gear" />
         </Button>
-      </Tip>
-      <Tip label="Manage members">
+      </TooltipTrigger><TooltipContent>{b.group.settingsHint(group)}</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label="Manage group members"
           className="shrink-0 text-(--ui-text-tertiary) hover:text-foreground"
@@ -926,8 +928,8 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         >
           <Codicon name="organization" />
         </Button>
-      </Tip>
-      <Tip label={b.group.disbandHint(group)}>
+      </TooltipTrigger><TooltipContent>"Manage members"</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild>
         <Button
           aria-label={b.group.disbandLabel(group)}
           className="shrink-0 text-(--ui-text-tertiary) hover:text-destructive"
@@ -937,7 +939,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
         >
           <Codicon name="trash" />
         </Button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{b.group.disbandHint(group)}</TooltipContent></Tooltip>
     </div>
   )
 
@@ -1008,7 +1010,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
           ) : null}
         </RowButton>
         {room.running ? (
-          <Tip label={b.group.stopHint}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               className="shrink-0 text-(--ui-accent)"
               onClick={() => void stopRoomRun()}
@@ -1018,7 +1020,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
               <Codicon name="debug-stop" />
               {b.group.stop}
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{b.group.stopHint}</TooltipContent></Tooltip>
         ) : null}
       </div>
       {activityOpen ? (
@@ -1035,7 +1037,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
                 </span>
                 <span className="shrink-0 text-[0.625rem] text-(--ui-text-quaternary)">{relativeTime(event.at)}</span>
                 {room.running && event.kind === 'working' ? (
-                  <Tip label={b.group.stopHint}>
+                  <Tooltip><TooltipTrigger asChild>
                     <Button
                       className="shrink-0 text-(--ui-accent) h-auto px-1 py-0 text-xs leading-4 font-normal"
                       onClick={() => void stopRoomRun()}
@@ -1044,7 +1046,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
                       <Codicon name="debug-stop" />
                       {b.group.stop}
                     </Button>
-                  </Tip>
+                  </TooltipTrigger><TooltipContent>{b.group.stopHint}</TooltipContent></Tooltip>
                 ) : null}
               </div>
             ))
@@ -1150,7 +1152,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
               <img alt="" className="size-6 rounded object-cover" src={img.data} />
             )}
             <span className="max-w-32 truncate text-[0.65rem] text-(--ui-text-tertiary)">{img.name || 'image'}</span>
-            <Tip label={b.group.removeAttachment}>
+            <Tooltip><TooltipTrigger asChild>
               <Button
                 aria-label={b.group.removeAttachment}
                 onClick={() => removeImage(thread, index)}
@@ -1159,7 +1161,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
               >
                 <Codicon name="close" />
               </Button>
-            </Tip>
+            </TooltipTrigger><TooltipContent>{b.group.removeAttachment}</TooltipContent></Tooltip>
           </div>
         ))}
       </div>
@@ -1167,7 +1169,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
   }
 
   const attachButton = (thread: null | string) => (
-    <Tip label={b.group.attachHint}>
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={b.group.attachHint}
         className="shrink-0 text-(--ui-text-tertiary) hover:text-foreground"
@@ -1178,7 +1180,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
       >
         <Codicon name="attach" />
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{b.group.attachHint}</TooltipContent></Tooltip>
   )
 
   // #91359: recognized @mentions render as inline references; recomputed
@@ -1285,7 +1287,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
             {isUser ? (
               <span className="text-[0.7rem] font-semibold text-foreground">{label}</span>
             ) : (
-              <Tip label={revealed ? 'Hide full handle' : 'Show full handle'}>
+              <Tooltip><TooltipTrigger asChild>
                 <Button
                   className="text-left text-[0.7rem] font-semibold text-(--ui-accent) h-auto p-0"
                   onClick={() => setRevealedSpeaker(revealed ? null : entryKey)}
@@ -1293,13 +1295,13 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
                 >
                   {label}
                 </Button>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{revealed ? 'Hide full handle' : 'Show full handle'}</TooltipContent></Tooltip>
             )}
             <span className="text-[0.625rem] text-(--ui-text-quaternary)">{relativeTime(entry.at)}</span>
             {entry.text.trim() || !isUser ? (
               <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
                 {isUser ? null : (
-                  <Tip label={`Reply to @${replyMentionTag(entry, member)}`}>
+                  <Tooltip><TooltipTrigger asChild>
                     <Button
                       aria-label={`Reply to ${display}`}
                       className="text-(--ui-text-tertiary) hover:text-foreground"
@@ -1309,7 +1311,7 @@ export function GroupChatWorkspace({ group, members, onBack, visible = true }: G
                     >
                       <Codicon name="reply" />
                     </Button>
-                  </Tip>
+                  </TooltipTrigger><TooltipContent>{`Reply to @${replyMentionTag(entry, member)}`}</TooltipContent></Tooltip>
                 )}
                 {entry.text.trim() ? (
                   <CopyButton appearance="icon" buttonSize="icon" stopPropagation text={entry.text} />

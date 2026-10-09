@@ -5,7 +5,11 @@ import { useEffect, useState } from 'react'
 import { WIDGET_SHELL_CLASS } from '@/components/chat/widget-shell'
 import { ImageLightbox } from '@/components/chat/zoomable-image'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useImageDownload } from '@/hooks/use-image-download'
 import { useI18n } from '@/i18n'
 import { ExternalLink } from '@/lib/external-link'
@@ -232,7 +236,7 @@ function GalleryTile({
   label: string
 }) {
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         className={cn('relative block size-full cursor-zoom-in overflow-hidden bg-muted/55', className)}
         onClick={onOpen}
@@ -257,6 +261,6 @@ function GalleryTile({
           </span>
         )}
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }

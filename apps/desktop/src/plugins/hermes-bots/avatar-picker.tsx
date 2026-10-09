@@ -14,7 +14,9 @@ import {
   RowButton,
   SegmentedControl,
   Textarea,
-  Tip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   useValue
 } from '@hermes/plugin-sdk'
 import { useState } from 'react'
@@ -148,7 +150,7 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
                 {/* Silhouette pins: Auto (name decides) + the six blob kinds. */}
                 <div className="grid grid-cols-4 justify-items-center gap-1.5">
                   {['', ...BLOB_KINDS].map(k => (
-                    <Tip key={k || 'auto'} label={k || b.editor.autoHint}>
+                    <Tooltip><TooltipTrigger asChild>
                       <RowButton
                         aria-label={k || b.editor.autoHint}
                         className={cn(
@@ -171,7 +173,7 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
                           <span className="text-[0.6rem] text-(--ui-text-tertiary)">{b.editor.auto}</span>
                         )}
                       </RowButton>
-                    </Tip>
+                    </TooltipTrigger><TooltipContent>{k || b.editor.autoHint}</TooltipContent></Tooltip>
                   ))}
                 </div>
                 <div className="flex items-center gap-1">
@@ -216,7 +218,7 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
           <div className="grid justify-items-center gap-3">
             <div className="grid grid-cols-4 justify-items-center gap-1.5">
               {(blobatarSvg ? ['blobatar', ...AVATAR_PICKER_SHAPES] : AVATAR_PICKER_SHAPES).map(s => (
-                <Tip key={s} label={s === 'blobatar' ? b.avatar.blobFromName : undefined}>
+                <Tooltip><TooltipTrigger asChild>
                   <RowButton
                     aria-label={s === 'blobatar' ? b.avatar.blobFromName : s}
                     className={cn(
@@ -230,7 +232,7 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
                   >
                     <BotFace color={avatarColor(color, pickerName)} name={pickerName} shape={s} size={32} />
                   </RowButton>
-                </Tip>
+                </TooltipTrigger><TooltipContent>{s === 'blobatar' ? b.avatar.blobFromName : undefined}</TooltipContent></Tooltip>
               ))}
             </div>
             <ColorSwatches

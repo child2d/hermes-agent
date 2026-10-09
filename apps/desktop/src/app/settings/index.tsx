@@ -4,7 +4,11 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 
 import { codiconIcon } from '@/components/ui/codicon'
 import { KbdCombo } from '@/components/ui/kbd'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { getHermesConfigDefaults, getHermesConfigRecord, saveHermesConfig } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
@@ -486,12 +490,12 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
 
   const navFooter = (
     <>
-      <Tip label={t.settings.exportConfig}>
+      <Tooltip><TooltipTrigger asChild>
         <OverlayIconButton onClick={() => void exportConfig()}>
           <Download />
         </OverlayIconButton>
-      </Tip>
-      <Tip label={t.settings.importConfig}>
+      </TooltipTrigger><TooltipContent>{t.settings.exportConfig}</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild>
         <OverlayIconButton
           onClick={() => {
             triggerHaptic('open')
@@ -500,8 +504,8 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
         >
           <Upload />
         </OverlayIconButton>
-      </Tip>
-      <Tip label={t.settings.resetToDefaults}>
+      </TooltipTrigger><TooltipContent>{t.settings.importConfig}</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild>
         <OverlayIconButton
           className="hover:text-destructive"
           onClick={() => {
@@ -511,7 +515,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
         >
           <RefreshCw />
         </OverlayIconButton>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{t.settings.resetToDefaults}</TooltipContent></Tooltip>
     </>
   )
 

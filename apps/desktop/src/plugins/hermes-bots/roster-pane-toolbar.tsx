@@ -8,7 +8,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   SearchField,
-  Tip
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
 } from '@hermes/plugin-sdk'
 
 import { botSourceStatus } from './data'
@@ -74,9 +76,7 @@ export function renderRosterToolbar({
           {b.nav}
         </span>
         <div className="flex items-center gap-0.5">
-          <Tip
-            label={activityToasts ? 'Activity toasts on — click to silence' : 'Activity toasts off — click to enable'}
-          >
+          <Tooltip><TooltipTrigger asChild>
             <Button
               className="rounded-md text-(--ui-text-tertiary) hover:text-foreground"
               onClick={() => setActivityToasts(!activityToasts)}
@@ -85,9 +85,9 @@ export function renderRosterToolbar({
             >
               <Codicon name={activityToasts ? 'bell' : 'bell-slash'} />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{activityToasts ? 'Activity toasts on — click to silence' : 'Activity toasts off — click to enable'}</TooltipContent></Tooltip>
           <DropdownMenu>
-            <Tip label="New…">
+            <Tooltip><TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
                 <Button
                   aria-label={b.roster.newBotOrGroup}
@@ -98,7 +98,7 @@ export function renderRosterToolbar({
                   <Codicon name="add" />
                 </Button>
               </DropdownMenuTrigger>
-            </Tip>
+            </TooltipTrigger><TooltipContent>"New…"</TooltipContent></Tooltip>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
                 <Codicon className="mr-1.5" name="hubot" />
@@ -139,7 +139,7 @@ export function renderRosterToolbar({
           )}
           {showRosterFilters ? (
             <DropdownMenu key={'roster-filters'}>
-              <Tip label={activeFilterCount ? `Filters (${activeFilterCount} active)` : 'Filter roster'}>
+              <Tooltip><TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <Button
                     aria-label={activeFilterCount ? `Filter roster, ${activeFilterCount} active` : 'Filter roster'}
@@ -153,7 +153,7 @@ export function renderRosterToolbar({
                     <Codicon name="list-filter" />
                   </Button>
                 </DropdownMenuTrigger>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{activeFilterCount ? `Filters (${activeFilterCount} active)` : 'Filter roster'}</TooltipContent></Tooltip>
               <DropdownMenuContent align="end">
                 {(
                   [

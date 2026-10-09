@@ -8,7 +8,11 @@ import { toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { resetLayoutTree } from '@/components/pane-shell/tree/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { Slot } from '@/contrib/react/slot'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { useI18n } from '@/i18n'
@@ -363,14 +367,14 @@ function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof us
   const className = cn(titlebarButtonClass, 'bg-transparent select-none', tool.className)
 
   const tooltipLabel = tool.actionId ? (
-    <TipKeybindLabel actionId={tool.actionId} text={tool.title ?? tool.label} />
+    tool.title ?? tool.label
   ) : (
     (tool.title ?? tool.label)
   )
 
   if (tool.href) {
     return (
-      <Tip label={tooltipLabel} placement="toolbar">
+      <Tooltip><TooltipTrigger asChild>
         <Button asChild className={className} size="icon-titlebar" variant="ghost">
           <a
             aria-label={tool.label}
@@ -383,12 +387,12 @@ function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof us
             {withCountBadge(tool.icon, tool.badge)}
           </a>
         </Button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{tooltipLabel}</TooltipContent></Tooltip>
     )
   }
 
   return (
-    <Tip label={tooltipLabel} placement="toolbar">
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={tool.label}
         aria-pressed={tool.active ?? undefined}
@@ -413,6 +417,6 @@ function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof us
       >
         {withCountBadge(tool.icon, tool.badge)}
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{tooltipLabel}</TooltipContent></Tooltip>
   )
 }

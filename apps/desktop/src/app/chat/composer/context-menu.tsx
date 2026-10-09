@@ -13,7 +13,11 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Kbd } from '@/components/ui/kbd'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { Clipboard, FileText, FolderOpen, type IconComponent, ImageIcon, Link, MessageSquareText } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -47,7 +51,7 @@ export function ContextMenu({
   return (
     <>
       <DropdownMenu>
-        <Tip label={state.tools.label} placement="control">
+        <Tooltip><TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <Button
               aria-label={state.tools.label}
@@ -63,7 +67,7 @@ export function ContextMenu({
               <Codicon name="add" size="0.875rem" />
             </Button>
           </DropdownMenuTrigger>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{state.tools.label}</TooltipContent></Tooltip>
         <DropdownMenuContent align="start" className={cn('w-60', composerPanelCard)} side="top" sideOffset={6}>
           <DropdownMenuLabel className="px-2 pb-0.5 pt-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-(--ui-text-tertiary)">
             {c.attachLabel}

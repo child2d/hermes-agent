@@ -9,7 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useI18n } from '@/i18n'
 import { PanelLeftIcon } from '@/lib/icons'
@@ -257,7 +262,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
   const label = t.ui.sidebar.toggle(state === 'collapsed')
 
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={label}
         className={cn(
@@ -275,7 +280,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
         tabIndex={-1}
         {...props}
       />
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }
 
@@ -501,7 +506,7 @@ function SidebarMenuButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent hidden={state !== 'collapsed' || isMobile} placement="left-rail" {...tooltip} />
+      <TooltipContent hidden={state !== 'collapsed' || isMobile} {...tooltip} />
     </Tooltip>
   )
 }

@@ -17,7 +17,11 @@ import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/type
 import { useMessageReactions } from '@/components/assistant-ui/thread/use-message-reactions'
 import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
@@ -521,7 +525,7 @@ export const UserMessage: FC<{
                       {StopGlyph}
                     </button>
                   ) : showRestore ? (
-                    <Tip label={copy.restoreFromHere}>
+                    <Tooltip><TooltipTrigger asChild>
                       <button
                         aria-label={copy.restoreCheckpoint}
                         className={cn('pointer-events-auto size-6', USER_ACTION_ICON_BUTTON_CLASS)}
@@ -542,7 +546,7 @@ export const UserMessage: FC<{
                       >
                         <Codicon name="discard" size="0.875rem" />
                       </button>
-                    </Tip>
+                    </TooltipTrigger><TooltipContent>{copy.restoreFromHere}</TooltipContent></Tooltip>
                   ) : null}
                 </div>
               </div>

@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 
 import { appViewForPath, isOverlayView } from '@/app/routes'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { findBarKeyAction, formatMatchLabel } from '@/lib/find-in-page'
 import { cn } from '@/lib/utils'
@@ -328,7 +332,7 @@ export function FindBar() {
         </span>
       )}
 
-      <Tip label={t.findInPage.previous}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           aria-label={t.findInPage.previous}
           className="flex h-7 w-7 items-center justify-center rounded text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background)"
@@ -339,9 +343,9 @@ export function FindBar() {
             <path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" strokeWidth="1.5" />
           </svg>
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{t.findInPage.previous}</TooltipContent></Tooltip>
 
-      <Tip label={t.findInPage.next}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           aria-label={t.findInPage.next}
           className="flex h-7 w-7 items-center justify-center rounded text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background)"
@@ -352,7 +356,7 @@ export function FindBar() {
             <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" />
           </svg>
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{t.findInPage.next}</TooltipContent></Tooltip>
 
       <button
         aria-label={t.common.close}

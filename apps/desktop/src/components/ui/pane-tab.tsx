@@ -3,7 +3,11 @@ import * as React from 'react'
 import { type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { translateNow } from '@/i18n'
 import { isMetaClose, middleClickHandlers } from '@/lib/middle-click'
 import { cn } from '@/lib/utils'
@@ -305,7 +309,7 @@ export interface PaneStripTool {
  */
 export function PaneStripGlyph({ active, disabled, icon, label, onSelect }: Omit<PaneStripTool, 'id'>) {
   return (
-    <Tip label={label} placement="toolbar">
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-label={label}
         aria-pressed={active ?? undefined}
@@ -322,7 +326,7 @@ export function PaneStripGlyph({ active, disabled, icon, label, onSelect }: Omit
       >
         {icon}
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }
 

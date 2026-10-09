@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 
 import { composerFloatingPill } from '@/components/chat/composer-dock'
 import { Codicon } from '@/components/ui/codicon'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { triggerHaptic } from '@/lib/haptics'
 import { brandFor, brandGlyphStyle } from '@/lib/mcp-brands'
 import { useSessionSlice } from '@/lib/use-session-slice'
@@ -129,7 +133,7 @@ function SessionSuggestionPills({ sessionId }: { sessionId: null | string }) {
     }
 
     return (
-      <Tip key={key} label={tip}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           className={cn(composerFloatingPill, 'max-w-56', phase === 'done' && 'cursor-default')}
           onClick={() => {
@@ -153,7 +157,7 @@ function SessionSuggestionPills({ sessionId }: { sessionId: null | string }) {
           )}
           <span className="truncate">{label}</span>
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{tip}</TooltipContent></Tooltip>
     )
   })
 }

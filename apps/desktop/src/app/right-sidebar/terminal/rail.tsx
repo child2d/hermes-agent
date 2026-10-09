@@ -8,9 +8,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
-import { Tip, TipHintLabel } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { formatCombo } from '@/lib/keybinds/combo'
 import { isMetaClose, middleClickHandlers } from '@/lib/middle-click'
 import { cn } from '@/lib/utils'
 import { $bindings } from '@/store/keybinds'
@@ -67,10 +70,7 @@ export function TerminalRail() {
           />
         ))}
         <li className="flex w-full justify-center">
-          <Tip
-            label={<TipHintLabel hint={newHint && formatCombo(newHint)} text={t.rightSidebar.terminalNew} />}
-            placement="right-rail"
-          >
+          <Tooltip><TooltipTrigger asChild>
             <button
               aria-label={t.rightSidebar.terminalNew}
               className={cn(RAIL_ACTION, 'size-7 text-(--ui-text-quaternary)')}
@@ -79,12 +79,12 @@ export function TerminalRail() {
             >
               <Codicon name="add" size="0.8125rem" />
             </button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{t.rightSidebar.terminalNew}</TooltipContent></Tooltip>
         </li>
       </ul>
 
       <div className="flex shrink-0 flex-col items-center pb-1.5">
-        <Tip label={t.rightSidebar.terminalHide} placement="right-rail">
+        <Tooltip><TooltipTrigger asChild>
           <button
             aria-label={t.rightSidebar.terminalHide}
             className={cn(RAIL_ACTION, 'opacity-0 transition-opacity group-hover/rail:opacity-100')}
@@ -93,7 +93,7 @@ export function TerminalRail() {
           >
             <Codicon name="chevron-down" size="0.8125rem" />
           </button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{t.rightSidebar.terminalHide}</TooltipContent></Tooltip>
       </div>
     </div>
   )
@@ -121,10 +121,7 @@ function TerminalRailItem({ active, canCloseOthers, index, term, toggleHint }: T
               className="absolute inset-y-0.5 right-0 w-0.5 rounded-l-sm bg-(--ui-stroke-primary)"
             />
           )}
-          <Tip
-            label={<TipHintLabel hint={toggleHint && formatCombo(toggleHint)} text={label} />}
-            placement="right-rail"
-          >
+          <Tooltip><TooltipTrigger asChild>
             <button
               aria-label={label}
               aria-selected={active}
@@ -146,7 +143,7 @@ function TerminalRailItem({ active, canCloseOthers, index, term, toggleHint }: T
                 size="0.875rem"
               />
             </button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
         </li>
       </ContextMenuTrigger>
       <ContextMenuContent>

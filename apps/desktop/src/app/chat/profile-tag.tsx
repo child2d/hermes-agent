@@ -1,7 +1,11 @@
 import { useStore } from '@nanostores/react'
 
 import { ProfileGlyph } from '@/components/ui/profile-glyph'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { resolveProfileColor } from '@/lib/profile-color'
 import { $profileColors, normalizeProfileKey } from '@/store/profile'
@@ -16,7 +20,7 @@ export function ProfileTag({ className, profile }: { className?: string; profile
   const label = t.sidebar.row.ownedByProfile(key)
 
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <ProfileGlyph
         aria-label={label}
         className={className}
@@ -25,6 +29,6 @@ export function ProfileTag({ className, profile }: { className?: string; profile
         name={key}
         role="img"
       />
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }

@@ -42,7 +42,12 @@ import {
 import { edgeMask, scrollEdges } from '@/components/ui/fade-scroll'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { ProfileGlyph } from '@/components/ui/profile-glyph'
-import { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import type { DesktopRegistryConnection } from '@/global'
 import { getProfileSoul, updateProfileSoul } from '@/hermes'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -829,7 +834,7 @@ function EditSoulDialog({
 // The "+" create button, shared by both rail render paths.
 function AddProfileButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={label}
         className="grid size-5 shrink-0 place-items-center rounded-[3px] text-(--ui-text-tertiary) opacity-55 transition hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100"
@@ -838,7 +843,7 @@ function AddProfileButton({ label, onClick }: { label: string; onClick: () => vo
       >
         <Codicon name="add" size="0.75rem" />
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }
 
@@ -847,7 +852,7 @@ function AddProfileButton({ label, onClick }: { label: string; onClick: () => vo
 // flow (picker → import → apply overlay → switch) lives in the store.
 function ImportProfileButton({ label }: { label: string }) {
   return (
-    <Tip label={label}>
+    <Tooltip><TooltipTrigger asChild>
       <button
         aria-label={label}
         className="grid size-5 shrink-0 place-items-center rounded-[3px] text-(--ui-text-tertiary) opacity-55 transition hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100"
@@ -856,7 +861,7 @@ function ImportProfileButton({ label }: { label: string }) {
       >
         <Codicon name="cloud-download" size="0.75rem" />
       </button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
   )
 }
 
@@ -1084,7 +1089,7 @@ function ProfilePill({
   const accessibleLabel = statusText ? `${label}, ${statusText}` : label
 
   const button = (
-    <Tip label={accessibleLabel}>
+    <Tooltip><TooltipTrigger asChild>
       <Button
         aria-busy={pending || undefined}
         aria-label={accessibleLabel}
@@ -1109,7 +1114,7 @@ function ProfilePill({
           </span>
         )}
       </Button>
-    </Tip>
+    </TooltipTrigger><TooltipContent>{accessibleLabel}</TooltipContent></Tooltip>
   )
 
   return profile ? (
@@ -1156,7 +1161,7 @@ function FleetDivider({
     </span>
   )
 
-  return label ? <Tip label={label}>{marker}</Tip> : marker
+  return label ? <Tooltip><TooltipTrigger asChild>{marker}</TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip> : marker
 }
 
 // One at-rest gateway on the fleet rail: hairline + kind glyph (amber dot when

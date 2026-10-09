@@ -6,7 +6,11 @@ import { Codicon } from '@/components/ui/codicon'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { Kbd, KbdCombo } from '@/components/ui/kbd'
 import { SearchField } from '@/components/ui/search-field'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { useI18n } from '@/i18n'
 import {
@@ -257,7 +261,7 @@ function KeybindRow({ action }: { action: KeybindActionMeta }) {
       )}
 
       {/* Click the caps to rebind — the on-screen editor does the same thing. */}
-      <Tip label={k.rebind}>
+      <Tooltip><TooltipTrigger asChild>
         <button
           aria-label={k.rebind}
           className="flex shrink-0 items-center gap-1 rounded-lg outline-none"
@@ -272,13 +276,13 @@ function KeybindRow({ action }: { action: KeybindActionMeta }) {
             <Kbd variant="ghost">{k.set}</Kbd>
           )}
         </button>
-      </Tip>
+      </TooltipTrigger><TooltipContent>{k.rebind}</TooltipContent></Tooltip>
 
       {/* Reset shows once a binding diverges from its default. A shipped chord
           (sidebar mod+b) has no reset, so that same slot clears it instead. */}
       {isDefault ? (
         combos.length > 0 ? (
-          <Tip label={k.clear}>
+          <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={k.clear}
               className="shrink-0 text-(--ui-text-tertiary) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
@@ -288,12 +292,12 @@ function KeybindRow({ action }: { action: KeybindActionMeta }) {
             >
               <Codicon name="close" size="0.8125rem" />
             </Button>
-          </Tip>
+          </TooltipTrigger><TooltipContent>{k.clear}</TooltipContent></Tooltip>
         ) : (
           <span aria-hidden className="size-6 shrink-0" />
         )
       ) : (
-        <Tip label={k.reset}>
+        <Tooltip><TooltipTrigger asChild>
           <Button
             aria-label={k.reset}
             className="shrink-0 text-(--ui-text-tertiary) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
@@ -303,7 +307,7 @@ function KeybindRow({ action }: { action: KeybindActionMeta }) {
           >
             <Codicon name="discard" size="0.8125rem" />
           </Button>
-        </Tip>
+        </TooltipTrigger><TooltipContent>{k.reset}</TooltipContent></Tooltip>
       )}
     </div>
   )

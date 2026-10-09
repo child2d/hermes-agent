@@ -10,7 +10,11 @@ import { requestComposerAttachImages, requestComposerFocus, requestComposerInser
 import { openGuestContextMenu } from '@/app/context-menu/store'
 import { PanelEmpty } from '@/app/overlays/panel'
 import { isElementInHiddenPane } from '@/components/pane-shell/pane-visibility'
-import { Tip } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import { type Translations, useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode, isReadFileErrorResult } from '@/lib/desktop-fs'
 import { guardGuestPointers } from '@/lib/guest-pointer-guard'
@@ -1459,7 +1463,7 @@ export function PreviewPane({
         {!embedded && (
           <div className="pointer-events-none flex min-h-(--titlebar-height) items-center gap-1.5 border-b border-border/60 bg-background px-2 py-1">
             <div className="min-w-0 flex-1">
-              <Tip label={copy.openTarget(currentUrl)}>
+              <Tooltip><TooltipTrigger asChild>
                 <a
                   className="pointer-events-auto inline max-w-full truncate text-left text-xs font-medium text-foreground underline-offset-4 decoration-current/20 transition-colors hover:text-primary hover:underline"
                   href={isRemoteHtmlTarget ? undefined : currentUrl}
@@ -1474,7 +1478,7 @@ export function PreviewPane({
                 >
                   {previewLabel || copy.fallbackTitle}
                 </a>
-              </Tip>
+              </TooltipTrigger><TooltipContent>{copy.openTarget(currentUrl)}</TooltipContent></Tooltip>
             </div>
           </div>
         )}
