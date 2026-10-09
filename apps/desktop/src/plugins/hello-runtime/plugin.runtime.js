@@ -6,21 +6,28 @@
  * `~/.hermes/desktop-plugins/<name>/plugin.js`.
  */
 
-import { cn, host, Tip, useValue } from '@hermes/plugin-sdk'
+import { cn, host, Tooltip, TooltipContent, TooltipTrigger, useValue } from '@hermes/plugin-sdk'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 function RuntimeChip() {
   const gateway = useValue(host.state.gateway)
 
-  return jsx(Tip, {
-    label: `Loaded at RUNTIME through blob import + SDK injection (gateway: ${gateway})`,
-    children: jsxs('span', {
-      className: cn(
-        'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem]',
-        'text-(--ui-text-tertiary)'
-      ),
-      children: [jsx('span', { 'aria-hidden': true, children: '⚡' }), jsx('span', { children: 'runtime' })]
-    })
+  return jsxs(Tooltip, {
+    children: [
+      jsx(TooltipTrigger, {
+        asChild: true,
+        children: jsxs('span', {
+          className: cn(
+            'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem]',
+            'text-(--ui-text-tertiary)'
+          ),
+          children: [jsx('span', { 'aria-hidden': true, children: '⚡' }), jsx('span', { children: 'runtime' })]
+        })
+      }),
+      jsx(TooltipContent, {
+        children: `Loaded at RUNTIME through blob import + SDK injection (gateway: ${gateway})`
+      })
+    ]
   })
 }
 

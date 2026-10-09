@@ -1,6 +1,6 @@
 import {
   atom, Button, createBudgetedLoop, GlyphSpinner, icons, Popover, PopoverContent, PopoverTrigger,
-  RowButton, SearchField, STATUSBAR_AREAS, Tip, usePluginI18n,
+  RowButton, SearchField, STATUSBAR_AREAS, Tooltip, TooltipContent, TooltipTrigger, usePluginI18n,
   useQuery, useValue
 } from '@hermes/plugin-sdk'
 import { useEffect, useRef, useState } from 'react'
@@ -435,11 +435,28 @@ function NextArrow() {
   ] })
 }
 
+/** One stock Tooltip trio around a trigger; renders the trigger alone when there
+ *  is no label — what the fork's `Tip` did before the migration. */
+function tip(label, trigger) {
+  if (!label) return trigger
+
+  return jsxs(Tooltip, { children: [
+    jsx(TooltipTrigger, { asChild: true, children: trigger }),
+    jsx(TooltipContent, { children: label })
+  ] })
+}
+
+// `micro` / `icon-xs` were fork-only Button sizes with no stock equivalent, so
+// they resolve to call-site classes / the nearest stock size.
 function SmallAction({ label, icon, onClick, size = 'micro', pressed, className, busy = false }) {
-  return jsx(Tip, { label, children: jsx(Button, {
-    variant: 'ghost', size, className: `hermes-radio-action ${className ?? ''}`, 'aria-label': label, 'aria-pressed': pressed, onClick,
+  const compact = size === 'micro'
+
+  return tip(label, jsx(Button, {
+    variant: 'ghost', size: compact ? undefined : size === 'icon-xs' ? 'icon' : size,
+    className: `hermes-radio-action${compact ? ' h-auto px-1 py-0 text-xs' : ''} ${className ?? ''}`,
+    'aria-label': label, 'aria-pressed': pressed, onClick,
     children: jsx('span', { className: 'hermes-radio-action-icon', children: busy ? jsx(GlyphSpinner, { ariaLabel: label }) : jsx(icon, {}) })
-  }) })
+  }))
 }
 
 function trackCredit(source) {
@@ -555,16 +572,16 @@ function Signal({ player, ctx }) {
     jsx(Waveform, { player }),
     jsxs('div', { className: 'hermes-radio-track', 'data-track': Boolean(track), role: 'status', children: [
       status === 'connecting' && jsx(GlyphSpinner, { ariaLabel: t('connecting') }),
-      credit.artist && (artistUrl ? jsx(Tip, { label: `${t('artistProfile')}: ${credit.artist}`, children: jsx(Button, {
-        variant: 'text', size: 'inline', asChild: true, className: 'hermes-radio-artist',
+      credit.artist && (artistUrl ? tip(`${t('artistProfile')}: ${credit.artist}`, jsx(Button, {
+        variant: 'link', asChild: true, className: 'hermes-radio-artist h-auto p-0',
         children: jsxs('a', { href: artistUrl, target: '_blank', rel: 'noopener noreferrer',
           'aria-label': `${t('artistProfile')}: ${credit.artist}`,
           onClick: event => { event.preventDefault(); void ctx.os.openExternal(artistUrl) },
           children: [jsx('span', { children: credit.artist }), jsx(icons.ExternalLink, { style: { width: 10, height: 10 }, 'aria-hidden': true })]
         })
-      }) }) : jsx('span', { className: 'hermes-radio-track-text', children: credit.artist })),
+      })) : jsx('span', { className: 'hermes-radio-track-text', children: credit.artist })),
       credit.artist && jsx('span', { className: 'hermes-radio-track-separator', 'aria-hidden': true, children: '—' }),
-      jsx(Tip, { label: text || undefined, children: jsx('span', { className: 'hermes-radio-track-text', children: credit.artist ? credit.title : text }) })
+      tip(text || undefined, jsx('span', { className: 'hermes-radio-track-text', children: credit.artist ? credit.title : text }))
     ] })
   ] })
 }
@@ -664,7 +681,7 @@ function RadioBar({ player, ctx }) {
     jsx(Waveform, { player, compact: true }),
     jsxs(Popover, { open, onOpenChange, children: [
       jsx(PopoverTrigger, { asChild: true, children: jsx(Button, {
-        ref: triggerRef, variant: 'ghost', size: 'micro', style: { width: open ? browseWidth : undefined },
+        ref: triggerRef, variant: 'ghost', className: 'h-auto px-1 py-0 text-xs', style: { width: open ? browseWidth : undefined },
         'aria-label': `${t('browse')}: ${station.name}`,
         children: jsx('span', { className: 'radio-name', children: station.name })
       }) }),
