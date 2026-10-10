@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PlanktonAuthGate } from '@/app/plankton-auth-gate'
@@ -17,6 +17,14 @@ const navigate = vi.fn()
 
 vi.mock('react-router', () => ({
   useNavigate: () => navigate
+}))
+
+// Only the mode labels are read from the catalog; pinning them keeps the
+// segmented control's assertions out of the active locale's hands.
+vi.mock('@/i18n', () => ({
+  useI18n: () => ({
+    t: { settings: { modeOptions: { dark: { label: 'Dark' }, light: { label: 'Light' }, system: { label: 'System' } } } }
+  })
 }))
 
 interface Bridge {
@@ -82,6 +90,39 @@ describe('SidebarUserMenu', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(SETTINGS_ROUTE))
     // The panel closes behind the navigation, never left floating over the app.
     await waitFor(() => expect(screen.queryByRole('button', { name: '设置' })).toBeNull())
+  })
+
+  it('groups the panel: identity, the preference rows, then sign-out on its own', async (): Promise<void> => {
+    setBridge({ subject: 'perry.chen@shaoke.com', displayName: '陈涛' })
+
+    renderMenu()
+    fireEvent.click(await screen.findByRole('button', { name: '陈涛' }))
+
+    const identity = screen.getByTestId('plankton-account-identity')
+    expect(within(identity).getByText('陈涛')).toBeTruthy()
+    expect(within(identity).getByText('perry.chen@shaoke.com')).toBeTruthy()
+
+    // Every row the panel offers, in order.
+    expect(screen.getByRole('button', { name: '设置' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '检查更新' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy()
+    expect(screen.getByText('外观')).toBeTruthy()
+    // The appearance control rides the row itself, so it is not a link row.
+    expect(screen.getByRole('button', { name: 'Light' })).toHaveProperty('ariaPressed', 'true')
+    expect(screen.getByRole('button', { name: 'Dark' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'System' })).toBeTruthy()
+  })
+
+  it('never prints an opaque SSO subject as if it were account detail', async (): Promise<void> => {
+    // The enterprise subject is an id, not an address: it must not surface as a
+    // stray number under the name.
+    setBridge({ subject: '5', displayName: '陈涛' })
+
+    renderMenu()
+    fireEvent.click(await screen.findByRole('button', { name: '陈涛' }))
+
+    const identity = screen.getByTestId('plankton-account-identity')
+    expect(within(identity).queryByText('5')).toBeNull()
   })
 
   it('falls back to the subject when the SSO identity carries no display name', async (): Promise<void> => {

@@ -24,7 +24,7 @@ const LOGGED_IN = {
   loginReady: true,
   loginBlockedReason: null,
   loggedIn: true,
-  whoami: { subject: 'subject-1', displayName: '张三' }
+  whoami: { subject: 'perry.chen@shaoke.com', displayName: '张三' }
 }
 
 const LOGGED_OUT = {
@@ -125,7 +125,7 @@ describe('PlanktonAuthGate sign-out', () => {
     const signOut = await openAccountPanel()
     const identity = screen.getByTestId('plankton-account-identity')
     expect(within(identity).getByText('张三')).toBeTruthy()
-    expect(within(identity).getByText('subject-1')).toBeTruthy()
+    expect(within(identity).getByText('perry.chen@shaoke.com')).toBeTruthy()
 
     fireEvent.click(signOut)
 

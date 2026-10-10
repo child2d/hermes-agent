@@ -253,15 +253,22 @@ and profile drag gestures temporarily remove the mask so the dragged square stay
 ## Account row
 
 The sidebar's foot carries the signed-in enterprise (Plankton) identity as one
-row — avatar + display name — with the account panel (sign-out, Settings) behind
+row — avatar + display name — with the account panel behind
 it. `<SidebarUserMenu>` (`app/chat/sidebar/user-menu.tsx`) renders only where
 `$enterpriseEnabled` is set and the login gate is active
 (`usePlanktonSession().required`), so every upstream variant keeps its own
 sidebar foot. The panel opens upward (`side="top"`, `align="start"`) and paints
 through the shared menu tokens (`menuSurfaceClass` / `menuItemClass`) rather than
-inventing a surface. The row's accessible name IS the identity, so the signed-in
-subject is addressable in tests and to screen readers without opening the panel.
-It is not tier-gated: the account belongs to both interface modes.
+inventing a surface. Its rows are grouped by hairlines — identity, the
+preference rows, then sign-out on its own group — and a row that owns a control
+(外观's light/dark switch) carries the control instead of a chevron. The row's
+accessible name IS the identity, so the signed-in subject is addressable in
+tests and to screen readers without opening the panel. It is not tier-gated: the
+account belongs to both interface modes.
+
+The panel shows the SSO address when the subject is one, and nothing when it is
+an opaque id (enterprise subjects are often bare numbers, which read as a broken
+badge under the name).
 
 ## Context-sensitive dialogs
 
