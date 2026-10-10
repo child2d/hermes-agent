@@ -1643,22 +1643,16 @@ body.guest-pointer-lock :is(webview, iframe) {
   width: 100%;
 }
 
-/* Pane-tab theming. The component is shared with the other shaoke products;
-   the skin stays ours. Set on the strip AND the tab: the strip is the tabs'
-   ancestor (so they inherit the vars), and a tab rendered outside a strip — a
-   collapsed vertical rail — still reads them. */
-[data-slot='pane-tab-strip'],
+/* Pane-tab palette: none. It uses the shared component's shadcn defaults, i.e.
+   the standard semantic slots (muted / background / primary / border), which
+   this app's `@theme inline` already maps onto its own --dt-* values — so the
+   colours are still ours, taken through the standard slot names.
+   The single host deviation is the label size: Plankton runs its own ladder
+   whose small-label rung is 11px (`text-2xs`). Deliberately NOT a className
+   override — two font-size utilities resolve by Tailwind's output order, not by
+   className order. Line height stays at the shared default (1rem), same as
+   `text-2xs` uses here. */
 [data-slot='pane-tab'] {
-  --pane-tab-strip-bg: var(--ui-sidebar-surface-background);
-  --pane-tab-active-bg: var(--ui-editor-surface-background);
-  --pane-tab-active-accent: var(--theme-primary);
-  --pane-tab-divider-color: var(--ui-stroke-quaternary);
-  --pane-tab-edge-color: var(--ui-stroke-tertiary);
-  --pane-tab-idle-fg: var(--ui-text-tertiary);
-  /* 11px — Plankton's small-label rung (`text-2xs`). Deliberately NOT a
-     className override: two font-size utilities resolve by Tailwind's output
-     order, not by className order. Line height stays at the shared default
-     (1rem), which is what `text-2xs` uses here. */
   --pane-tab-font-size: 0.6875rem;
 }
 
