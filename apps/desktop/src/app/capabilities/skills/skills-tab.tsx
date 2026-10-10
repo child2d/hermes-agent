@@ -1,6 +1,5 @@
 import { compactNumber } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
-import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useCallback, useMemo, useState } from 'react'
 
 import { ArchiveSkillConfirmDialog } from '@/app/learning/archive-skill-confirm-dialog'
@@ -10,20 +9,15 @@ import { Button } from '@/components/ui/button'
 import {
   editLearningNode,
   getLearningNode,
-  getOfficialSkills,
   type ProfileScope,
-  profileScopeKey,
   setSkillEnabled
 } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { Loader2 } from '@/lib/icons'
 import { Codecs, persistentAtom } from '@/lib/persisted'
 import { queryClient } from '@/lib/query-client'
 import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
-import { useStoreSelector } from '@/lib/use-session-slice'
-import { $hubActions, installHubSkill, notifyHubActionFailed, OFFICIAL_SKILLS_KEY } from '@/store/hub-actions'
 import { notify, notifyError } from '@/store/notifications'
-import type { OfficialSkillInfo, SkillInfo } from '@/types/hermes'
+import type { SkillInfo } from '@/types/hermes'
 
 import {
   CapRow,
@@ -38,9 +32,8 @@ import {
 import { prettyName } from '../../settings/helpers'
 import { CapabilityEmpty, SortButton } from '../primitives'
 
-import { OfficialSkillDetail } from './official-skill-detail'
 import { SkillDetail } from './skill-detail'
-import { categoryFor, filteredOfficial, filteredSkills, skillsQueryKey, usageOf } from './skills-data'
+import { categoryFor, filteredSkills, skillsQueryKey, usageOf } from './skills-data'
 
 // Sort direction for the Skills list — persisted so the tab remembers
 // most/least-used across navigations and restarts.
@@ -79,20 +72,16 @@ interface SkillsTabProps {
   onRefresh: () => void
 }
 
-/** The Skills tab: installed skills, official optional skills, and learned-skill editing. */
+/** The Skills tab: the skills installed in the scoped profile, with learned-skill
+ *  editing and enable/disable. It lists what is INSTALLED and changes nothing
+ *  about where skills come from — the install catalog is a separate surface
+ *  (this fork's is the enterprise plugin's own tab, not a catalog rendered
+ *  here). */
 export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps) {
   const { t } = useI18n()
   const skillsSortDesc = useStore($skillsSortDesc)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
-  const [selectedOfficial, setSelectedOfficial] = useState<string | null>(null)
-
-  const { data: officialData } = useQuery({
-    queryKey: [...OFFICIAL_SKILLS_KEY, profileScopeKey(profile)],
-    queryFn: () => getOfficialSkills(profile),
-    staleTime: 60_000,
-    retry: false
-  })
 
   // Learned/local skills are editable + archivable, mirroring the memory
   // graph (same /api/learning/node endpoints — delete archives, restorable
@@ -112,44 +101,12 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
 
   const visibleSkills = useMemo(() => filteredSkills(skills, query, skillsSortDesc), [query, skills, skillsSortDesc])
 
-  // Installed-name set stays unfiltered so search cannot make a skill look absent.
-  const installedSkillNames = useMemo(() => new Set(skills.map(s => s.name)), [skills])
-
-  const visibleOfficial = useMemo(() => {
-    const catalog = (officialData?.skills ?? []).filter(
-      skill => !skill.installed && !installedSkillNames.has(skill.name)
-    )
-
-    return filteredOfficial(catalog, query)
-  }, [installedSkillNames, officialData, query])
-
-  const runningInstallKey = useStoreSelector($hubActions, actions =>
-    Object.keys(actions)
-      .filter(key => actions[key]?.running)
-      .sort()
-      .join('|')
-  )
-
-  const runningInstalls = useMemo(() => new Set(runningInstallKey.split('|').filter(Boolean)), [runningInstallKey])
-
   // Keep a valid selection: fall back to the first visible row when the
   // current selection is filtered out (or nothing is selected yet).
   const activeSkill = useMemo(
     () => visibleSkills.find(s => s.name === selectedSkill) ?? visibleSkills[0] ?? null,
     [selectedSkill, visibleSkills]
   )
-
-  const activeOfficial = useMemo(
-    () => visibleOfficial.find(skill => skill.identifier === selectedOfficial) ?? null,
-    [selectedOfficial, visibleOfficial]
-  )
-
-  function handleInstallOfficial(skill: OfficialSkillInfo) {
-    notify({ kind: 'success', title: t.skills.hub.installStarted(skill.name), message: t.skills.hub.actionLog })
-    void installHubSkill(skill.identifier, profile).catch(err =>
-      notifyHubActionFailed(err, t.skills.hub.actionFailed, skill.name, profile)
-    )
-  }
 
   async function handleToggleSkill(skill: SkillInfo, enabled: boolean) {
     setSkills(current => current?.map(row => (row.name === skill.name ? { ...row, enabled } : row)) ?? current)
@@ -275,96 +232,59 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
     </DetailPane>
   )
 
+  if (visibleSkills.length === 0) {
+    return <CapabilityEmpty noun="skills" query={query} />
+  }
+
   return (
     <>
-      {visibleSkills.length === 0 && visibleOfficial.length === 0 ? (
-        <CapabilityEmpty noun="skills" query={query} />
-      ) : (
-        <MasterDetail pane={skillEditorPane} resizeId="capabilities-split" split="wide">
-          <ListColumn
-            header={
-              <ListStrip
-                left={<SortButton desc={skillsSortDesc} onFlip={() => $skillsSortDesc.set(!$skillsSortDesc.get())} />}
-                right={
-                  <ListStripMenu
-                    items={[
-                      {
-                        disabled: bulkBusy,
-                        label: t.skills.disableUnused,
-                        onSelect: () => void disableUnused()
-                      }
-                    ]}
-                    label={t.skills.tabSkills}
-                    toggle={bulkSwitch}
-                  />
-                }
-              />
-            }
-          >
-            {visibleSkills.map(skill => (
-              <CapRow
-                active={activeOfficial === null && activeSkill?.name === skill.name}
-                busy={bulkBusy}
-                enabled={skill.enabled}
-                key={skill.name}
-                meta={usageOf(skill) > 0 ? `×${compactNumber(usageOf(skill))}` : undefined}
-                onSelect={() => {
-                  setSelectedSkill(skill.name)
-                  setSelectedOfficial(null)
-                }}
-                onToggle={enabled => void handleToggleSkill(skill, enabled)}
-                subtitle={skillSubtitle(skill)}
-                title={skill.name}
-                toggleLabel={skill.name}
-              />
-            ))}
-            {visibleOfficial.length > 0 && (
-              <div className="flex h-7 shrink-0 items-end px-2 pb-1 text-2xs font-medium uppercase tracking-wide text-(--ui-text-quaternary)">
-                {t.skills.officialCatalog}
-              </div>
-            )}
-            {visibleOfficial.map(skill => {
-              const installing = runningInstalls.has(skill.identifier)
-
-              return (
-                <CapRow
-                  action={
-                    <Button disabled={installing} onClick={() => handleInstallOfficial(skill)} size="sm" variant="link">
-                      {installing && <Loader2 className="size-3 animate-spin" />}
-                      {installing ? t.skills.hub.installing : t.skills.hub.install}
-                    </Button>
-                  }
-                  active={activeOfficial?.identifier === skill.identifier}
-                  enabled={false}
-                  key={skill.identifier}
-                  onSelect={() => setSelectedOfficial(skill.identifier)}
-                  subtitle={prettyName(skill.category)}
-                  title={skill.name}
+      <MasterDetail pane={skillEditorPane} resizeId="capabilities-split" split="wide">
+        <ListColumn
+          header={
+            <ListStrip
+              left={<SortButton desc={skillsSortDesc} onFlip={() => $skillsSortDesc.set(!$skillsSortDesc.get())} />}
+              right={
+                <ListStripMenu
+                  items={[
+                    {
+                      disabled: bulkBusy,
+                      label: t.skills.disableUnused,
+                      onSelect: () => void disableUnused()
+                    }
+                  ]}
+                  label={t.skills.tabSkills}
+                  toggle={bulkSwitch}
                 />
-              )
-            })}
-          </ListColumn>
-          <DetailColumn footer={t.skills.changesApplyNewSessions}>
-            {activeOfficial ? (
-              <OfficialSkillDetail
-                installing={runningInstalls.has(activeOfficial.identifier)}
-                onInstall={() => handleInstallOfficial(activeOfficial)}
-                profile={profile}
-                skill={activeOfficial}
-              />
-            ) : (
-              activeSkill && (
-                <SkillDetail
-                  onArchive={() => setArchiveTarget(activeSkill.name)}
-                  onEdit={() => void openSkillEditor(activeSkill.name)}
-                  profile={profile}
-                  skill={activeSkill}
-                />
-              )
-            )}
-          </DetailColumn>
-        </MasterDetail>
-      )}
+              }
+            />
+          }
+        >
+          {visibleSkills.map(skill => (
+            <CapRow
+              active={activeSkill?.name === skill.name}
+              busy={bulkBusy}
+              enabled={skill.enabled}
+              key={skill.name}
+              meta={usageOf(skill) > 0 ? `×${compactNumber(usageOf(skill))}` : undefined}
+              onSelect={() => setSelectedSkill(skill.name)}
+              onToggle={enabled => void handleToggleSkill(skill, enabled)}
+              subtitle={skillSubtitle(skill)}
+              title={skill.name}
+              toggleLabel={skill.name}
+            />
+          ))}
+        </ListColumn>
+        <DetailColumn footer={t.skills.changesApplyNewSessions}>
+          {activeSkill && (
+            <SkillDetail
+              onArchive={() => setArchiveTarget(activeSkill.name)}
+              onEdit={() => void openSkillEditor(activeSkill.name)}
+              profile={profile}
+              skill={activeSkill}
+            />
+          )}
+        </DetailColumn>
+      </MasterDetail>
       {archiveTarget && (
         <ArchiveSkillConfirmDialog
           onApply={() => {

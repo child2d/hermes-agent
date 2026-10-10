@@ -42,7 +42,7 @@ async function loadPlugin(source = SOURCE) {
   const sdk = path.join(dir, 'sdk.mjs')
   const react = path.join(dir, 'react.mjs')
   const jsxrt = path.join(dir, 'jsx-runtime.mjs')
-  fs.writeFileSync(sdk, 'export const Button=()=>null;export const ConfirmDialog=()=>null;export const GlyphSpinner=()=>null;export const SearchField=()=>null;export const icons={Info:()=>null};\n')
+  fs.writeFileSync(sdk, 'export const Button=()=>null;export const CAPABILITIES_TABS_AREA="capabilities.tabs";export const ConfirmDialog=()=>null;export const GlyphSpinner=()=>null;export const SearchField=()=>null;export const icons={Info:()=>null};\n')
   fs.writeFileSync(react, 'export const useEffect=()=>{};export const useState=v=>[v,()=>{}];\n')
   // jsx/jsxs return a describable element so a test can prove the render ran.
   fs.writeFileSync(jsxrt, 'export const jsx=(t,p)=> ({ __el: typeof t === "function" ? (t.name||"fn") : t, props: p||{} });export const jsxs=(t,p)=> ({ __el: typeof t === "function" ? (t.name||"fn") : t, props: p||{} });\n')
@@ -221,7 +221,27 @@ test('register(ctx): the plugin REALLY registers the carrier directives on the h
   const directives = ctx._contributions.filter((c) => c.area === 'transcript.directives')
   const names = directives.map((c) => c.data.name)
   assert.deepEqual([...names].sort(), [...BLOCK_TAGS].sort(), 'register() must claim every declared block tag')
-  assert.ok(ctx._contributions.length >= 7, 'the two pages + two navs + the three carrier directives')
+  assert.ok(ctx._contributions.length >= 5, 'the two Capabilities tabs + the three carrier directives')
+})
+
+test('register(ctx): the two catalogs are contributed as Capabilities TABS, and nothing else', () => {
+  const ctx = capturingCtx()
+  M.default.register(ctx)
+
+  const tabs = ctx._contributions.filter((c) => c.area === 'capabilities.tabs')
+  assert.deepEqual(
+    tabs.map((c) => [c.id, c.data.label]).sort(),
+    [['enterprise-skills', '企业技能'], ['enterprise-tools', '企业工具']].sort(),
+    'both catalogs must be contributed as named tabs of the Capabilities page'
+  )
+  for (const tab of tabs) {
+    assert.equal(typeof tab.render, 'function', 'a tab contributes a render function')
+  }
+
+  // The tab IS the entry point: no full page of its own and no sidebar row, so
+  // the same surface can never be reached (or maintained) in two places.
+  assert.equal(ctx._contributions.filter((c) => c.area === 'routes').length, 0, 'no routes')
+  assert.equal(ctx._contributions.filter((c) => c.area === 'sidebar.nav').length, 0, 'no sidebar rows')
 })
 
 // ── 4 · the write path is W3's, unchanged (确认 + 服务端铸发身份) ───────────────

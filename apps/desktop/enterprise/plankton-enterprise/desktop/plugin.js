@@ -1,10 +1,18 @@
 /**
  * plankton-enterprise — the desktop half.
  *
- * Two pages, both served entirely through this plugin's own backend namespace
- * (``ctx.rest(...)`` → ``/api/plugins/plankton-enterprise/*``):
- *   * ``/plankton-tools``   — the read-only local ``shaoke-cli`` tool catalog.
- *   * ``/plankton-skills``  — the enterprise skill market.
+ * TWO TABS of the Capabilities page (侧边栏「技能与工具」), both served entirely
+ * through this plugin's own backend namespace (``ctx.rest(...)`` →
+ * ``/api/plugins/plankton-enterprise/*``):
+ *   * 企业工具 (``/tools``)    — the read-only local ``shaoke-cli`` tool catalog.
+ *   * 企业技能 (``/skills``)   — the enterprise skill market.
+ *
+ * They are contributed as ``capabilities.tabs`` contributions, NOT as their own
+ * routes: the page the user already opens for skills/tools is where these
+ * belong, and a second sidebar entry for the same content is exactly the
+ * duplication this removed (the fork used to show the upstream Hermes skill
+ * market there — a docs-site iframe plus an official-skill catalog — which is
+ * gone; THIS is the catalog that surface offers now).
  *
  * Delivered through the STANDALONE desktop-plugin door
  * (`<HERMES_HOME>/desktop-plugins/plankton-enterprise/plugin.js`), NOT the
@@ -16,7 +24,7 @@
  * standalone door has no marker, so it is default-ON and loads on the very first
  * launch. See PLANKTON-MIGRATION-BATCH2.md (card point 1).
  *
- * SKILL MARKET — what this page guarantees (batch 2 step 2):
+ * SKILL MARKET — what this tab guarantees (batch 2 step 2):
  *   * The catalog source is the enterprise `shaoke-cli skillhub +list`; there is
  *     no direct platform call.
  *   * Five failure classes are INDEPENDENTLY visible — ``unauthorized`` /
@@ -25,19 +33,19 @@
  *   * EVERY write (install / update / uninstall / enable / disable / batch
  *     update) goes through an explicit human confirmation dialog; a batch update
  *     is never silent.
- *   * "停用" is the ENGINE's own enable state (``config.yaml`` →
- *     ``skills.disabled``) — this app keeps no second copy.
+ *   * "停用" is the ENGINE's own enable state (``config.yaml`` →)
+ *     ``skills.disabled`` — this app keeps no second copy.
  *   * Storage belongs to the ENGINE: install / update / uninstall are handed to
  *     the engine's own skill-management entry points in-process. This app
  *     computes no landing, removes no directory and keeps no ledger; the
- *     install records the page shows are the engine's own ``skills/.hub/lock.json``.
+ *     install records the tab shows are the engine's own ``skills/.hub/lock.json``.
  *   * No credential is read: the backend runs credential-free CLI commands and
  *     never touches ``~/.shaoke/tokens.json``.
  *
  * Plain ESM + `jsx()` calls — exactly the shape the runtime loader evaluates.
  */
 
-import { Button, ConfirmDialog, GlyphSpinner, SearchField, icons } from '@hermes/plugin-sdk'
+import { Button, CAPABILITIES_TABS_AREA, ConfirmDialog, GlyphSpinner, SearchField, icons } from '@hermes/plugin-sdk'
 import { useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
@@ -4426,8 +4434,12 @@ function assemblePacks(entries = installedPacks()) {
 
 
 const ID = 'plankton-enterprise'
-const TOOLS_PATH = '/plankton-tools'
-const SKILLS_PATH = '/plankton-skills'
+
+// The two tabs this plugin contributes to the Capabilities page. The
+// contribution id IS the `?tab=` value (see CAPABILITIES_TABS_AREA in the SDK),
+// so these are the deep-linkable names and must stay stable.
+const SKILLS_TAB_ID = 'enterprise-skills'
+const TOOLS_TAB_ID = 'enterprise-tools'
 
 const FAILURE_COPY = {
   'cli-missing': '未找到本机 shaoke-cli（企业副本应位于引擎数据目录的 bin 下）',
@@ -4502,6 +4514,14 @@ const S = {
   banner: { borderRadius: '6px', padding: '8px 12px', fontSize: '12px', border: '1px solid' },
   actions: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' },
   hash: { fontFamily: 'var(--font-mono, monospace)', fontSize: '10px', color: 'var(--ui-text-tertiary)' },
+  // ── Capabilities-tab chrome ─────────────────────────────────────────────────
+  // The host hands a contributed tab the pane's full height and no chrome, so
+  // each tab body renders its own strip: the page's tab strip above already
+  // names it, hence no <h1> — just a compact title/metrics line.
+  panel: { display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 18px', overflowY: 'auto', height: '100%', minHeight: 0, boxSizing: 'border-box', fontSize: '13px' },
+  toolbar: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' },
+  panelTitle: { fontSize: '13px', fontWeight: 600, margin: 0 },
+  chips: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
   // ── W4 · the carrier directive card (HTML-first; markdown fallback) ──────────
   carrierMuted: { color: 'var(--ui-text-tertiary)', fontSize: '12px', padding: '4px 0' },
   carrierCard: { border: '1px solid var(--chrome-border, var(--ui-border))', borderRadius: '6px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '640px' },
@@ -4569,10 +4589,11 @@ function Banner({ banner }) {
   return jsx('div', { style: { ...S.banner, ...BANNER_TONE[banner.tone] }, children: banner.text })
 }
 
-// ── Tool catalog page ────────────────────────────────────────────────────────
+// ── Tool catalog tab ─────────────────────────────────────────────────────────
 
-function ToolCatalogPage({ ctx }) {
+function ToolCatalogTab({ ctx }) {
   const [state, setState] = useState({ phase: 'loading' })
+  const [query, setQuery] = useState('')
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -4598,22 +4619,44 @@ function ToolCatalogPage({ ctx }) {
   const data = state.data
   if (!data.ok) return jsx(FailureBox, { data, onRetry: load })
 
-  const systems = Array.isArray(data.systems) ? data.systems : []
+  const all = Array.isArray(data.systems) ? data.systems : []
+  const toolCount = all.reduce((n, s) => n + (Array.isArray(s.tools) ? s.tools.length : 0), 0)
   const when = data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''
 
-  return jsxs('div', { style: S.page, children: [
-    jsx('h1', { style: S.title, children: '企业工具目录' }),
-    jsxs('div', { style: S.meta, children: [
-      `只读 · 无执行入口、无开关 · 共 ${data.count != null ? data.count : systems.length} 个系统`,
-      jsx('br', {}),
-      `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）${when ? ` · ${when}` : ''}`
+  // Search spans the whole catalog (system names AND their commands), and it
+  // NARROWS each system's tool list rather than dropping the system outright —
+  // a hit inside a system the user did not name is still a hit.
+  const q = query.trim().toLowerCase()
+  const match = (...parts) => parts.some(part => String(part || '').toLowerCase().includes(q))
+  const systems = q
+    ? all
+        .map(system => ({
+          ...system,
+          tools: (Array.isArray(system.tools) ? system.tools : []).filter(tool =>
+            match(tool.name, tool.full_name, tool.description)
+          )
+        }))
+        .filter(system => match(system.name, system.description) || system.tools.length > 0)
+    : all
+
+  return jsxs('div', { style: S.panel, children: [
+    jsxs('div', { style: S.toolbar, children: [
+      jsx('h2', { style: S.panelTitle, children: '企业工具目录' }),
+      jsx('span', { style: S.meta, children: `只读 · 无执行入口、无开关 · 共 ${data.count != null ? data.count : all.length} 个系统 / ${toolCount} 条命令` })
     ] }),
-    systems.length === 0
+    jsx(SearchField, { placeholder: '检索系统 / 命令 / 说明…', value: query, onChange: setQuery, ariaLabel: '检索企业工具' }),
+    all.length === 0
       ? jsx('div', { style: S.notice, children: 'shaoke-cli 可用，但当前没有声明任何工具系统（空清单是有效结果）。' })
-      : jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: systems.map((system, i) => jsx(SystemCard, { system }, `${i}:${system.name}`)) }),
+      : null,
+    q && systems.length === 0
+      ? jsx('div', { style: S.notice, children: `没有匹配「${query}」的系统或命令（共 ${all.length} 个系统）。` })
+      : null,
+    systems.length > 0
+      ? jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: systems.map((system, i) => jsx(SystemCard, { system }, `${i}:${system.name}`)) })
+      : null,
     jsxs('div', { style: S.meta, children: [
       jsx(icons.Info, { size: 11, style: { verticalAlign: '-1px' } }),
-      ' 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。'
+      ` CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）${when ? ` · ${when}` : ''} · 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。`
     ] })
   ] })
 }
@@ -4810,11 +4853,30 @@ export function writeConfirmCopy(action, skill) {
   }
 }
 
-function SkillMarketPage({ ctx }) {
+/** One browsing-filter chip (category / installed-only). Token-based: the active
+ *  chip is a `secondary` Button, the rest `ghost` — the same vocabulary core's
+ *  own chips use, without needing a primitive core does not expose. */
+function FilterChip({ active, children, onClick }) {
+  return jsx(Button, {
+    'aria-pressed': active,
+    onClick,
+    size: 'sm',
+    variant: active ? 'secondary' : 'ghost',
+    children
+  })
+}
+
+function SkillMarketTab({ ctx }) {
   const [state, setState] = useState({ phase: 'loading' })
   const [query, setQuery] = useState('')
   const [banner, setBanner] = useState(null)
   const [confirm, setConfirm] = useState(null)
+  // Browsing filters, on top of the free-text search: a category chip row and
+  // an "only what I took" switch. They narrow the VIEW only — the catalog
+  // fetch, the batch-update set and every write still see the whole list, so a
+  // filter can never quietly shrink what an action covers.
+  const [category, setCategory] = useState('')
+  const [installedOnly, setInstalledOnly] = useState(false)
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -4986,9 +5048,14 @@ function SkillMarketPage({ ctx }) {
   // the page must show WHY instead of failing writes one click at a time.
   const guardNotice = writeGuardNotice(data.writeGuard)
   const q = query.trim().toLowerCase()
-  const skills = q
-    ? all.filter(s => `${s.name} ${s.slug} ${s.category} ${s.description} ${(s.tags || []).join(' ')}`.toLowerCase().includes(q))
-    : all
+  const isInstalled = s =>
+    Boolean(s.installState) && s.installState !== 'not-installed' && s.installState !== 'name-missing'
+  const installedCount = all.filter(isInstalled).length
+  const categories = [...new Set(all.map(s => s.category).filter(Boolean))].sort()
+  const skills = all
+    .filter(s => !category || (s.category || '') === category)
+    .filter(s => !installedOnly || isInstalled(s))
+    .filter(s => !q || `${s.name} ${s.slug} ${s.category} ${s.description} ${(s.tags || []).join(' ')}`.toLowerCase().includes(q))
   // A skill whose local-edit status is not CONFIRMED clean must never ride the
   // batch: the batch sends no per-item overwrite acknowledgement, so those are
   // exactly the items a batch would silently replace — or, when the drift is
@@ -4999,10 +5066,13 @@ function SkillMarketPage({ ctx }) {
   const updatable = all.filter(canBatchUpdate)
   const when = data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''
 
-  return jsxs('div', { style: S.page, children: [
-    jsx('h1', { style: S.title, children: '企业技能市场' }),
+  return jsxs('div', { style: S.panel, children: [
+    jsxs('div', { style: S.toolbar, children: [
+      jsx('h2', { style: S.panelTitle, children: '企业技能市场' }),
+      jsx('span', { style: S.meta, children: `我安装的 ${lockNote ? '—' : installedLedger.length} 条${installedCount ? `（目录里 ${installedCount} 条）` : ''} · 已审技能 ${catalog.ok ? catalog.count : '—'} 条` })
+    ] }),
     jsxs('div', { style: S.meta, children: [
-      `来源：企业 SkillHub（经 shaoke-cli skillhub）· 已审技能 ${catalog.ok ? catalog.count : '—'} 条 · 引擎取用记录 ${lockNote ? '读取失败（见下方提示，非“从未装过”）' : `${installedLedger.length} 条`}`,
+      `来源：企业 SkillHub（经 shaoke-cli skillhub）· 引擎取用记录 ${lockNote ? '读取失败（见下方提示，非“从未装过”）' : `${installedLedger.length} 条`}`,
       jsx('br', {}),
       `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 技能落点 ${data.skillsPath || '未知'}${when ? ` · ${when}` : ''}`
     ] }),
@@ -5048,7 +5118,28 @@ function SkillMarketPage({ ctx }) {
       : null,
 
     catalog.ok
-      ? jsx('div', { children: jsx(SearchField, { placeholder: '检索技能名 / 分类 / 标签…', value: query, onChange: setQuery, ariaLabel: '检索技能' }) })
+      ? jsx(SearchField, { placeholder: '检索技能名 / 分类 / 标签…', value: query, onChange: setQuery, ariaLabel: '检索技能' })
+      : null,
+
+    // Category chips + the installed filter. Derived from the catalog itself, so
+    // a category the platform adds shows up without a code change.
+    catalog.ok && all.length > 0
+      ? jsxs('div', { style: S.chips, children: [
+          jsx(FilterChip, { active: category === '', onClick: () => setCategory(''), children: '全部' }),
+          ...categories.map(cat =>
+            jsx(FilterChip, {
+              active: category === cat,
+              onClick: () => setCategory(category === cat ? '' : cat),
+              children: `${cat}`,
+              key: `cat:${cat}`
+            })
+          ),
+          jsx(FilterChip, {
+            active: installedOnly,
+            onClick: () => setInstalledOnly(!installedOnly),
+            children: installedCount ? `只看已安装（${installedCount}）` : '只看已安装'
+          })
+        ] })
       : null,
 
     updatable.length > 0
@@ -5065,7 +5156,7 @@ function SkillMarketPage({ ctx }) {
       ? jsx('div', { style: S.notice, children: '企业 SkillHub 当前没有已审技能（空目录是有效结果）。' })
       : null,
     catalog.ok && all.length > 0 && skills.length === 0
-      ? jsx('div', { style: S.notice, children: `没有匹配「${query}」的技能（共 ${all.length} 条）。` })
+      ? jsx('div', { style: S.notice, children: `没有匹配当前筛选的技能（共 ${all.length} 条）${query ? `；关键词「${query}」` : ''}${category ? `；分类「${category}」` : ''}${installedOnly ? '；只看已安装' : ''}。` })
       : null,
 
     skills.length > 0
@@ -5159,33 +5250,23 @@ export default {
     })
 
     ctx.registerMany([
+      // The two Capabilities-page tabs. They are the ONLY entry points to these
+      // catalogs — no `routes` page and no `sidebar.nav` row of their own, so the
+      // same surface can never be reached (or maintained) twice. The id is the
+      // `?tab=` value: `#/capabilities?tab=enterprise-skills` is the deep link.
       {
-        id: 'tools-page',
-        area: 'routes',
-        title: '企业工具',
-        order: 40,
-        data: { path: TOOLS_PATH },
-        render: () => jsx(ToolCatalogPage, { ctx })
+        id: SKILLS_TAB_ID,
+        area: CAPABILITIES_TABS_AREA,
+        order: 10,
+        data: { label: '企业技能' },
+        render: () => jsx(SkillMarketTab, { ctx })
       },
       {
-        id: 'tools-nav',
-        area: 'sidebar.nav',
-        order: 40,
-        data: { codicon: 'tools', label: '企业工具', path: TOOLS_PATH }
-      },
-      {
-        id: 'skills-page',
-        area: 'routes',
-        title: '企业技能',
-        order: 41,
-        data: { path: SKILLS_PATH },
-        render: () => jsx(SkillMarketPage, { ctx })
-      },
-      {
-        id: 'skills-nav',
-        area: 'sidebar.nav',
-        order: 41,
-        data: { codicon: 'extensions', label: '企业技能', path: SKILLS_PATH }
+        id: TOOLS_TAB_ID,
+        area: CAPABILITIES_TABS_AREA,
+        order: 11,
+        data: { label: '企业工具' },
+        render: () => jsx(ToolCatalogTab, { ctx })
       },
       // W4 · the carrier directives (one per declared block tag).
       ...carrier

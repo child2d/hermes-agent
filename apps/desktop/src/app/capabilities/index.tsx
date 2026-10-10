@@ -3,12 +3,13 @@ import { useCallback, useMemo, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
+import { useContributions } from '@/contrib'
+import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useI18n } from '@/i18n'
 import { queryClient } from '@/lib/query-client'
 import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { $gateway } from '@/store/gateway'
-import { OFFICIAL_SKILLS_KEY } from '@/store/hub-actions'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -17,20 +18,23 @@ import { PageSearchShell } from '../page-search-shell'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
 import { ConnectorsTab } from './connectors/connectors-tab'
+import { CAPABILITIES_TABS_AREA, capabilityTabs } from './contrib'
 import { PluginsTab } from './plugins/plugins-tab'
 import { CapabilityScopeSelector, useCapabilityScope } from './scope-selector'
-import { EmbeddedHubPicker } from './skills/embedded-hub-picker'
 import { SKILLS_QUERY_KEY, skillSearchTerms, useSkillsQuery } from './skills/skills-data'
 import { SkillsTab } from './skills/skills-tab'
 import { refreshToolCalls } from './toolsets/tool-calls'
 import { TOOLSETS_QUERY_KEY, toolsetSearchTerms, useToolsetsQuery, visibleToolsetCount } from './toolsets/toolsets-data'
 import { ToolsetsTab } from './toolsets/toolsets-tab'
 
-// Skills Hub browsing lives inside the Skills tab. Legacy `?tab=hub`
-// links fall back to 'skills' via useRouteEnumParam.
-const CAPABILITY_MODES = ['skills', 'toolsets', 'connectors', 'plugins'] as const
+// The tabs core itself ships, in strip order. Plugin tabs
+// (CAPABILITIES_TABS_AREA — e.g. the enterprise 企业技能 / 企业工具 tabs) are
+// appended AFTER them, so a contributed tab never displaces a core one.
+const CORE_TABS = ['skills', 'toolsets', 'connectors', 'plugins'] as const
 
-type CapabilityMode = (typeof CAPABILITY_MODES)[number]
+type CoreTab = (typeof CORE_TABS)[number]
+
+const isCoreTab = (mode: string): mode is CoreTab => (CORE_TABS as readonly string[]).includes(mode)
 
 interface CapabilitiesViewProps extends React.ComponentProps<'section'> {
   setStatusbarItemGroup?: SetStatusbarItemGroup
@@ -65,19 +69,23 @@ export function CapabilitiesView({
   const { t } = useI18n()
   // Both hooks run unconditionally (rules of hooks); embedded picks the local
   // one so tab clicks inside a dialog don't rewrite the page URL.
-  const routeTab = useRouteEnumParam('tab', CAPABILITY_MODES, 'skills')
-  const localTab = useState<CapabilityMode>('skills')
+  const tabContributions = useContributions(CAPABILITIES_TABS_AREA)
+  const contributedTabs = useMemo(() => capabilityTabs(tabContributions), [tabContributions])
+  // The route param accepts every tab, core or contributed — a deep link to a
+  // plugin tab must survive a reload, and an unknown value still falls back.
+  const modes = useMemo(() => [...CORE_TABS, ...contributedTabs.map(tab => tab.id)], [contributedTabs])
+  const routeTab = useRouteEnumParam('tab', modes, 'skills')
+  const localTab = useState<string>('skills')
   const [mode, setMode] = embedded ? localTab : routeTab
-  const gateway = useStoreSelector($gateway, g => (mode === 'connectors' ? g : null))
+  const activeContributed = useMemo(() => contributedTabs.find(tab => tab.id === mode) ?? null, [contributedTabs, mode])
+  // A contributed tab can vanish while it is the selected one (its plugin was
+  // disabled or reloaded). The route param keeps naming it, so fall back to the
+  // first core tab rather than render an empty body under a tab the strip no
+  // longer shows.
+  const activeMode: string = isCoreTab(mode) || activeContributed ? mode : 'skills'
+  const gateway = useStoreSelector($gateway, g => (activeMode === 'connectors' ? g : null))
 
   const [query, setQuery] = useState('')
-
-  // Keep the docs iframe alive after the first Skills visit.
-  const [hubMounted, setHubMounted] = useState(mode === 'skills')
-
-  if (mode === 'skills' && !hubMounted) {
-    setHubMounted(true)
-  }
 
   const scope = useCapabilityScope({ fixedConnection, fixedProfile })
 
@@ -85,13 +93,11 @@ export function CapabilitiesView({
   // pair, because the counts stay live for the tab the user is NOT on.
   const { data: skills, isError: skillsFailed, error: skillsError } = useSkillsQuery(scope.profile)
   const { data: toolsets, isError: toolsetsFailed } = useToolsetsQuery(scope.profile)
-  const installedSkillNames = useMemo(() => new Set((skills ?? []).map(skill => skill.name)), [skills])
 
   const refreshCapabilities = useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: SKILLS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: TOOLSETS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: OFFICIAL_SKILLS_KEY })
+      queryClient.invalidateQueries({ queryKey: TOOLSETS_QUERY_KEY })
     ])
 
     invalidateSlashCompletions()
@@ -104,19 +110,19 @@ export function CapabilitiesView({
   // Rotating placeholder nudges from the user's own data — teach that search
   // understands categories and tool names, not just titles.
   const searchHints = useMemo(() => {
-    if (mode === 'skills' && skills?.length) {
+    if (activeMode === 'skills' && skills?.length) {
       return skillSearchTerms(skills).map(term => t.common.tryHint(term))
     }
 
-    if (mode === 'toolsets' && toolsets?.length) {
+    if (activeMode === 'toolsets' && toolsets?.length) {
       return toolsetSearchTerms(toolsets).map(term => t.common.tryHint(term))
     }
 
     return undefined
-  }, [mode, skills, t, toolsets])
+  }, [activeMode, skills, t, toolsets])
 
   // MCP and Plugins load independently of the installed Skills/Tools lists.
-  const gated = mode === 'toolsets' || mode === 'skills'
+  const gated = activeMode === 'toolsets' || activeMode === 'skills'
   const pending = gated && !(skills && toolsets)
 
   const loadGate = !pending ? null : skillsFailed || toolsetsFailed ? (
@@ -134,7 +140,7 @@ export function CapabilitiesView({
     <PageLoader label={t.skills.loading} />
   )
 
-  const tabContent = {
+  const coreTabContent = {
     // The gateway instance backs ONLY the live `reload.mcp` RPC, and it is the
     // ACTIVE gateway's socket — for a scope pinned to a different backend that
     // (config edits still apply on that backend's next session).
@@ -167,39 +173,46 @@ export function CapabilitiesView({
     toolsets: () => (
       <ToolsetsTab key={`toolsets-${scope.key}`} profile={scope.profile} query={query} toolsets={toolsets ?? []} />
     )
-  } satisfies Record<CapabilityMode, () => React.ReactNode>
+  } satisfies Record<CoreTab, () => React.ReactNode>
 
   return (
     <PageSearchShell
       {...props}
-      activeTab={mode}
+      activeTab={activeMode}
       onSearchChange={setQuery}
-      onTabChange={id => setMode(id as CapabilityMode)}
-      // The Connectors directory owns its search field; plugins has its own list.
-      searchHidden={mode === 'connectors' || mode === 'plugins'}
+      onTabChange={setMode}
+      // The Connectors directory and Plugins own their search field; a
+      // contributed tab owns its own chrome end to end.
+      searchHidden={activeMode === 'connectors' || activeMode === 'plugins' || activeContributed !== null}
       searchHints={searchHints}
-      searchPlaceholder={mode === 'skills' ? t.skills.searchSkills : t.skills.searchToolsets}
+      searchPlaceholder={activeMode === 'skills' ? t.skills.searchSkills : t.skills.searchToolsets}
       searchValue={query}
       tabs={[
         { id: 'skills', label: t.skills.tabSkills, meta: skills?.length ?? null },
         { id: 'toolsets', label: t.skills.tabToolsets, meta: toolsets ? visibleToolsetCount(toolsets) : null },
         { id: 'connectors', label: t.connectorsPage.title },
-        { id: 'plugins', label: t.skills.tabPlugins }
+        { id: 'plugins', label: t.skills.tabPlugins },
+        // No `meta`: `null` means "still loading" in the tab strip and renders a
+        // pulsing skeleton chip. A contributed tab reports no count of its own —
+        // its own body carries the counts it cares about.
+        ...contributedTabs.map(tab => ({ id: tab.id, label: tab.label }))
       ]}
     >
       <div className="flex h-full flex-col">
-        {mode !== 'plugins' && <CapabilityScopeSelector scope={scope} />}
+        {activeMode !== 'plugins' && <CapabilityScopeSelector scope={scope} />}
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className={mode === 'skills' ? 'min-h-40 flex-1 overflow-hidden' : 'min-h-0 flex-1'}>
-            {loadGate ?? tabContent[mode]()}
+          <div className="min-h-0 flex-1">
+            {loadGate ??
+              (activeContributed ? (
+                // The blast wall stays between plugin code and the page: a
+                // throwing tab degrades to an inline error in ITS body.
+                <ContribBoundary id={activeContributed.id}>
+                  <ContribRender render={activeContributed.render} />
+                </ContribBoundary>
+              ) : (
+                isCoreTab(activeMode) && coreTabContent[activeMode]()
+              ))}
           </div>
-          {hubMounted && (
-            <EmbeddedHubPicker
-              hidden={mode !== 'skills'}
-              installedNames={installedSkillNames}
-              profile={scope.profile}
-            />
-          )}
         </div>
       </div>
     </PageSearchShell>

@@ -35,7 +35,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-import { _electron, expect, test } from '@playwright/test'
+import { _electron, expect, type Page, test } from '@playwright/test'
 
 import { writeEnvFile, writeMockProviderConfig } from '../../../../tests-js/scripts/mock-provider-config'
 import { startMockServer } from '../../../../tests-js/scripts/mock-server'
@@ -227,6 +227,25 @@ function packagedEnv(sandbox: Sandbox): Record<string, string> {
   return env
 }
 
+/**
+ * Open the Capabilities page (技能与工具) and switch to one of the enterprise
+ * plugin's tabs.
+ *
+ * These tabs — 企业技能 / 企业工具 — ARE the entry point: the plugin no longer
+ * registers its own `/plankton-*` routes or sidebar rows, so the only way in is
+ * the page's tab strip, and driving it through the real strip is exactly what
+ * proves the contribution reached the host page.
+ */
+async function openEnterpriseTab(page: Page, label: string) {
+  const nav = page.locator('[data-slot="sidebar"] button', { hasText: '技能与工具' }).first()
+  await nav.waitFor({ state: 'visible', timeout: 60_000 })
+  await nav.click()
+
+  const tab = page.getByRole('button', { name: label }).first()
+  await tab.waitFor({ state: 'visible', timeout: 60_000 })
+  await tab.click()
+}
+
 test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog', async () => {
   const appPath = resolvePackagedApp()
   const { cliPath } = assertEnterpriseArtifactIdentity(appPath)
@@ -363,9 +382,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
       'the launched artifact must report enterprise identity'
     ).toBe(true)
 
-    const nav = page.locator('[data-slot="sidebar"] button', { hasText: '企业工具' }).first()
-    await nav.waitFor({ state: 'visible', timeout: 60_000 })
-    await nav.click()
+    await openEnterpriseTab(page, '企业工具')
 
     await expect(page.getByText('企业工具目录', { exact: false }).first()).toBeVisible({ timeout: 30_000 })
 
@@ -398,9 +415,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     expect(text).not.toContain('#62')
 
     // ── 企业技能市场 (batch 2 step 2) ──────────────────────────────────────
-    const skillsNav = page.locator('[data-slot="sidebar"] button', { hasText: '企业技能' }).first()
-    await skillsNav.waitFor({ state: 'visible', timeout: 60_000 })
-    await skillsNav.click()
+    await openEnterpriseTab(page, '企业技能')
 
     // Wait for POST-LOAD content, not the loading text (which itself contains
     // "企业技能市场" — matching it would read the page mid-load and see neither

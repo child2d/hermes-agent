@@ -12,6 +12,7 @@
  * local type misuse. See tsconfig.enterprise.json.
  */
 export const Button: any
+export const CAPABILITIES_TABS_AREA: any
 export const ConfirmDialog: any
 export const GlyphSpinner: any
 export const SearchField: any

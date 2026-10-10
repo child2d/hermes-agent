@@ -1645,25 +1645,38 @@ export const host = {
 
 // -- react bridge -------------------------------------------------------------
 
-/** THE whole Capabilities surface (Skills / Tools / MCP tabs, installed
- *  lists, full-skill detail pane, embedded hub picker with one-click
- *  installs). For plugin dialogs pass `embedded` (tab state stays local —
- *  never touches the page router) and `fixedProfile` to pin every tab to one
- *  bot's backend; the internal profile selector hides itself. Add
- *  `fixedConnection` (registry connection id) to pin a bot living on another
- *  registered gateway — probe `CapabilitiesView.supportsFixedConnection` first;
- *  builds without it would route the pin to the ACTIVE gateway. Bot Mode's
- *  Advanced section is the reference consumer. */
+/** THE whole Capabilities surface (the Skills / Tools / MCP / Plugins tabs,
+ *  installed lists, full-skill detail pane, profile scope selector, plus every
+ *  `CAPABILITIES_TABS_AREA` tab a plugin contributes). For plugin dialogs pass
+ *  `embedded` (tab state stays local — never touches the page router) and
+ *  `fixedProfile` to pin every tab to one bot's backend; the internal profile
+ *  selector hides itself. Add `fixedConnection` (registry connection id) to pin
+ *  a bot living on another registered gateway — probe
+ *  `CapabilitiesView.supportsFixedConnection` first; builds without it would
+ *  route the pin to the ACTIVE gateway. Bot Mode's Advanced section is the
+ *  reference consumer. */
 export { CapabilitiesView } from '@/app/capabilities'
-
-// -- ui: the design language --------------------------------------------------
-
 /** THE Connectors tab core Capabilities renders — managed apps, the user's
  *  own MCP servers, plugin servers and the catalog, with per-server enable,
  *  sign-in and live probes. Renders anywhere under the app router (a plugin
  *  dialog); pass a live `gateway` (see `host.getGateway()`) and the `profile`
  *  to scope it to one bot. */
 export { ConnectorsTab } from '@/app/capabilities/connectors/connectors-tab'
+
+// -- ui: the design language --------------------------------------------------
+
+/** Plugin tabs for that surface: register a `capabilities.tabs` contribution
+ *  (`data: { label }`, `render`) and it appears in the page's strip after the
+ *  core tabs, its `render()` becoming the whole tab body. The host hands the
+ *  body the pane's full height and NO chrome — build the tab's own header /
+ *  search / list from the `Panel*`, `SearchField` and `Button` primitives so it
+ *  reads like a core tab. The contribution id is the `?tab=` value. */
+export {
+  CAPABILITIES_TABS_AREA,
+  type CapabilitiesTabContribution,
+  type CapabilityTab,
+  capabilityTabs
+} from '@/app/capabilities/contrib'
 // Every contribution surface, plugin-reachable: register keybinds, palette
 // commands, routes, themes, panes, composer extensions, and bar items with
 // the same area ids + payload types core uses.

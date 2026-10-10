@@ -855,7 +855,8 @@
 |---|---|---|
 | 身份与门禁 | 启动即有 SSO 登录门（未登录不挂载会话/配置）；设置 ▸ 关于 有账号区块与退出登录 | `src/app/plankton-auth-gate.tsx`、`src/main.tsx:113`、`settings/plankton-account-section.tsx` |
 | 品牌与数据根 | 产品名 Plankton（不中文化）、`com.app.shaoke.plankton`、应用数据根 `~/Library/Application Support/Plankton`、引擎 home `~/.plankton/engine/home` | `apps/desktop/ENTERPRISE.md`、`product-identity.cjs` |
-| 企业工具 / 企业技能 | 侧栏两行来自企业侧插件（`/plankton-tools`、`/plankton-skills`），走本机 `shaoke-cli` 取数 | `enterprise/plankton-enterprise/desktop/plugin.js:5164-5188` |
+| 企业工具 / 企业技能 | 「技能与工具」页的两个页签（`capabilities.tabs` 贡献，插件的唯一入口），走本机 `shaoke-cli` 取数 | `enterprise/plankton-enterprise/desktop/plugin.js`（`register()` 的 `SKILLS_TAB_ID` / `TOOLS_TAB_ID`）、`src/app/capabilities/contrib.ts` |
+| Hermes 技能市场 | **已去掉**：技能页签不再内嵌上游 Hermes 技能市场（docs 站 iframe）与官方技能目录行；底层 hub 管道 / 深链 / API 保留未删 | 见 `src/app/capabilities/skills/`（原 `embedded-hub-picker.tsx` / `official-skill-detail.tsx` 已删） |
 | 关闭的 | 桌面自助更新（人工推包）、共享指标发送行 | `electron/main.ts:4223,5303`、`store/enterprise-flag.ts:13` |
 | 尚未迁移（上游语义仍是 Hermes 原生） | 技能源（无企业 SkillHub、无版本对照/内容哈希字段）、工具面（无 shaoke-cli 工具目录）、审计与出口代理、企业技能/工具在迁移文档里属「批 2」 | `PLANKTON-MIGRATION.md`、`PLANKTON-MIGRATION-BATCH2.md` |
 

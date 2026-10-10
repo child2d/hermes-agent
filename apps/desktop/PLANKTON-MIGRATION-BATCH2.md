@@ -110,6 +110,7 @@
   - `POST /skills/install|uninstall|enable|disable|update` → 落 `/ 删 <HERMES_HOME>/skills`，写台账。
   - 取数、下载、解压、哈希**全在引擎进程内**：天然拿到 `HERMES_HOME`、天然 import 引擎模块、天然是「经 shaoke-cli」。
 - **前端**（`desktop/plugin.js`）：用 `ROUTES_AREA` 挂 `/plankton-tools`、`/plankton-skills` 两个整页；`SIDEBAR_NAV_AREA` 出导航行；`PALETTE_AREA` 出命令。数据走 `ctx.rest('/tools')`——**不需要新增任何 Electron IPC 通道**（回避批 1 的通道清单门禁与 `plankton:` 前缀扩张）。
+  - **后续调整**：两个整页 + 两条侧栏导航行已撤掉，改为 `CAPABILITIES_TABS_AREA`（`capabilities.tabs`）贡献的两个页签，挂在「技能与工具」页上——同一功能不再有两处入口。数据口不变（仍走 `ctx.rest`）。见 `src/app/capabilities/contrib.ts`。
 - **投递**：产物 `Contents/Resources/enterprise/plankton-enterprise/` → 首启（沿用 `electron/enterprise-model-seed.ts` 的既有形态）复制到 `<HERMES_HOME>/plugins/`，并在 `<HERMES_HOME>/config.yaml` 的 `plugins.enabled` 里加白名单（user 源插件挂后端必需）。只读副本 + 幂等复制，企业 home 是唯一活动副本。
 
 **为什么选它（三条硬理由）**：

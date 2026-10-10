@@ -61,19 +61,24 @@ import { TOOLSETS_QUERY_KEY } from '../toolsets/toolsets-data'
 import { mergePluginPackages, type PackageKind, type PluginPackage } from './plugin-packages'
 import { PluginSettingsForm } from './plugin-settings-form'
 
-// The REAL Plugin Catalog page (docs site) embedded as a one-click picker —
-// the same pattern as the Skills tab's EmbeddedHubPicker. `?embed=picker`
-// hides the docs chrome and adds "+ Add to this Agent" per card, which posts
+// The REAL Plugin Catalog page (docs site) embedded as a one-click picker.
+// `?embed=picker` hides the docs chrome and adds "+ Add to this Agent" per
+// card, which posts
 //   { type: 'hermes-plugin-pick', name, repo, sha, subdir, tier, installCmd }
 // to the parent window. We validate the origin and open the shared
 // dual-target install modal (agent half → catalog-pinned install into the
 // scoped profile; desktop half → this app), so unified packages install both
 // halves in one flow. URLs live in `@/lib/plugin-catalog` so the
 // `hermes://plugin/install?catalog=` deep link resolves against the same feed.
+//
+// NOTE: this is the PLUGIN feed. The skill feed this page once mirrored (the
+// upstream Hermes skill-market browser, and the official-skill catalog in the
+// Skills tab) is gone — the enterprise build offers its own skill market as a
+// `capabilities.tabs` tab instead.
 
 // Catalog viewport: persisted through the shared pane store, dragged from the
 // section's TOP edge ("pull the catalog up"), clamped so neither the catalog
-// nor the plugin list above can vanish. Same contract as EmbeddedHubPicker.
+// nor the plugin list above can vanish. Same contract as DetailPane.
 const CATALOG_PANE_ID = 'capabilities-plugin-catalog'
 const CATALOG_DEFAULT_PX = 380
 const CATALOG_MIN_PX = 120

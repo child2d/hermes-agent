@@ -32,7 +32,7 @@ async function loadPlugin(source) {
   const sdk = path.join(dir, 'sdk.mjs')
   const react = path.join(dir, 'react.mjs')
   const jsxrt = path.join(dir, 'jsx-runtime.mjs')
-  fs.writeFileSync(sdk, 'export const Button=()=>null;export const ConfirmDialog=()=>null;export const GlyphSpinner=()=>null;export const SearchField=()=>null;export const icons={Info:()=>null};\n')
+  fs.writeFileSync(sdk, 'export const Button=()=>null;export const CAPABILITIES_TABS_AREA="capabilities.tabs";export const ConfirmDialog=()=>null;export const GlyphSpinner=()=>null;export const SearchField=()=>null;export const icons={Info:()=>null};\n')
   fs.writeFileSync(react, 'export const useEffect=()=>{};export const useState=v=>[v,()=>{}];\n')
   fs.writeFileSync(jsxrt, 'export const jsx=()=>null;export const jsxs=()=>null;\n')
   const src = source
