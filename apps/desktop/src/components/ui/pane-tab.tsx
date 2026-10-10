@@ -408,6 +408,7 @@ export const PaneTabStrip = React.forwardRef<HTMLDivElement, PaneTabStripProps>(
             : "h-7 [-webkit-app-region:no-drag]",
           className,
         )}
+        data-slot="pane-tab-strip"
         ref={ref}
         {...props}
       >
