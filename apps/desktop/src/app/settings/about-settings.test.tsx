@@ -156,8 +156,7 @@ describe('AboutSettings', (): void => {
     expect(checkUpdates).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the enterprise account + sign-out entry, and nothing on upstream', async (): Promise<void> => {
-    // Upstream: the account block is absent.
+  it('leaves the account row to the sidebar — About carries no sign-out entry on any variant', async (): Promise<void> => {
     render(<AboutSettings />)
     expect(screen.queryByRole('button', { name: '退出登录' })).toBeNull()
     cleanup()
@@ -185,8 +184,10 @@ describe('AboutSettings', (): void => {
       </PlanktonAuthGate>
     )
 
-    // The signed-in gate mounts About, which carries the account entry.
-    expect(await screen.findByRole('button', { name: '退出登录' })).toBeTruthy()
-    expect(screen.getByText('张三')).toBeTruthy()
+    // About resolves through the signed-in gate as version/update facts only:
+    // the enterprise identity moved to the sidebar's account row.
+    expect(await screen.findByText(en.updates.latestBody)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '退出登录' })).toBeNull()
+    expect(screen.queryByText('张三')).toBeNull()
   })
 })

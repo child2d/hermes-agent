@@ -1,16 +1,16 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $enterpriseEnabled } from '@/store/enterprise-flag'
 
+import { SidebarUserMenu } from './chat/sidebar/user-menu'
 import { PlanktonAuthGate } from './plankton-auth-gate'
-import { PlanktonAccountSection } from './settings/plankton-account-section'
 
 /**
  * The renderer half of the enterprise SSO session: the gate mounts the app only
- * while signed in, and Settings › About exposes the sign-out entry through the
- * gate's session context. These tests drive the real gate + account section
- * together against a stubbed preload bridge.
+ * while signed in, and the sidebar's account row carries the sign-out entry
+ * through the gate's session context. These tests drive the real gate + account
+ * row together against a stubbed preload bridge.
  */
 
 interface Bridge {
@@ -35,6 +35,12 @@ const LOGGED_OUT = {
   whoami: null
 }
 
+const navigate = vi.fn()
+
+vi.mock('react-router', () => ({
+  useNavigate: () => navigate
+}))
+
 function setBridge(overrides: Partial<Bridge> = {}): Bridge {
   const api: Bridge = {
     status: vi.fn().mockResolvedValue(LOGGED_IN),
@@ -56,12 +62,19 @@ function renderGate(): void {
   render(
     <PlanktonAuthGate>
       <div data-testid="app">signed-in surface</div>
-      <PlanktonAccountSection />
+      <SidebarUserMenu />
     </PlanktonAuthGate>
   )
 }
 
-const logoutButton = (): HTMLElement => screen.getByRole('button', { name: '退出登录' })
+/** Open the account panel, then hand the caller its sign-out row. */
+async function openAccountPanel(name = '张三'): Promise<HTMLElement> {
+  const row = await screen.findByRole('button', { name })
+
+  fireEvent.click(row)
+
+  return screen.getByRole('button', { name: '退出登录' })
+}
 
 describe('PlanktonAuthGate sign-out', () => {
   let reload: ReturnType<typeof vi.fn>
@@ -89,7 +102,7 @@ describe('PlanktonAuthGate sign-out', () => {
     }
   })
 
-  it('is a transparent pass-through off the enterprise build (no sign-out entry)', (): void => {
+  it('is a transparent pass-through off the enterprise build (no account row)', (): void => {
     ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
       planktonAuthRequired: false,
       enterpriseEnabled: false
@@ -98,7 +111,7 @@ describe('PlanktonAuthGate sign-out', () => {
     renderGate()
 
     expect(screen.getByTestId('app')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '退出登录' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '张三' })).toBeNull()
   })
 
   it('shows the signed-in identity and signs out back to the login page', async (): Promise<void> => {
@@ -107,18 +120,20 @@ describe('PlanktonAuthGate sign-out', () => {
 
     renderGate()
 
-    // Gate opens after the status probe: the app surfaces and the account entry
+    // Gate opens after the status probe: the app surfaces and the account row
     // carries the signed-in identity.
-    await screen.findByRole('button', { name: '退出登录' })
-    expect(screen.getByText('张三')).toBeTruthy()
+    const signOut = await openAccountPanel()
+    const identity = screen.getByTestId('plankton-account-identity')
+    expect(within(identity).getByText('张三')).toBeTruthy()
+    expect(within(identity).getByText('subject-1')).toBeTruthy()
 
-    fireEvent.click(logoutButton())
+    fireEvent.click(signOut)
 
     await waitFor(() => expect(api.logout).toHaveBeenCalledTimes(1))
     // Back to the login page; every signed-in fact is gone.
     await screen.findByRole('heading', { name: '登录 Plankton' })
     expect(screen.queryByTestId('app')).toBeNull()
-    expect(screen.queryByRole('button', { name: '退出登录' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '张三' })).toBeNull()
     // The renderer hard-reloads so module-level stores/sockets cannot survive
     // into the next sign-in.
     expect(reload).toHaveBeenCalledTimes(1)
@@ -130,8 +145,7 @@ describe('PlanktonAuthGate sign-out', () => {
 
     renderGate()
 
-    await screen.findByRole('button', { name: '退出登录' })
-    fireEvent.click(logoutButton())
+    fireEvent.click(await openAccountPanel())
 
     await waitFor(() => expect(api.logout).toHaveBeenCalledTimes(1))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', '退出登录失败，请稍后重试。')
@@ -146,8 +160,7 @@ describe('PlanktonAuthGate sign-out', () => {
 
     renderGate()
 
-    await screen.findByRole('button', { name: '退出登录' })
-    fireEvent.click(logoutButton())
+    fireEvent.click(await openAccountPanel())
     await screen.findByRole('heading', { name: '登录 Plankton' })
 
     // The reloaded renderer re-probes status; the bridge now reports logged out
