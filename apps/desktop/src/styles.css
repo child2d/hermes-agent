@@ -1652,6 +1652,9 @@ body.guest-pointer-lock :is(webview, iframe) {
   --pane-tab-strip-bg: var(--ui-sidebar-surface-background);
   --pane-tab-active-bg: var(--ui-editor-surface-background);
   --pane-tab-active-accent: var(--theme-primary);
+  --pane-tab-divider-color: var(--ui-stroke-quaternary);
+  --pane-tab-edge-color: var(--ui-stroke-tertiary);
+  --pane-tab-idle-fg: var(--ui-text-tertiary);
   /* 11px — Plankton's small-label rung (`text-2xs`). Deliberately NOT a
      className override: two font-size utilities resolve by Tailwind's output
      order, not by className order. Line height stays at the shared default

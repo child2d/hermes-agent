@@ -20,6 +20,9 @@ import { cn } from "@/lib/utils";
  *   --pane-tab-strip-bg      gutter colour of inactive tabs
  *   --pane-tab-active-accent underline on the active tab
  *   --pane-tab-close-width   width of the hover close chip (default 1.5rem)
+ *   --pane-tab-divider-color line between adjacent tabs (default --color-border)
+ *   --pane-tab-edge-color    vertical rail's content-facing edge (default --color-border)
+ *   --pane-tab-idle-fg       inactive tab label colour (default --color-muted-foreground)
  *
  * Fallbacks reference the THEME-MAPPED name (`var(--color-muted)`, not
  * `var(--muted)`). Stock shadcn and a fork both define `--color-*` via
@@ -126,7 +129,7 @@ const TAB =
 // divider between neighbours is horizontal-only — no bottom rule, the strip owns
 // that, and a per-tab border stacked a second line over it.
 const TAB_HORIZONTAL =
-  "h-full min-w-0 max-w-48 not-first:border-l not-first:border-l-border";
+  "h-full min-w-0 max-w-48 not-first:border-l not-first:border-l-(--pane-tab-divider-color,var(--color-border))";
 
 // A closeable tab's floor keeps short labels left of the close button.
 // A floor, not padding — a tab already wider than it pays nothing.
@@ -134,7 +137,7 @@ const TAB_HORIZONTAL =
 const TAB_CLOSEABLE = "min-w-13";
 
 const TAB_VERTICAL =
-  "w-full max-h-48 justify-center not-first:border-t not-first:border-t-border [writing-mode:vertical-rl]";
+  "w-full max-h-48 justify-center not-first:border-t not-first:border-t-(--pane-tab-divider-color,var(--color-border)) [writing-mode:vertical-rl]";
 
 // Active merges into the pane it belongs to. On a vertical rail it also goes
 // border-transparent (applied in the render body) so the tab CUTS the strip line
@@ -148,7 +151,7 @@ const TAB_SELECTED = "bg-accent text-accent-foreground";
 // Inactive = gutter. Hover uses the stock accent wash so it registers against a
 // background-valued strip the same way every other shadcn control does.
 const TAB_IDLE =
-  "text-muted-foreground bg-(--pane-tab-strip-bg,var(--color-muted)) hover:bg-accent hover:text-accent-foreground";
+  "text-(--pane-tab-idle-fg,var(--color-muted-foreground)) bg-(--pane-tab-strip-bg,var(--color-muted)) hover:bg-accent hover:text-accent-foreground";
 
 export interface PaneTabProps extends React.ComponentProps<"div"> {
   active?: boolean;
@@ -212,7 +215,7 @@ export const PaneTab = React.forwardRef<HTMLDivElement, PaneTabProps>(
           !vertical && onClose && TAB_CLOSEABLE,
           // Vertical rail: the content-facing edge is a line the ACTIVE tab cuts.
           vertical && edge,
-          vertical && (active ? "border-transparent" : "border-border"),
+          vertical && (active ? "border-transparent" : "border-(--pane-tab-edge-color,var(--color-border))"),
           active
             ? cn(
                 TAB_ACTIVE,
@@ -402,7 +405,7 @@ export const PaneTabStrip = React.forwardRef<HTMLDivElement, PaneTabStripProps>(
     return (
       <div
         className={cn(
-          "group/pane-header relative flex min-w-0 shrink-0 select-none border-b border-border bg-(--pane-tab-strip-bg,var(--color-muted))",
+          "group/pane-header relative flex min-w-0 shrink-0 select-none bg-(--pane-tab-strip-bg,var(--color-muted))",
           titlebar
             ? "h-full flex-1 [-webkit-app-region:drag]"
             : "h-7 [-webkit-app-region:no-drag]",
