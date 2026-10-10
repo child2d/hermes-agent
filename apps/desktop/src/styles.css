@@ -1647,6 +1647,13 @@ body.guest-pointer-lock :is(webview, iframe) {
    stack the glass tint and still let the label bleed through. */
 [data-slot='pane-tab'][data-closeable] {
   --pane-tab-close-width: 1.5rem;
+  /* Tab label size. Plankton runs its own ladder, whose small-label rung is
+     11px (`text-2xs`); the shared pane-tab defaults to stock `text-xs` (12px),
+     so the host pins its own size through the component's knob instead of
+     fighting it with a className — two font-size utilities resolve by
+     Tailwind's output order, not by className order. Line height is left at
+     the shared default (1rem), which is what `text-2xs` uses here. */
+  --pane-tab-font-size: 0.6875rem;
 }
 
 [data-slot='pane-tab'][data-closeable]:hover > .pane-tab-content {

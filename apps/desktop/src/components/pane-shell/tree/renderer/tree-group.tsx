@@ -19,10 +19,9 @@ import { Codicon } from '@/components/ui/codicon'
 import { DecodeText } from '@/components/ui/decode-text'
 import { DROP_SHEET_BLUR_CLASS, DROP_SHEET_CLASS } from '@/components/ui/drop-affordance'
 import {
-  PANE_TAB_STRIP_LINE_LEFT,
-  PANE_TAB_STRIP_LINE_RIGHT,
   PaneStripGlyph,
   PaneTab,
+  type PaneTabCloseItem,
   paneTabCloseItems,
   PaneTabLabel,
   PaneTabStrip
@@ -92,6 +91,21 @@ import { tabStripVisibleForZone } from './strip-visibility'
 import { useActiveTabVisible } from './tab-strip-scroll'
 import { paneChrome } from './track-model'
 
+/** Inset stroke for a vertical tab rail — the content-facing edge the active
+ *  tab cuts. Pane-shell geometry, so it lives here rather than in the shared
+ *  pane-tab component. */
+const PANE_TAB_STRIP_LINE_LEFT = 'shadow-[inset_1px_0_0_var(--ui-stroke-tertiary)]'
+const PANE_TAB_STRIP_LINE_RIGHT = 'shadow-[inset_-1px_0_0_var(--ui-stroke-tertiary)]'
+
+/** Close-verb id → codicon name. Icons stay at the call site: the shared
+ *  pane-tab ships data, not a menu kit or an icon library. */
+const TAB_CLOSE_ICON: Record<PaneTabCloseItem['id'], string> = {
+  close: 'close',
+  closeAll: 'clear-all',
+  closeOthers: 'close-all',
+  closeToRight: 'arrow-right'
+}
+
 /** Right-click zone menu: the tab verbs (close this / others / to the right /
  *  all) plus the strip's own chrome toggles. Same items and icons as a session
  *  tab's menu, so every tab in a strip answers a right-click the same way —
@@ -157,8 +171,14 @@ function ZoneMenu({
           onSelect: () => reloadTreePane(targetId)
         })}
         <kit.Separator />
-        {paneTabCloseItems(kit, {
+        {paneTabCloseItems({
           counts: treeTabCloseTargets(targetId),
+          labels: {
+            close: t.common.close,
+            closeAll: t.zones.closeAll,
+            closeOthers: t.zones.closeOthers,
+            closeToRight: t.zones.closeToRight
+          },
           onClose: paneId !== undefined ? () => closeTabPane(paneId) : undefined,
           onCloseAll: () => {
             // Persist-close session tiles first so Bot Mode cannot
@@ -168,7 +188,14 @@ function ZoneMenu({
           },
           onCloseOthers: () => closeOtherTreeTabs(targetId),
           onCloseToRight: () => closeTreeTabsToRight(targetId)
-        })}
+        }).map(item =>
+          renderActionItem(kit, {
+            disabled: item.disabled,
+            icon: TAB_CLOSE_ICON[item.id],
+            label: item.label,
+            onSelect: item.onSelect
+          })
+        )}
         {(() => {
           // Show/hide rows for the zone's hide-only chrome tabs (sessions /
           // Bots) — their Close replacement. Resolved when the menu OPENS,
@@ -624,6 +651,8 @@ export function TreeGroup({
                     <PaneTab
                       active={isActive}
                       aria-selected={isActive}
+                      closeIcon={<Codicon name="close" size="0.6875rem" />}
+                      closeLabel={t.common.close}
                       data-tree-tab={paneId}
                       key={paneId}
                       onClose={closeable ? () => closeTab(paneId) : undefined}
