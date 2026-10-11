@@ -4547,11 +4547,18 @@ const S = {
   chips: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
   // The market's master surface: the card grid sits ABOVE the selected record's
   // detail (top/bottom, never left/right — a card grid needs width, a record
-  // needs a reading measure), so the grid is a basis-sized scrollable band.
-  cardColumn: { display: 'flex', flex: '0 1 42%', minWidth: 0, minHeight: 0, flexDirection: 'column', gap: '8px', overflowY: 'auto' },
+  // needs a reading measure), so the grid is a basis-sized scrollable band. The
+  // bottom mask fades the last ~2rem so a clipped row reads as "more below"
+  // rather than as a rendering cut (same maskImage-in-style move as core's
+  // profile switcher / churn bar).
+  cardColumn: { display: 'flex', flex: '0 1 42%', minWidth: 0, minHeight: 0, flexDirection: 'column', gap: '8px', overflowY: 'auto', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 2rem), transparent)' },
   // Holds [card grid] over [detail] as a plain column: no sash, no rail.
   stack: { display: 'flex', flex: '1 1 auto', minHeight: 0, flexDirection: 'column', gap: '10px', overflow: 'hidden' },
   mono: { fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
+  // The selected record's NAME, above its pills: with the card grid stacked on
+  // top, the detail must say what it is showing instead of relying on which card
+  // happens to be highlighted.
+  detailTitle: { color: 'var(--ui-text-primary, inherit)', fontSize: '14px', fontWeight: 600, lineHeight: '20px' },
   prose: { color: 'var(--ui-text-secondary)', fontSize: '12px', lineHeight: '18px' },
   // A row's trailing meta: state pill + version comparison, one line, and the
   // hash for a ledger row (the engine's own `sha256:…`, shown as-is).
@@ -4814,6 +4821,7 @@ function SkillDetailBody({ onAction, skill }) {
   const needsOverwriteAck = Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
 
   return jsxs('div', { style: S.detail, children: [
+    jsx('div', { style: S.detailTitle, children: skill.name || '(未命名)' }),
     jsxs('div', { style: S.rowMeta, children: [
       statePill(skill.installState),
       skill.category ? jsx(PanelPill, { tone: 'muted', children: skill.category }) : null,
@@ -4861,6 +4869,7 @@ function SkillDetailBody({ onAction, skill }) {
 function InstalledDetailBody({ item }) {
   const hashLabel = item.hashState === 'mismatch' ? '本地内容哈希（与取用记录不一致）' : '本地内容哈希'
   return jsxs('div', { style: S.detail, children: [
+    jsx('div', { style: S.detailTitle, children: item.name || item.reference || '(未命名)' }),
     jsxs('div', { style: S.rowMeta, children: [
       jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
       item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null

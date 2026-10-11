@@ -261,7 +261,9 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
               />
             }
           />
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [mask-image:linear-gradient(to_bottom,#000_calc(100%_-_2rem),transparent)]"
+          >
             <CardGrid>
               {visibleSkills.map(skill => (
                 <EntityCard
@@ -290,7 +292,7 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          <DetailColumn footer={t.skills.changesApplyNewSessions}>
+          <DetailColumn footer={t.skills.changesApplyNewSessions} width="full">
             {activeSkill && (
               <SkillDetail
                 onArchive={() => setArchiveTarget(activeSkill.name)}

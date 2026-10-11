@@ -170,19 +170,38 @@ export function ListColumn({ children, header }: { children: ReactNode; header?:
 export function DetailColumn({
   actionBar,
   children,
-  footer
+  footer,
+  width = 'measure'
 }: {
   actionBar?: ReactNode
   children: ReactNode
   footer?: ReactNode
+  /** `measure` centers the body at a reading width — right for the classic
+   *  left/right split, where the detail is a narrow column. `full` drops both
+   *  the max width and the centering: use it when the detail sits UNDER a
+   *  full-width grid (the stacked layout), so the two halves share one left
+   *  edge instead of the detail drifting toward the middle. */
+  width?: 'measure' | 'full'
 }) {
   return (
     <main className="flex min-h-0 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
-        <div className="mx-auto max-w-2xl space-y-5 px-5 py-4">{children}</div>
+        <div
+          className={cn(
+            'space-y-5 py-4',
+            width === 'full' ? 'w-full max-w-none px-5' : 'mx-auto max-w-2xl px-5'
+          )}
+        >
+          {children}
+        </div>
       </div>
       {footer && (
-        <div className="mx-auto w-full max-w-2xl shrink-0 px-5 pb-3 pt-1.5 text-right text-2xs text-muted-foreground/50">
+        <div
+          className={cn(
+            'shrink-0 px-5 pb-3 pt-1.5 text-right text-2xs text-muted-foreground/50',
+            width === 'full' ? 'w-full max-w-none' : 'mx-auto w-full max-w-2xl'
+          )}
+        >
           {footer}
         </div>
       )}
