@@ -231,19 +231,22 @@ function packagedEnv(sandbox: Sandbox): Record<string, string> {
  * Open the Capabilities page (技能与工具) and switch to one of the enterprise
  * plugin's tabs.
  *
- * These tabs — 企业技能 / 企业工具 — ARE the entry point: the plugin no longer
- * registers its own `/plankton-*` routes or sidebar rows, so the only way in is
- * the page's tab strip, and driving it through the real strip is exactly what
- * proves the contribution reached the host page.
+ * Route by hash (these catalogs have NO route and no sidebar row of their own —
+ * the tab IS the entry point), then CLICK the tab: the strip click goes through
+ * the app's own navigate, so it also proves the contributed tab is a real,
+ * clickable tab and not just a rendered label. A sidebar row would be icon-only
+ * in the enterprise build's resting Simple mode anyway, which is why this no
+ * longer matches nav rows by label.
  */
 async function openEnterpriseTab(page: Page, label: string) {
-  const nav = page.locator('[data-slot="sidebar"] button', { hasText: '技能与工具' }).first()
-  await nav.waitFor({ state: 'visible', timeout: 60_000 })
-  await nav.click()
+  await page.evaluate(() => {
+    window.location.hash = '/capabilities'
+  })
 
   const tab = page.getByRole('button', { name: label }).first()
   await tab.waitFor({ state: 'visible', timeout: 60_000 })
   await tab.click()
+  await expect(tab, `clicking "${label}" must make it the active tab`).toHaveAttribute('data-active', 'true')
 }
 
 test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog', async () => {
@@ -477,11 +480,13 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
     // ── F-1: the version comparison, in the selected entry's detail ─────────
     // The state that was pinned at `version-unknown` for EVERY install, which is
-    // what disabled the manage actions and the batch entry.
+    // what disabled the manage actions and the batch entry. The detail renders
+    // label/value pairs (a `<dl>` grid), so `innerText` separates them with a
+    // newline — match across whitespace, not with a literal space.
     await catalogRow('e2e-outdated-skill').click()
     const versionDetail = await page.locator('body').innerText()
-    expect(versionDetail, 'the catalog version must be shown').toContain('目录版本 2.5.0')
-    expect(versionDetail, 'record version != catalog version').toContain('记录版本 1.0.0')
+    expect(versionDetail, 'the catalog version must be shown').toMatch(/目录版本\s+2\.5\.0/)
+    expect(versionDetail, 'the recorded version must be shown').toMatch(/记录版本\s+1\.0\.0/)
     expect(versionDetail, 'record version != catalog version').toContain('已装 · 与目录不一致')
 
     // HASH PARITY: the ledger row's detail prints the CURRENT engine-computed
@@ -567,6 +572,18 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     await expect(dialog).toContainText('本地已修改')
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
+
+    // FINAL: the plugin registers NO standalone page of its own — the tab (and
+    // its `?tab=` deep link) IS the entry point. `/plankton-skills`, the route
+    // this catalog used to have, must now fall through to an ordinary view
+    // instead of rendering the market a second time. Done LAST: an unknown route
+    // makes the app normalize the URL, and that must not race the tab clicks
+    // above.
+    await page.evaluate(() => {
+      window.location.hash = '/plankton-skills'
+    })
+    await expect(page.getByText('企业技能市场')).toHaveCount(0)
+    await expect(page.getByText('企业工具目录')).toHaveCount(0)
 
     await page.screenshot({ path: test.info().outputPath('tool-catalog.png') })
   } finally {
