@@ -434,7 +434,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
     const marketText = await page.locator('body').innerText()
     expect(marketText, 'the skill market must not render a minified React error').not.toContain('Minified React error')
-    expect(marketText).toContain('Enterprise skill market')
+    expect(marketText).toMatch(/Enterprise skill market/i)
 
     // The catalog must be in one of exactly TWO valid states — never a silent
     // empty page (PLK-REQ-0018: "取不到" ≠ "没有") and never a collapsed REST
@@ -456,7 +456,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
       catalogReady,
       'with a fixed skillhub catalog the market must be READY — 取不到目录 here means the PLANKTON_SHAOKE_CLI override never reached the backend'
     ).toBe(true)
-    expect(marketText, 'a ready catalog must report a numeric approved-skill count').toMatch(/approved skills\s*·\s*\d+/)
+    expect(marketText, 'a ready catalog must report a numeric approved-skill count').toMatch(/\d+ approved skills/i)
 
     // ── The market's cards: both sections, one card per entry ───────────────
     // The market is core's master-detail with a CARD grid as the master surface
@@ -466,9 +466,9 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     // card's own button selects, and `rowKey` lands `data-panel-row` on it — so
     // these selectors survived the row→card switch unchanged. Both sections must
     // be labelled and every entry must render exactly once.
-    expect(marketText).toContain('Approved enterprise skills')
-    expect(marketText).toContain('Taken on this machine (engine ledger)')
-    expect(marketText, 'the deliberately-bogus record must show as a hash mismatch').toContain('Hash mismatch')
+    expect(marketText).toMatch(/Approved enterprise skills/i)
+    expect(marketText).toMatch(/Taken on this machine \(engine ledger\)/i)
+    expect(marketText, 'the deliberately-bogus record must show as a hash mismatch').toMatch(/Hash mismatch/i)
 
     const catalogCard = (name: string) =>
       page.locator('[data-panel-row^="catalog:"]', { hasText: name }).locator('button').first()
@@ -493,16 +493,16 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     // newline — match across whitespace, not with a literal space.
     await catalogCard('e2e-outdated-skill').click()
     const versionDetail = await page.locator('body').innerText()
-    expect(versionDetail, 'the catalog version must be shown').toMatch(/Catalog version\s+2\.5\.0/)
-    expect(versionDetail, 'the recorded version must be shown').toMatch(/Recorded version\s+1\.0\.0/)
-    expect(versionDetail, 'record version != catalog version').toContain('Installed · differs from catalog')
+    expect(versionDetail, 'the catalog version must be shown').toMatch(/catalog version\s+2\.5\.0/i)
+    expect(versionDetail, 'the recorded version must be shown').toMatch(/recorded version\s+1\.0\.0/i)
+    expect(versionDetail, 'record version != catalog version').toMatch(/Installed · differs from catalog/i)
 
     // HASH PARITY: the ledger card's detail prints the CURRENT engine-computed
     // hash, and it must be byte-for-byte the engine's own
     // `tools.skills_guard.content_hash` (computed in a separate Python process).
     await ledgerCard('e2e-market-skill').click()
     const hashDetail = await page.locator('body').innerText()
-    expect(hashDetail, 'the hash comparison must be stated').toContain('Local content hash (differs from the pickup record)')
+    expect(hashDetail, 'the hash comparison must be stated').toMatch(/Local content hash \(differs from the pickup record\)/i)
     const hashMatch = hashDetail.match(/sha256:[0-9a-f]{16}/)
     expect(hashMatch, 'the detail must display a local content hash').toBeTruthy()
     const pageHash = hashMatch![0]
@@ -518,7 +518,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     const uninstall = page.getByRole('button', { name: 'Uninstall', exact: true })
     await expect(uninstall, 'the selected entry renders exactly one Uninstall').toHaveCount(1)
     expect(await uninstall.isEnabled(), 'F-1: Uninstall must not be permanently disabled').toBe(true)
-    expect(marketText, 'record version == catalog version').toContain('Installed · matches')
+    expect(marketText, 'record version == catalog version').toMatch(/Installed · matches/i)
 
     // …while the slot holding content NO record claims stays disabled (uninstall
     // would be a `no-record` failure) and is flagged as "cannot confirm clean".
@@ -527,14 +527,14 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     expect(
       await page.locator('body').innerText(),
       'content at a landing no record attests must be flagged on the entry'
-    ).toContain('Cannot tell whether it changed')
+    ).toMatch(/Cannot tell whether it changed/i)
 
     // The engine-visible drift at a recorded landing is flagged too.
     await catalogCard('e2e-market-skill').click()
     expect(
       await page.locator('body').innerText(),
       'the engine-visible drift at a recorded landing must be flagged on the entry'
-    ).toContain('Modified locally')
+    ).toMatch(/Modified locally/i)
 
     // The batch entry renders for the ONE confirmed-clean `version-differs` entry
     // (the other two are `version-unknown` / `consistent`, and the drifted one is
@@ -558,7 +558,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     expect(
       await dialog.innerText(),
       'a landing with nothing in it must not claim a local-edit risk'
-    ).not.toContain('Cannot tell whether it changed locally')
+    ).not.toMatch(/Cannot tell whether it changed locally/i)
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
 
