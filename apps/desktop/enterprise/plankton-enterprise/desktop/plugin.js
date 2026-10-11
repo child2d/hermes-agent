@@ -678,20 +678,20 @@ function collectionStats(records, declaredFields, { nowMs }) {
     if (info.day < todayDay) overdue += 1
     else if (info.at >= nowMs && info.at < nowMs + DAY_MS) dueSoon += 1
   }
-  const dueLabel = dueField ? String(dueField.label || dueField.key) : '到期日'
+  const dueLabel = dueField ? String(dueField.label || dueField.key) : t('到期日')
   const note =
-    `统计口径：待办＝记录条数；已逾期＝${dueLabel}早于今天；` +
-    `今日截止＝${dueLabel}落在未来 24 小时窗口内（服务端场景口径是 24 小时窗口而非自然日；日界取本机时区）。`
+    t('统计口径：待办＝记录条数；已逾期＝{0}早于今天；', dueLabel) +
+    t('今日截止＝{0}落在未来 24 小时窗口内（服务端场景口径是 24 小时窗口而非自然日；日界取本机时区）。', dueLabel)
   return Object.freeze({
     total: records.length,
     overdue,
     dueSoon,
     missingDue,
     items: Object.freeze([
-      Object.freeze({ label: '待办', value: records.length }),
-      Object.freeze({ label: '已逾期', value: overdue }),
-      Object.freeze({ label: '今日截止', value: dueSoon }),
-      Object.freeze({ label: '无截止日期', value: missingDue }),
+      Object.freeze({ label: t('待办'), value: records.length }),
+      Object.freeze({ label: t('已逾期'), value: overdue }),
+      Object.freeze({ label: t('今日截止'), value: dueSoon }),
+      Object.freeze({ label: t('无截止日期'), value: missingDue }),
     ]),
     note,
   })
@@ -742,7 +742,7 @@ function presentOutput(output, { nowMs = Date.now() } = {}) {
       title: '',
       components: Object.freeze([
         Object.freeze({ primitive: 'table', title: '', columns, rows }),
-        Object.freeze({ primitive: 'stat-bar', title: '统计', items: stats.items, note: stats.note }),
+        Object.freeze({ primitive: 'stat-bar', title: t('统计'), items: stats.items, note: stats.note }),
       ]),
       stats,
     })
@@ -1225,28 +1225,41 @@ const RESEND_AS_NEW_BLOCK_ADVICE =
 const NOT_DRAFT_ADVICE = Object.freeze({
   confirmed: Object.freeze({
     hostAction: 'discard',
-    text: '要改这条，先点「丢弃草稿」丢掉这张卡；丢完' + RESEND_AS_NEW_BLOCK_ADVICE,
+    // A GETTER, not a value: these maps are frozen at module load, long before
+    // `register(ctx)` binds `t` — a value would bake the zh rendering in.
+    get text() {
+      return t('要改这条，先点「丢弃草稿」丢掉这张卡；丢完') + t(RESEND_AS_NEW_BLOCK_ADVICE)
+    },
   }),
   failed: Object.freeze({
     hostAction: 'discard',
-    text: '要改这条，可以点「重开」把它放回「待确认」再改；或点「丢弃草稿」丢掉它 —— 丢完' + RESEND_AS_NEW_BLOCK_ADVICE,
+    get text() {
+      return t('要改这条，可以点「重开」把它放回「待确认」再改；或点「丢弃草稿」丢掉它 —— 丢完') + t(RESEND_AS_NEW_BLOCK_ADVICE)
+    },
   }),
   discarded: Object.freeze({
     hostAction: 'resend-as-new-block',
-    text: '这一张已经丢了，' + RESEND_AS_NEW_BLOCK_ADVICE,
+    get text() {
+      return t('这一张已经丢了，') + t(RESEND_AS_NEW_BLOCK_ADVICE)
+    },
   }),
   written: Object.freeze({
     hostAction: 'another-block-kind',
-    text: '这一条已经写进台账了，卡片不再接受新版本。要改内容，请让助手另发一个「更新」类块（改既有工单的那一种，不是新建）。',
+    get text() {
+      return t('这一条已经写进台账了，卡片不再接受新版本。要改内容，请让助手另发一个「更新」类块（改既有工单的那一种，不是新建）。')
+    },
   }),
-  'write-unknown': Object.freeze({ hostAction: 'reconcile', text: RECONCILE_ADVICE }),
-  partial: Object.freeze({ hostAction: 'reconcile', text: RECONCILE_ADVICE }),
-  'duplicate-risk': Object.freeze({ hostAction: 'reconcile', text: RECONCILE_ADVICE }),
+  'write-unknown': Object.freeze({ hostAction: 'reconcile', get text() { return t(RECONCILE_ADVICE) } }),
+  partial: Object.freeze({ hostAction: 'reconcile', get text() { return t(RECONCILE_ADVICE) } }),
+  'duplicate-risk': Object.freeze({ hostAction: 'reconcile', get text() { return t(RECONCILE_ADVICE) } }),
 })
 
 /** 「这一版没进卡片」该怎么说、下一步做什么 —— 状态不认识时按最保守的「先去核对」处理 */
 function notDraftAdvice(state) {
-  return NOT_DRAFT_ADVICE[String(state ?? '')] ?? Object.freeze({ hostAction: 'reconcile', text: RECONCILE_ADVICE })
+  return (
+    NOT_DRAFT_ADVICE[String(state ?? '')] ??
+    Object.freeze({ hostAction: 'reconcile', get text() { return t(RECONCILE_ADVICE) } })
+  )
 }
 
 /** 这一态能否直接重试：写没写进去还不确定／可能已存在 —— 都须先核对，重写会造重复 */
@@ -1292,7 +1305,7 @@ function toPresentation(card, { requiredFields = [] } = {}) {
     id: card.id,
     title: card.title,
     state: card.state,
-    stateLabel: STATE_LABELS[card.state] ?? card.state,
+    stateLabel: t(STATE_LABELS[card.state] ?? card.state),
     ref: card.ref,
     failure: card.failure,
     // 写这张卡片**还缺哪些必填**：界面据此把「确认」先拦住（别等服务端拒了才说缺什么）
@@ -1312,7 +1325,7 @@ function toPresentation(card, { requiredFields = [] } = {}) {
       required: required.includes(f.key),
       // 佐证一并呈现：本人能看见「这句话是我说的」／「这个取值是查出来的」
       evidence: f.attestation,
-      tierLabel: TIER_LABELS[f.tier] ?? f.tier,
+      tierLabel: t(TIER_LABELS[f.tier] ?? f.tier),
     })),
   }
 }
@@ -2078,7 +2091,7 @@ function createPackSession() {
       // 说明里带上**这一版的标题**：它既是「说的是哪一版」的凭据，也让「换了版本」这件事
       // 在签名里真的可见（复核 R2-6：`changed` 不能对 notice 的变化视而不见）。
       const advice = notDraftAdvice(existing.state)
-      const version = String(title ?? '').trim() || '未命名'
+      const version = String(title ?? '').trim() || t('未命名')
       return {
         ok: true,
         card: existing,
@@ -2086,8 +2099,8 @@ function createPackSession() {
         reason: 'card-not-draft',
         advice,
         note:
-          `这一版（标题：${version}）没有落进卡片（卡片当前是「${STATE_LABELS[existing.state] ?? existing.state}」）：` +
-          `正文里这一段照旧可见，卡片上还是它原来那一版。${advice.text}`,
+          t('这一版（标题：{0}）没有落进卡片（卡片当前是「{1}」）：', version, t(STATE_LABELS[existing.state] ?? existing.state)) +
+          t('正文里这一段照旧可见，卡片上还是它原来那一版。{0}', advice.text),
       }
     }
     // 写这张卡片要用到的**必填字段**由载荷的调用方（渲染层）从声明里取来。
@@ -2731,7 +2744,7 @@ function failureReason(outcome, kind) {
   const parts = []
   if (err) {
     if (err.message) parts.push(String(err.message))
-    if (err.param) parts.push(`参数 ${err.param}`)
+    if (err.param) parts.push(t('参数 {0}', err.param))
     if (!err.message && err.subtype) parts.push(String(err.subtype))
   }
   if (!parts.length && outcome?.note) parts.push(String(outcome.note))
@@ -2755,7 +2768,7 @@ function applyOutcome(session, card, outcome, declaration = {}, { readback = nul
       return { card: session.replace(markWritten(card, { ref: outcome.ref }).card).card, blocked: null }
     }
     const reason = readback ? String(readback.reason ?? 'readback-failed') : 'readback-not-declared'
-    return { card: session.replace(markWriteUnknown(card, { reason: `ok:true 但读回未确认（${reason}）` }).card).card, blocked: null }
+    return { card: session.replace(markWriteUnknown(card, { reason: t('ok:true 但读回未确认（{0}）', reason) }).card).card, blocked: null }
   }
   if (kind === 'ok') return { card: session.replace(markWriteUnknown(card, { reason: 'ref-missing' }).card).card, blocked: null }
 
@@ -2766,7 +2779,7 @@ function applyOutcome(session, card, outcome, declaration = {}, { readback = nul
   if (outcome?.ref) {
     // 「被拒」却带回执 ⇒ 台账那边已经有东西了 ⇒ 结果未知（判「确定没写」会诱发重复写）
     return {
-      card: session.replace(markWriteUnknown(card, { reason: `${failureReason(outcome, kind)} · 但回执是 ${outcome.ref}，先核对` }).card).card,
+      card: session.replace(markWriteUnknown(card, { reason: t('{0} · 但回执是 {1}，先核对', failureReason(outcome, kind), outcome.ref) }).card).card,
       blocked: null,
     }
   }
@@ -3226,13 +3239,13 @@ function createIdentityProvider({ read = planktonIdentityAsync } = /** @type {an
 
 /** 动作结果 → 一行可读的如实回报（不把「未知」说成「失败」）。 */
 function describeAction(result) {
-  if (!result || typeof result !== 'object') return '执行未返回结果'
-  if (result.ok === false) return `未写入：${String(result.reason ?? '未知原因')}`
+  if (!result || typeof result !== 'object') return t('执行未返回结果')
+  if (result.ok === false) return t('未写入：{0}', String(result.reason ?? t('未知原因')))
   const kind = String(result.outcome?.kind ?? '')
   const ref = result.outcome?.ref ? ` · ${result.outcome.ref}` : ''
-  if (kind === 'ok' && result.readback?.ok === true) return `已写入并读回确认${ref}`
-  if (kind === 'ok') return `已提交，结果待核对${ref}`
-  return `结果未知（${kind || 'no-kind'}）${ref}`
+  if (kind === 'ok' && result.readback?.ok === true) return t('已写入并读回确认{0}', ref)
+  if (kind === 'ok') return t('已提交，结果待核对{0}', ref)
+  return t('结果未知（{0}）{1}', kind || 'no-kind', ref)
 }
 
 /**
@@ -3273,7 +3286,7 @@ function CarrierDirective({ directiveName, attrs, source, renderer, runAction, i
       const refreshed = await renderer.land({ name: directiveName, attrs: attrs ?? {} })
       setModel(refreshed)
     } catch {
-      setOutcome('执行失败')
+      setOutcome(t('执行失败'))
     } finally {
       setBusy(false)
       setPending(null)
@@ -3281,7 +3294,7 @@ function CarrierDirective({ directiveName, attrs, source, renderer, runAction, i
   }
 
   if (model === null) {
-    return jsx('div', { 'data-plankton-carrier': directiveName, 'data-state': 'loading', style: S.carrierMuted, children: '正在取回内容…' })
+    return jsx('div', { 'data-plankton-carrier': directiveName, 'data-state': 'loading', style: S.carrierMuted, children: t('正在取回内容…') })
   }
   // 不可用 ⇒ **退化 markdown**：把指令原文交回宿主按文本呈现（内容不丢，退回原文显示）。
   if (!model.ok) {
@@ -3311,29 +3324,29 @@ function CarrierDirective({ directiveName, attrs, source, renderer, runAction, i
   const fields = Array.isArray(model.card?.fields) ? model.card.fields : []
   const missing = fields.filter((f) => !String(f.value ?? '').trim()).map((f) => f.label || f.key)
   return jsxs('div', { 'data-plankton-carrier': directiveName, 'data-state': 'card', style: S.carrierCard, children: [
-    jsx('div', { style: S.carrierTitle, children: model.presentation?.title || '草稿' }),
+    jsx('div', { style: S.carrierTitle, children: model.presentation?.title || t('草稿') }),
     jsx('div', { style: S.carrierFields, children: fields.map((f) =>
       jsxs('div', { style: S.carrierField, children: [
         jsx('span', { style: S.carrierLabel, children: f.label || f.key }),
-        jsx('span', { style: S.carrierValue, children: String(f.value ?? '').trim() ? String(f.value) : '（等你给）' }),
+        jsx('span', { style: S.carrierValue, children: String(f.value ?? '').trim() ? String(f.value) : t('（等你给）') }),
       ] }, f.key),
     ) }),
-    missing.length ? jsx('div', { style: S.carrierNote, children: `还缺：${missing.join('、')}` }) : null,
+    missing.length ? jsx('div', { style: S.carrierNote, children: t('还缺：{0}', missing.join('、')) }) : null,
     jsx('div', { style: S.carrierActions, children: actions.map((action) =>
       jsx(Button, { type: 'button', disabled: busy, onClick: () => { if (action.human === 'confirm') setPending(action); else void doRun(action) }, children: action.label || action.id }, action.id),
     ) }),
-    confirmer ? null : jsx('div', { style: S.carrierNote, children: '未取到登录身份：确认写动作将被拒绝（fail-closed）。' }),
+    confirmer ? null : jsx('div', { style: S.carrierNote, children: t('未取到登录身份：确认写动作将被拒绝（fail-closed）。') }),
     outcome ? jsx('div', { style: S.carrierNote, children: outcome }) : null,
     pending
       ? jsx(ConfirmDialog, {
           open: true,
           onClose: () => setPending(null),
           onConfirm: () => Promise.resolve(doRun(pending)),
-          title: pending.label || '确认',
-          description: `确认以「${confirmer || '未知身份'}」执行：${pending.label || pending.id}`,
+          title: pending.label || t('确认'),
+          description: t('确认以「{0}」执行：{1}', confirmer || t('未知身份'), pending.label || pending.id),
           destructive: Boolean(pending.destructive),
-          confirmLabel: '确认',
-          cancelLabel: '取消'
+          confirmLabel: t('确认'),
+          cancelLabel: t('取消')
         })
       : null,
   ] })
@@ -4460,19 +4473,317 @@ const SKILLS_TAB_ID = 'enterprise-skills'
 const TOOLS_TAB_ID = 'enterprise-tools'
 
 /**
- * The TWO strings this plugin localizes: its Capabilities tab labels. They are
- * registered under the plugin id (`ctx.i18n.register`) and resolved through
- * `ctx.i18n.t`, exactly like kanban's labels — no core catalog is touched, and
- * `en` doubles as the translator's fallback for any locale without a bundle.
+ * EVERY user-visible string this plugin renders goes through `ctx.i18n`, with the
+ * CHINESE TEXT ITSELF as the key — so `zh` is the source language and its bundle
+ * is derived (identity), while only `en` needs hand-written copy. Two reasons for
+ * source-text keys instead of invented ids: the call sites stay readable, and a
+ * missing entry degrades to the Chinese original instead of a naked key.
  *
- * Scope note: only the TAB LABELS follow the UI language. Everything the two
- * panels render is still a Chinese literal, so an English UI shows English
- * tabs over Chinese panels until the panel copy itself is localized.
+ * Interpolated copy is written as a `{0}`/`{1}` template: the key keeps the
+ * placeholders, the caller passes the values, and the derived zh entry becomes a
+ * formatter over the very same template — so the Chinese rendering is
+ * byte-identical to the pre-i18n literals.
+ *
+ * Scope: the plugin's UI copy. Deliberately NOT here: the embedded skill markdown,
+ * agent-facing prompt/face payloads, and the pack contract data — those are
+ * content, not interface copy.
  */
-const TAB_LABELS = {
-  en: { skillsTab: 'Enterprise Skills', toolsTab: 'Enterprise Tools' },
-  zh: { skillsTab: '企业技能', toolsTab: '企业工具' }
+const EN = {
+  // ── shared ────────────────────────────────────────────────────────────────
+  '（未提供说明）': '(no description provided)',
+  '(未命名)': '(unnamed)',
+  '未知': 'unknown',
+  '—': '—',
+  '确认': 'Confirm',
+  '取消': 'Cancel',
+  '重试': 'Retry',
+  '刷新': 'Refresh',
+  '操作失败': 'The action failed',
+  '读取失败': 'Read failed',
+  // ── the two Capabilities tabs ─────────────────────────────────────────────
+  '企业技能': 'Enterprise Skills',
+  '企业工具': 'Enterprise Tools',
+  '企业技能与工具': 'Enterprise skills & tools',
+  '企业已审技能市场（安装/卸载/启停/更新 + 版本对照 + 哈希）与本机工具目录（只读）。':
+    'The approved enterprise skill market (install / uninstall / enable / disable / update, version comparison, hashes) and the local tool catalog (read-only).',
+  '企业技能市场': 'Enterprise skill market',
+  '企业工具目录': 'Enterprise tool catalog',
+  '正在读取企业技能市场…': 'Reading the enterprise skill market…',
+  '正在读取本机工具目录…': 'Reading the local tool catalog…',
+  '读取技能市场失败': 'Could not read the skill market',
+  '读取工具目录失败': 'Could not read the tool catalog',
+  '企业已审技能': 'Approved enterprise skills',
+  '本机已取用（引擎台账）': 'Taken on this machine (engine ledger)',
+  '没有可显示的技能': 'No skill to show',
+  '没有可显示的命令': 'No command to show',
+  '（该系统未声明工具）': '(this system declares no tools)',
+  '系统': 'System',
+  '命令': 'Command',
+  '风险': 'Risk',
+  '我安装的': 'I installed',
+  '只看已安装': 'Installed only',
+  '检索技能': 'Search skills',
+  '检索技能名 / 分类 / 标签…': 'Search by skill name / category / tag…',
+  '检索企业工具': 'Search enterprise tools',
+  '检索系统 / 命令 / 说明…': 'Search systems / commands / descriptions…',
+  '全部': 'All',
+  '批量更新 {0} 条（需确认）': 'Batch update {0} item(s) (needs confirmation)',
+  '只看已安装（{0}）': 'Installed only ({0})',
+  '记录版本 {0}': 'Recorded version {0}',
+  '记录版本 {0} · 取用于 {1}': 'Recorded version {0} · taken {1}',
+  '{0} — {1}': '{0} — {1}',
+  '{0} 条': '{0}',
+  '（引擎取用记录读取失败：{0}）': '(the engine pickup record failed to read: {0})',
+  '引擎里这条技能已不在落点上，取用记录已移除。':
+    'This skill is no longer at that landing in the engine; its pickup record was removed.',
+  '引擎停用清单读取失败（{0}），启停开关已禁用，改动不会被静默执行。':
+    'The engine’s disabled list failed to read ({0}); the enable/disable switches are disabled and no change runs silently.',
+  '我安装的 {0} 条{1} · 已审技能 {2} 条 · 来源：企业 SkillHub（经 shaoke-cli skillhub）{3}':
+    'I installed {0}{1} · {2} approved skills · source: enterprise SkillHub (via shaoke-cli skillhub){3}',
+  '（目录里 {0} 条）': ' ({0} in the catalog)',
+  '目录读取失败': 'Could not read the catalog',
+  '目录版本': 'Catalog version',
+  '记录版本': 'Recorded version',
+  '作者': 'Author',
+  '标签': 'Tags',
+  '落点': 'Landing',
+  '取用时间': 'Taken at',
+  '卸载时间': 'Uninstalled at',
+  '未标注': 'not stated',
+  '目录未给版本': 'the catalog gives no version',
+  '目录未给技能名': 'the catalog gives no skill name',
+  '本地已改动': 'Modified locally',
+  '是否改动无法判定': 'Cannot tell whether it changed',
+  '本地内容哈希 {0}': 'Local content hash {0}',
+  '本地内容哈希': 'Local content hash',
+  '本地内容哈希（与取用记录不一致）': 'Local content hash (differs from the pickup record)',
+  '落点存在': 'Landing exists',
+  '落点已不在': 'Landing is gone',
+  '哈希不符': 'Hash mismatch',
+  '已装 · 一致': 'Installed · matches',
+  '已装 · 与目录不一致': 'Installed · differs from catalog',
+  '已装 · 版本不可判定': 'Installed · version undecidable',
+  '已装 · 引擎已停用': 'Installed · disabled in the engine',
+  '曾取用，本地已不存在': 'Taken before, no longer on disk',
+  '未装': 'Not installed',
+  '不能用：目录未提供技能名': 'Unusable: the catalog gives no skill name',
+  '更新': 'Update',
+  '取用': 'Take',
+  '启用': 'Enable',
+  '停用': 'Disable',
+  '卸载': 'Uninstall',
+  '更新技能「{0}」？': 'Update skill “{0}”?',
+  '取用技能「{0}」？': 'Take skill “{0}”?',
+  '卸载技能「{0}」？': 'Uninstall skill “{0}”?',
+  '{0}技能「{1}」？': '{0} skill “{1}”?',
+  '将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：{0}。':
+    'The skill package will be downloaded again and handed to the engine’s own install entry point (the engine owns the landing, the safety scan and file semantics). Landing: {0}.',
+  '注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。':
+    'Note: that landing is occupied by a directory no engine pickup record attests; the engine replaces it wholesale.',
+  '企业侧技能目录之外的任何内容都不会被改动。':
+    'Nothing outside the enterprise skill directory is touched.',
+  '⚠ 本地已修改：磁盘上的内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些本地改动。':
+    '⚠ Modified locally: the content on disk no longer matches the hash in the engine’s pickup record. Continuing overwrites and loses those local changes.',
+  '⚠ 无法判定本地是否有改动：引擎取用记录里没有这条技能、读不出（损坏或不可读），或记录里没有可比对的内容哈希，而该落点已存在内容。继续可能覆盖并丢失本地改动。':
+    '⚠ Cannot tell whether it changed locally: the engine’s pickup record has no such skill, cannot be read (damaged or unreadable), or carries no comparable content hash, while the landing already holds content. Continuing may overwrite and lose local changes.',
+  '（该技能在引擎取用记录里的落点是 {0}，与本次计划落点不同。）':
+    '(the engine’s pickup record places this skill at {0}, which differs from this planned landing.)',
+  '将调用引擎自己的卸载入口删除落点目录 {0}，引擎的取用记录一并移除。此操作不可撤销。':
+    'The engine’s own uninstall entry point deletes the landing directory {0}; the engine’s pickup record goes with it. This cannot be undone.',
+  '将从引擎的停用清单（config.yaml 的 skills.disabled）里移出这条技能，下次会话生效。':
+    'This skill is removed from the engine’s disabled list (config.yaml → skills.disabled) and loads again from the next session.',
+  '将把这条技能写进引擎的停用清单（config.yaml 的 skills.disabled），下次会话不再加载。':
+    'This skill is written into the engine’s disabled list (config.yaml → skills.disabled) and stops loading from the next session.',
+  '批量更新 {0} 条技能？': 'Batch-update {0} skills?',
+  '将依次重新下载并覆盖以下落点：{0}。批量写入不会静默执行，需你在此确认。':
+    'These landings are re-downloaded and overwritten one by one: {0}. A batch write never runs silently — it needs your confirmation here.',
+  '批量更新完成（{0} 条）。默认在下一个会话生效。':
+    'Batch update finished ({0}). Applies to new sessions by default.',
+  '批量更新：成功 {0} 条、失败 {1} 条。失败项：{2}':
+    'Batch update: {0} succeeded, {1} failed. Failures: {2}',
+  '已取用到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。':
+    'Taken into the enterprise skill directory: {0} ({1} file(s)); content hash {2}. The engine wrote it ({3}). Applies to new sessions by default.',
+  '已更新到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。':
+    'Updated in the enterprise skill directory: {0} ({1} file(s)); content hash {2}. The engine wrote it ({3}). Applies to new sessions by default.',
+  '已覆盖既有落点。': 'The existing landing was overwritten.',
+  '已由引擎删除落点 {0}（引擎取用记录一并移除）。':
+    'The engine deleted the landing {0} (its pickup record went with it).',
+  '已写进引擎的停用清单（config.yaml）。默认在下一个会话生效。':
+    'Written into the engine’s disabled list (config.yaml). Applies to new sessions by default.',
+  '已从引擎的停用清单里移出。默认在下一个会话生效。':
+    'Removed from the engine’s disabled list. Applies to new sessions by default.',
+  '企业已审技能目录已就绪。': 'The approved-skill catalog is ready.',
+  '企业 SkillHub 当前没有已审技能（空目录是有效结果）。':
+    'The enterprise SkillHub currently has no approved skill (an empty catalog is a valid result).',
+  '没有匹配当前筛选的技能（共 {0} 条）{1}{2}{3}。':
+    'No skill matches the current filter (of {0}){1}{2}{3}.',
+  '；关键词「{0}」': '; keyword “{0}”',
+  '；分类「{0}」': '; category “{0}”',
+  '；只看已安装': '; installed only',
+  '没有匹配「{0}」的系统或命令（共 {1} 个系统）。':
+    'No system or command matches “{0}” (of {1} systems).',
+  'shaoke-cli 可用，但当前没有声明任何工具系统（空清单是有效结果）。':
+    'shaoke-cli is available but declares no tool system (an empty listing is a valid result).',
+  '目录已达分页上限（{0} 页 × 每页 {1} 条 = 共 {2} 条），结果已截断——上面列出的不是全量已审技能。':
+    'The catalog hit its paging ceiling ({0} pages × {1} per page = {2} total); the list is truncated — what you see above is not every approved skill.',
+  'PATH 上存在同名 CLI（个人副本）{0}，已按企业口径忽略。':
+    'A same-named CLI (personal copy) exists on PATH at {0}; it is ignored under the enterprise policy.',
+  '只读 · 无执行入口、无开关 · 共 {0} 个系统 / {1} 条命令{2}':
+    'Read-only · no execution entry, no switches · {0} systems / {1} commands{2}',
+  'CLI: {0}（来源 {1}）': 'CLI: {0} (source {1})',
+  'CLI: {0}（来源 {1}）· 技能落点 {2}': 'CLI: {0} (source {1}) · skill landing {2}',
+  'CLI: {0}（来源 {1}）· 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。':
+    'CLI: {0} (source {1}) · this page only lists the local CLI’s command inventory; authorisation and execution belong to shaoke-cli itself, and this app reads no token.',
+  '未知原因': 'unknown reason',
+  '安装/卸载/更新全部交由引擎自己的技能管理入口执行，落点、扫描与文件语义由引擎负责；本页只做参数校验、人工确认与如实回显。技能哈希与引擎同源（引擎 tools.skills_guard.content_hash），取用记录就是引擎的 skills/.hub/lock.json。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。':
+    'Install / uninstall / update all run through the engine’s own skill management entry point; the engine owns the landing, the scan and file semantics, while this page only validates parameters, asks a human and reports back honestly. Skill hashes share the engine’s implementation (tools.skills_guard.content_hash) and the pickup records are the engine’s own skills/.hub/lock.json. “Disable” writes the engine’s enable state (config.yaml → skills.disabled). Every write needs human confirmation, and this app reads no token.',
+  '引擎取用记录 {0}': 'Engine pickup records {0}',
+  '读取失败（见下方提示，非“从未装过”）': 'read failed (see the notice below — this is NOT “never installed”)',
+  '引擎取用记录读取失败/已损坏：下方「本机已取用」显示为 0 条，是「读不到记录」，不是「从未装过」；此时卸载会报“记录里没有”，更新也会按「无法判定本地是否有改动」处理，必须显式确认覆盖（不会静默替换），这类技能也不会进入批量更新。':
+    'The engine’s pickup record failed to read or is damaged: “taken on this machine” below shows 0 because the record cannot be read, NOT because nothing was ever installed. In this state an uninstall reports “not in the record”, an update is treated as “cannot tell whether it changed locally” and needs an explicit overwrite confirmation (nothing is replaced silently), and such skills are excluded from batch updates.',
+  '引擎停用清单读取失败（{0}）': 'The engine’s disabled list failed to read ({0})',
+  '这是「取不到目录」，不是「目录为空」。本机已装技能仍列在下方。':
+    'This is “the catalog could not be fetched”, not “the catalog is empty”. Locally installed skills are still listed below.',
+  '以下技能不能进批量更新（批量不带逐项覆盖确认），请逐条更新并在确认框里明确是否覆盖：{0}':
+    'These skills cannot join a batch update (a batch carries no per-item overwrite confirmation). Update them one by one and state the overwrite decision in each dialog: {0}',
+  '技能写路径自检未通过：已按 fail-closed 拒绝全部写动作（取用 / 卸载 / 启用 / 停用 / 更新）。':
+    'The skill write-path self-check failed: every write (take / uninstall / enable / disable / update) is refused, fail-closed.',
+  '本页的列表与状态仍可读，但在这条问题修好之前，任何写操作都不会被执行。':
+    'The lists and states on this page stay readable, but no write runs until this is fixed.',
+  '· {0}（{1} @ {2}）': '· {0} ({1} @ {2})',
+  '自检未通过': 'self-check failed',
+  // ── failure copy (the catalog / tool read paths) ──────────────────────────
+  '未找到本机 shaoke-cli（企业副本应位于引擎数据目录的 bin 下）':
+    'Local shaoke-cli not found (the enterprise copy belongs under <engine data>/bin)',
+  '未找到企业副本 shaoke-cli（应位于引擎数据目录的 bin 下）':
+    'The enterprise shaoke-cli copy was not found (it belongs under <engine data>/bin)',
+  'shaoke-cli 执行失败': 'shaoke-cli failed to run',
+  'shaoke-cli 返回了非 JSON 输出': 'shaoke-cli returned non-JSON output',
+  'shaoke-cli 输出结构不符预期（缺少 data.services）':
+    'shaoke-cli output has an unexpected shape (missing data.services)',
+  '未授权：请先在 shaoke-cli 自己的终端里完成授权（本应用不代输口令）':
+    'Not authorised: finish authorisation in shaoke-cli’s own terminal first (this app never types your credentials)',
+  '网络不可达：无法连接企业 SkillHub（或请求超时）':
+    'Network unreachable: the enterprise SkillHub could not be reached (or the request timed out)',
+  'CLI 输出不是 JSON（格式不符）': 'The CLI output is not JSON (unexpected format)',
+  'CLI 输出结构不符预期（格式不符：缺少必需字段）':
+    'The CLI output has an unexpected shape (unexpected format: a required field is missing)',
+  '这条技能在平台上没有可下载的包': 'This skill has no downloadable package on the platform',
+  '下载技能包失败（网络或存储服务不可用）':
+    'Downloading the skill package failed (network or storage service unavailable)',
+  '技能包解不开或被判定含不安全路径，已拒绝落盘':
+    'The package could not be unpacked, or was judged to contain unsafe paths, so it was refused',
+  '写入企业侧技能目录失败': 'Writing into the enterprise skill directory failed',
+  '需要人工确认后才能继续': 'This needs human confirmation before it can continue',
+  '目录缺少确定落点所需的信息（如技能名）':
+    'The catalog lacks what a landing needs (for example the skill name)',
+  '落点被判定为个人环境，已拒绝取用': 'The landing was judged personal, so the take was refused',
+  '企业侧引擎目录不可用，已拒绝取用': 'The enterprise engine directory is unavailable, so the take was refused',
+  '内容哈希取不到，判等无法成立': 'No content hash could be computed, so equality cannot be established',
+  '删除落点失败': 'Deleting the landing failed',
+  '引擎拒绝了这次写入（落点不符合引擎规则：链上有符号链接、与既有技能目录嵌套，或会覆盖分类目录）':
+    'The engine refused this write (the landing breaks its rules: a symlink on the path, nesting inside an existing skill directory, or overwriting a category directory)',
+  '引擎的安装前安全扫描未放行这条技能，已拒绝安装':
+    'The engine’s pre-install safety scan did not clear this skill, so the install was refused',
+  '这是引擎的必备技能（essential），无法停用': 'This is an engine-essential skill and cannot be disabled',
+  '写入未生效：引擎持久化的状态未变成请求的状态':
+    'The write did not take effect: the engine’s persisted state is not the requested one',
+  '请求失败（网络或后端异常）': 'The request failed (network or backend error)',
+  '引擎的取用记录里没有这条技能，本页只卸载引擎记录在案的技能（若记录文件损坏，请见页面顶部的读取失败提示）':
+    'The engine’s pickup record has no such skill; this page only uninstalls skills the engine records (if the record file is damaged, see the read-failure notice at the top of the page)',
+  '本地已修改：磁盘内容与引擎取用记录不一致。继续更新会覆盖并丢失这些改动，需你确认覆盖':
+    'Modified locally: the content on disk differs from the engine’s pickup record. Continuing overwrites and loses those changes, so the overwrite needs your confirmation',
+  '引擎配置读取失败，启停开关已禁用': 'The engine config failed to read, so the enable/disable switches are disabled',
+  '引擎技能配置模块不可用，无法改启停': 'The engine’s skill-config module is unavailable; enable/disable cannot change',
+  '技能写路径自检未通过（技能路径链含符号链接）：已按 fail-closed 拒绝这次写动作':
+    'The skill write-path self-check failed (a symlink is on the skill path): this write is refused, fail-closed',
+  '这是「取不到目录」，不是「目录为空」': 'This is “the catalog could not be fetched”, not “the catalog is empty”',
+  // ── the carrier directive + proposal cards (chat transcript surfaces) ─────
+  '到期日': 'Due date',
+  '待办': 'Open',
+  '已逾期': 'Overdue',
+  '今日截止': 'Due today',
+  '无截止日期': 'No due date',
+  '统计': 'Stats',
+  '统计口径：待办＝记录条数；已逾期＝{0}早于今天；':
+    'Counting: open = record count; overdue = {0} earlier than today;',
+  '今日截止＝{0}落在未来 24 小时窗口内（服务端场景口径是 24 小时窗口而非自然日；日界取本机时区）。':
+    'Due today = {0} falls inside the next 24-hour window (the server’s scenario window is 24 h, not a calendar day; the day boundary is the local timezone).',
+  'agent 起草': 'Drafted by the agent',
+  '须本人给': 'You must supply it',
+  '须本人指定': 'You must specify it',
+  '待确认': 'Awaiting confirmation',
+  '已确认，待写入': 'Confirmed, pending write',
+  '已写入': 'Written',
+  '写入失败（确定没写进去）': 'Write failed (nothing was written)',
+  '写入结果未知（先核对，不要重写）': 'Write outcome unknown (verify first, do not rewrite)',
+  '部分写入（有些项没写进去）': 'Partly written (some items were not written)',
+  '可能有重复（先去重，再决定）': 'Possible duplicate (dedupe first, then decide)',
+  '已撤销（草稿丢弃）': 'Withdrawn (draft discarded)',
+  '要改这条，先点「丢弃草稿」丢掉这张卡；丢完':
+    'To change this one, click “Discard draft” to drop this card first; then',
+  '要改这条，可以点「重开」把它放回「待确认」再改；或点「丢弃草稿」丢掉它 —— 丢完':
+    'To change this one, click “Reopen” to put it back to “Awaiting confirmation”, or click “Discard draft” to drop it — then',
+  '这一张已经丢了，': 'This card was already discarded;',
+  '这一条已经写进台账了，卡片不再接受新版本。要改内容，请让助手另发一个「更新」类块（改既有工单的那一种，不是新建）。':
+    'This record is already in the ledger, so the card accepts no new version. To change the content, have the assistant send an “update” block (the kind that edits an existing ticket, not a new one).',
+  'ok:true 但读回未确认（{0}）': 'ok:true but the read-back was not confirmed ({0})',
+  '{0} · 但回执是 {1}，先核对': '{0} · but the receipt is {1}; verify first',
+  '执行未返回结果': 'The action returned no result',
+  '未写入：{0}': 'Not written: {0}',
+  '已写入并读回确认{0}': 'Written and confirmed by read-back{0}',
+  '已提交，结果待核对{0}': 'Submitted; the outcome needs verification{0}',
+  '结果未知（{0}）{1}': 'Outcome unknown ({0}){1}',
+  '执行失败': 'The action failed',
+  '正在取回内容…': 'Fetching content…',
+  '草稿': 'Draft',
+  '（等你给）': '(waiting for you)',
+  '还缺：{0}': 'Still missing: {0}',
+  '未取到登录身份：确认写动作将被拒绝（fail-closed）。':
+    'No signed-in identity was found: confirming a write will be refused (fail-closed).',
+  '确认以「{0}」执行：{1}': 'Confirm running as “{0}”: {1}',
+  '未知身份': 'unknown identity',
+  '未命名': 'unnamed',
+  '参数 {0}': 'parameter {0}',
+  '这一笔的结果还没弄清楚 —— 这一状态下不许丢草稿（丢草稿只会把线索藏起来）。先去台账按标题／编号核对清楚，这期间改内容不会落到卡片上。':
+    'The outcome of this one is not settled yet — in this state discarding the draft is not allowed (discarding only hides the trail). Check the ledger by title / id first; until then, edits will not reach the card.',
+  '同一个块（同一组字段键）不会再进卡。要重新落卡，请换一个块名、或在记录里多给一个字段，作为新的一条重发。':
+    'The same block (the same set of field keys) never re-enters a card. To land a new draft, rename the block or add one more field, and resend it as a new item.',
+  '正文里这一段照旧可见，卡片上还是它原来那一版。{0}':
+    'This passage stays visible in the body, and the card still holds its earlier version. {0}'
 }
+
+/** `{0}`/`{1}` substitution — the ONE formatter both bundles share. */
+const fillTemplate = (template, args) =>
+  template.replace(/\{(\d+)\}/g, (_, index) => String(args[Number(index)] ?? ''))
+
+/**
+ * Chinese is the source language, so the zh bundle IS the key set: a plain key
+ * maps to itself, a `{n}` template maps to a formatter over the same template.
+ * Nothing to keep in sync by hand — and the Chinese rendering stays byte-for-byte
+ * what it was before this plugin spoke two languages.
+ */
+const LOCALES = {
+  en: EN,
+  zh: Object.fromEntries(
+    Object.keys(EN).map(key => [key, key.includes('{') ? (...args) => fillTemplate(key, args) : key])
+  )
+}
+
+/**
+ * The module-level translator. `register(ctx)` binds it to `ctx.i18n.t`, which
+ * resolves the ACTIVE locale at call time — so every string built inside a render
+ * (or a handler) follows the app's language without threading a translator
+ * through card/detail/helper signatures. Reactivity comes from the host
+ * re-registering this plugin's contributions on a locale switch, which re-renders
+ * the tabs and re-runs these builders.
+ *
+ * Before binding it behaves like the zh bundle (identity + `{n}` substitution):
+ * a string built before `register(ctx)` — and every string the pack's own tests
+ * build by calling these helpers directly — still reads as proper Chinese copy
+ * instead of a raw `{0}` template.
+ */
+let t = (key, ...args) => fillTemplate(String(key), args)
 
 /**
  * The card band's "more below" mask: the last 2rem fade out, applied ONLY when
@@ -4598,13 +4909,13 @@ function FailureBox({ data, onRetry, copyMap }) {
   const kind = data && data.kind
   const copy = copyMap || FAILURE_COPY
   return jsxs('div', { style: S.notice, children: [
-    jsx('div', { children: `${copy[kind] || '读取失败'}${kind ? ` — ${kind}` : ''}` }),
-    data && data.cliPath ? jsx('div', { style: S.meta, children: `CLI: ${data.cliPath}（来源 ${data.cliSource}）` }) : null,
+    jsx('div', { children: `${t(copy[kind] || '读取失败')}${kind ? ` — ${kind}` : ''}` }),
+    data && data.cliPath ? jsx('div', { style: S.meta, children: t('CLI: {0}（来源 {1}）', data.cliPath, data.cliSource) }) : null,
     data && data.note ? jsx('div', { style: S.meta, children: data.note }) : null,
     data && data.error ? jsx('div', { style: S.meta, children: data.error }) : null,
     data && data.detail && data.detail.message ? jsx('div', { style: S.meta, children: String(data.detail.message) }) : null,
     data && data.rawExcerpt ? jsx(PanelBlock, { children: data.rawExcerpt }) : null,
-    jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: onRetry, children: '重试' }) })
+    jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: onRetry, children: t('重试') }) })
   ] })
 }
 
@@ -4643,14 +4954,14 @@ function ToolCatalogTab({ ctx }) {
   useEffect(() => { load() }, [])
 
   if (state.phase === 'loading') {
-    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, { icon: 'loading~spin', title: '正在读取本机工具目录…' }) })
+    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, { icon: 'loading~spin', title: t('正在读取本机工具目录…') }) })
   }
   if (state.phase === 'error') {
     return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, {
-      action: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: '重试' }),
+      action: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: t('重试') }),
       description: state.message,
       icon: 'warning',
-      title: '读取工具目录失败'
+      title: t('读取工具目录失败')
     }) })
   }
 
@@ -4690,23 +5001,23 @@ function ToolCatalogTab({ ctx }) {
 
   return jsxs('div', { style: S.panel, children: [
     jsx(PanelHeader, {
-      actions: jsx(PanelAction, { icon: 'refresh', onClick: load, children: '刷新' }),
-      subtitle: `只读 · 无执行入口、无开关 · 共 ${data.count != null ? data.count : all.length} 个系统 / ${toolCount} 条命令${when ? ` · ${when}` : ''}`,
-      title: '企业工具目录'
+      actions: jsx(PanelAction, { icon: 'refresh', onClick: load, children: t('刷新') }),
+      subtitle: t('只读 · 无执行入口、无开关 · 共 {0} 个系统 / {1} 条命令{2}', data.count != null ? data.count : all.length, toolCount, when ? ` · ${when}` : ''),
+      title: t('企业工具目录')
     }),
-    jsx(SearchField, { ariaLabel: '检索企业工具', onChange: setQuery, placeholder: '检索系统 / 命令 / 说明…', value: query }),
+    jsx(SearchField, { ariaLabel: t('检索企业工具'), onChange: setQuery, placeholder: t('检索系统 / 命令 / 说明…'), value: query }),
     all.length === 0
-      ? jsx('div', { style: S.notice, children: 'shaoke-cli 可用，但当前没有声明任何工具系统（空清单是有效结果）。' })
+      ? jsx('div', { style: S.notice, children: t('shaoke-cli 可用，但当前没有声明任何工具系统（空清单是有效结果）。') })
       : null,
     q && systems.length === 0
-      ? jsx('div', { style: S.notice, children: `没有匹配「${query}」的系统或命令（共 ${all.length} 个系统）。` })
+      ? jsx('div', { style: S.notice, children: t('没有匹配「{0}」的系统或命令（共 {1} 个系统）。', query, all.length) })
       : null,
     jsxs(PanelBody, { children: [
       jsx(PanelList, { children: systems.flatMap(system => {
         const tools = Array.isArray(system.tools) ? system.tools : []
         const rows = [jsx(PanelSectionLabel, { key: `system:${system.name}`, children: system.name })]
         if (tools.length === 0) {
-          rows.push(jsx('div', { key: `empty:${system.name}`, style: S.meta, children: '（该系统未声明工具）' }))
+          rows.push(jsx('div', { key: `empty:${system.name}`, style: S.meta, children: t('（该系统未声明工具）') }))
         } else {
           for (const tool of tools) {
             const key = toolRowKey(system, tool)
@@ -4726,23 +5037,26 @@ function ToolCatalogTab({ ctx }) {
       jsx(PanelDetail, { children: active
         ? jsxs('div', { style: S.detail, children: [
             jsx(PanelMeta, { rows: [
-              { label: '系统', value: active.system.name },
-              { label: '命令', value: jsx('span', { style: S.mono, children: active.tool.full_name || active.tool.name }) },
-              { label: '风险', value: jsx(PanelPill, { tone: active.tool.risk === 'write' ? 'warn' : 'muted', children: active.tool.risk || '?' }) }
+              { label: t('系统'), value: active.system.name },
+              { label: t('命令'), value: jsx('span', { style: S.mono, children: active.tool.full_name || active.tool.name }) },
+              { label: t('风险'), value: jsx(PanelPill, { tone: active.tool.risk === 'write' ? 'warn' : 'muted', children: active.tool.risk || '?' }) }
             ] }),
             active.system.description ? jsx('div', { style: S.prose, children: active.system.description }) : null,
-            jsx(PanelBlock, { children: active.tool.description || '（未提供说明）' })
+            jsx(PanelBlock, { children: active.tool.description || t('（未提供说明）') })
           ] })
-        : jsx(PanelSectionLabel, { children: '没有可显示的命令' }) })
+        : jsx(PanelSectionLabel, { children: t('没有可显示的命令') }) })
     ] }),
-    jsx('div', { style: S.meta, children: `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。` })
+    jsx('div', { style: S.meta, children: t('CLI: {0}（来源 {1}）· 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。', data.cliPath || t('未知'), data.cliSource || t('未知')) })
   ] })
 }
 
 // ── Skill market page ────────────────────────────────────────────────────────
 
 function stateMeta(installState) {
-  return INSTALL_STATE[installState] || { label: installState, tone: 'info' }
+  const entry = INSTALL_STATE[installState]
+
+  // The dictionary stays a plain state→copy map (its values ARE the i18n keys).
+  return entry ? { label: t(entry.label), tone: entry.tone } : { label: installState, tone: 'info' }
 }
 
 /**
@@ -4787,11 +5101,11 @@ export function writeGuardNotice(writeGuard) {
   if (!writeGuard || writeGuard.ok !== false) return null
   const findings = Array.isArray(writeGuard.findings) ? writeGuard.findings : []
   const lines = findings.map(
-    f => `· ${f.message || f.check || '自检未通过'}（${f.check || 'unknown'} @ ${f.layer || f.path || '?'}）`
+    f => t('· {0}（{1} @ {2}）', f.message || f.check || t('自检未通过'), String(f.check || 'unknown'), f.layer || f.path || '?')
   )
   return [
-    '技能写路径自检未通过：已按 fail-closed 拒绝全部写动作（取用 / 卸载 / 启用 / 停用 / 更新）。',
-    '本页的列表与状态仍可读，但在这条问题修好之前，任何写操作都不会被执行。',
+    t('技能写路径自检未通过：已按 fail-closed 拒绝全部写动作（取用 / 卸载 / 启用 / 停用 / 更新）。'),
+    t('本页的列表与状态仍可读，但在这条问题修好之前，任何写操作都不会被执行。'),
     ...lines
   ].join('\n')
 }
@@ -4828,35 +5142,35 @@ function SkillDetailBody({ onAction, skill }) {
   const needsOverwriteAck = Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
 
   return jsxs('div', { style: S.detail, children: [
-    jsx('div', { style: S.detailTitle, children: skill.name || '(未命名)' }),
+    jsx('div', { style: S.detailTitle, children: skill.name || t('(未命名)') }),
     jsxs('div', { style: S.rowMeta, children: [
       statePill(skill.installState),
       skill.category ? jsx(PanelPill, { tone: 'muted', children: skill.category }) : null,
-      needsOverwriteAck ? jsx(PanelPill, { tone: 'warn', children: skill.localEdits ? '本地已改动' : '是否改动无法判定' }) : null
+      needsOverwriteAck ? jsx(PanelPill, { tone: 'warn', children: skill.localEdits ? t('本地已改动') : t('是否改动无法判定') }) : null
     ] }),
-    jsx('div', { style: S.prose, children: skill.description || '（未提供说明）' }),
+    jsx('div', { style: S.prose, children: skill.description || t('（未提供说明）') }),
     jsx(PanelMeta, { rows: [
-      { label: '目录版本', value: skill.version || '目录未给版本' },
-      { label: '记录版本', value: skill.recordedVersion || '—' },
-      { label: '作者', value: skill.author || '未标注' },
-      { label: '标签', value: skill.tags && skill.tags.length ? skill.tags.join('、') : '—' },
-      { label: '落点', value: jsx('span', { style: S.hash, children: skill.installPath || '目录未给技能名' }) }
+      { label: t('目录版本'), value: skill.version || t('目录未给版本') },
+      { label: t('记录版本'), value: skill.recordedVersion || '—' },
+      { label: t('作者'), value: skill.author || t('未标注') },
+      { label: t('标签'), value: skill.tags && skill.tags.length ? skill.tags.join('、') : '—' },
+      { label: t('落点'), value: jsx('span', { style: S.hash, children: skill.installPath || t('目录未给技能名') }) }
     ] }),
-    skill.localHash ? jsx(PanelBlock, { children: `本地内容哈希 ${skill.localHash}` }) : null,
+    skill.localHash ? jsx(PanelBlock, { children: t('本地内容哈希 {0}', skill.localHash) }) : null,
     jsxs('div', { style: S.actions, children: [
       jsx(PanelAction, {
         disabled: !skill.installPath,
         icon: installed ? 'sync' : 'cloud-download',
         onClick: () => onAction(installed ? 'update' : 'install', skill),
         primary: !installed,
-        children: installed ? '更新' : '取用'
+        children: installed ? t('更新') : t('取用')
       }),
       installed
         ? jsx(PanelAction, {
             disabled: !manage || !disabledKnown,
             icon: skill.disabled ? 'play' : 'circle-slash',
             onClick: () => onAction(skill.disabled ? 'enable' : 'disable', skill),
-            children: skill.disabled ? '启用' : '停用'
+            children: skill.disabled ? t('启用') : t('停用')
           })
         : null,
       installed
@@ -4864,7 +5178,7 @@ function SkillDetailBody({ onAction, skill }) {
             disabled: !manage,
             icon: 'trash',
             onClick: () => onAction('uninstall', skill),
-            children: '卸载'
+            children: t('卸载')
           })
         : null
     ] })
@@ -4874,18 +5188,18 @@ function SkillDetailBody({ onAction, skill }) {
 /** The detail body for one ENGINE ledger record (what is on disk for a skill the
  *  engine recorded taking, plus the hash comparison that made the row amber). */
 function InstalledDetailBody({ item }) {
-  const hashLabel = item.hashState === 'mismatch' ? '本地内容哈希（与取用记录不一致）' : '本地内容哈希'
+  const hashLabel = item.hashState === 'mismatch' ? t('本地内容哈希（与取用记录不一致）') : t('本地内容哈希')
   return jsxs('div', { style: S.detail, children: [
-    jsx('div', { style: S.detailTitle, children: item.name || item.reference || '(未命名)' }),
+    jsx('div', { style: S.detailTitle, children: item.name || item.reference || t('(未命名)') }),
     jsxs('div', { style: S.rowMeta, children: [
-      jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
-      item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null
+      jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? t('落点存在') : t('落点已不在') }),
+      item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: t('哈希不符') }) : null
     ] }),
     jsx(PanelMeta, { rows: [
-      { label: '记录版本', value: item.version || '—' },
-      { label: '落点', value: jsx('span', { style: S.hash, children: item.installPath }) },
-      { label: '取用时间', value: item.installedAt || '未知' },
-      ...(item.uninstalledAt ? [{ label: '卸载时间', value: item.uninstalledAt }] : [])
+      { label: t('记录版本'), value: item.version || '—' },
+      { label: t('落点'), value: jsx('span', { style: S.hash, children: item.installPath }) },
+      { label: t('取用时间'), value: item.installedAt || t('未知') },
+      ...(item.uninstalledAt ? [{ label: t('卸载时间'), value: item.uninstalledAt }] : [])
     ] }),
     item.localHash ? jsx(PanelBlock, { children: `${hashLabel} ${item.localHash}` }) : null
   ] })
@@ -4917,12 +5231,12 @@ function catalogCard(skill, activeKey, onSelect) {
       statePill(skill.installState),
       skill.category ? jsx(PanelPill, { tone: 'muted', children: skill.category }) : null
     ] }),
-    description: skill.description || '（未提供说明）',
+    description: skill.description || t('（未提供说明）'),
     key,
-    meta: skill.recordedVersion ? `记录版本 ${skill.recordedVersion}` : undefined,
+    meta: skill.recordedVersion ? t('记录版本 {0}', skill.recordedVersion) : undefined,
     onSelect: () => onSelect(key),
     rowKey: key,
-    title: skill.name || '(未命名)'
+    title: skill.name || t('(未命名)')
   })
 }
 
@@ -4935,15 +5249,15 @@ function ledgerCard(item, i, activeKey, onSelect) {
   return jsx(EntityCard, {
     active: activeKey === key,
     badges: jsxs('span', { style: S.rowMeta, children: [
-      jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
-      item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null
+      jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? t('落点存在') : t('落点已不在') }),
+      item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: t('哈希不符') }) : null
     ] }),
-    description: `记录版本 ${item.version || '—'} · 取用于 ${item.installedAt || '未知'}`,
+    description: t('记录版本 {0} · 取用于 {1}', item.version || '—', item.installedAt || t('未知')),
     key,
     meta: item.installPath || undefined,
     onSelect: () => onSelect(key),
     rowKey: key,
-    title: item.name || item.reference || '(未命名)'
+    title: item.name || item.reference || t('(未命名)')
   })
 }
 
@@ -4959,7 +5273,7 @@ export function summarizeBatchUpdate(results) {
   const list = Array.isArray(results) ? results : []
   const failed = list.filter(entry => !(entry && entry.result && entry.result.ok))
   if (failed.length === 0) {
-    return { ok: true, tone: 'ok', text: `批量更新完成（${list.length} 条）。默认在下一个会话生效。` }
+    return { ok: true, tone: 'ok', text: t('批量更新完成（{0} 条）。默认在下一个会话生效。', list.length) }
   }
   const detail = failed
     .map(entry => {
@@ -4968,14 +5282,14 @@ export function summarizeBatchUpdate(results) {
       // Plain language first, machine token in parentheses (the same shape the
       // single-item banner uses). A bare `（local-edits）` left the user with no
       // idea that their own edits were about to be lost.
-      const plain = SKILL_FAILURE_COPY[kind] || '操作失败'
+      const plain = SKILL_FAILURE_COPY[kind] || t('操作失败')
       return `${skill.name || skill.installPath || skill.slug || '?'}：${plain}（${kind}）`
     })
     .join('、')
   return {
     ok: false,
     tone: 'error',
-    text: `批量更新：成功 ${list.length - failed.length} 条、失败 ${failed.length} 条。失败项：${detail}`
+    text: t('批量更新：成功 {0} 条、失败 {1} 条。失败项：{2}', list.length - failed.length, failed.length, detail)
   }
 }
 
@@ -5003,19 +5317,19 @@ export function writeConfirmCopy(action, skill) {
   return {
     localEdits,
     localEditsUnknown,
-    title: action === 'update' ? `更新技能「${skill.name}」？` : `取用技能「${skill.name}」？`,
+    title: action === 'update' ? t('更新技能「{0}」？', skill.name) : t('取用技能「{0}」？', skill.name),
     description:
       (localEdits
-        ? `⚠ 本地已修改：磁盘上的内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些本地改动。`
+        ? t('⚠ 本地已修改：磁盘上的内容与引擎取用记录里的哈希不一致。继续会覆盖并丢失这些本地改动。')
         : localEditsUnknown
-        ? `⚠ 无法判定本地是否有改动：引擎取用记录里没有这条技能、读不出（损坏或不可读），或记录里没有可比对的内容哈希，而该落点已存在内容。继续可能覆盖并丢失本地改动。`
+        ? t('⚠ 无法判定本地是否有改动：引擎取用记录里没有这条技能、读不出（损坏或不可读），或记录里没有可比对的内容哈希，而该落点已存在内容。继续可能覆盖并丢失本地改动。')
         : '') +
-      (recordElsewhere ? `（该技能在引擎取用记录里的落点是 ${skill.recordInstallPath}，与本次计划落点不同。）` : '') +
-      `将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：${skill.installPath}。` +
+      (recordElsewhere ? t('（该技能在引擎取用记录里的落点是 {0}，与本次计划落点不同。）', skill.recordInstallPath) : '') +
+      t('将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：{0}。', skill.installPath) +
       (skill.onDisk && !skill.ownedByEngine
-        ? `注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。`
+        ? t('注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。')
         : '') +
-      `企业侧技能目录之外的任何内容都不会被改动。`,
+      t('企业侧技能目录之外的任何内容都不会被改动。'),
     destructive: localEdits || localEditsUnknown
   }
 }
@@ -5080,7 +5394,7 @@ function SkillMarketTab({ ctx }) {
     if (result && result.ok) return null
     const k = (result && result.kind) || kind
     const note = result && result.detail && result.detail.lockNote
-    return `${SKILL_FAILURE_COPY[k] || '操作失败'} — ${k}${note ? `（引擎取用记录读取失败：${note}）` : ''}`
+    return t('{0} — {1}{2}', t(SKILL_FAILURE_COPY[k] || '操作失败'), k, note ? t('（引擎取用记录读取失败：{0}）', note) : '')
   }
 
   // Every write funnels through here AFTER a confirmation dialog.
@@ -5102,7 +5416,9 @@ function SkillMarketTab({ ctx }) {
     if (endpoint) {
       return call(endpoint, payload).then(result => {
         setBanner(result && result.ok
-          ? { tone: 'ok', text: `${action === 'update' ? '已更新' : '已取用'}到企业侧技能目录：${result.target}（${result.files} 个文件）；内容哈希 ${result.localHash}。由引擎完成落盘（${result.engine}）。${result.replaced ? '已覆盖既有落点。' : ''}默认在下一个会话生效。` }
+          ? { tone: 'ok', text: (action === 'update'
+              ? t('已更新到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。', result.target, result.files, result.localHash, result.engine)
+              : t('已取用到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。', result.target, result.files, result.localHash, result.engine)) + (result.replaced ? t('已覆盖既有落点。') : '') }
           : { tone: 'error', text: describeResult(action, result) })
         load()
       }, error => { setBanner({ tone: 'error', text: String((error && error.message) || error) }); load() })
@@ -5110,7 +5426,7 @@ function SkillMarketTab({ ctx }) {
     if (action === 'uninstall') {
       return call('/skills/uninstall', { reference: skill.reference || '', installPath: skill.installPath || '', confirm: true }).then(result => {
         setBanner(result && result.ok
-          ? { tone: 'ok', text: result.removed ? `已由引擎删除落点 ${result.installPath}（引擎取用记录一并移除）。` : '引擎里这条技能已不在落点上，取用记录已移除。' }
+          ? { tone: 'ok', text: result.removed ? t('已由引擎删除落点 {0}（引擎取用记录一并移除）。', result.installPath) : t('引擎里这条技能已不在落点上，取用记录已移除。') }
           : { tone: 'error', text: describeResult(action, result) })
         load()
       }, error => { setBanner({ tone: 'error', text: String((error && error.message) || error) }); load() })
@@ -5119,7 +5435,7 @@ function SkillMarketTab({ ctx }) {
     const path = action === 'enable' ? '/skills/enable' : '/skills/disable'
     return call(path, { name: skill.name || '', enabled: action === 'enable', confirm: true }).then(result => {
       setBanner(result && result.ok
-        ? { tone: 'ok', text: `${action === 'enable' ? '已从引擎的停用清单里移出。' : '已写进引擎的停用清单（config.yaml）。'}默认在下一个会话生效。` }
+        ? { tone: 'ok', text: action === 'enable' ? t('已从引擎的停用清单里移出。默认在下一个会话生效。') : t('已写进引擎的停用清单（config.yaml）。默认在下一个会话生效。') }
         : { tone: 'error', text: describeResult(action, result) })
       load()
     }, error => { setBanner({ tone: 'error', text: String((error && error.message) || error) }); load() })
@@ -5136,10 +5452,10 @@ function SkillMarketTab({ ctx }) {
     }
     if (action === 'enable' || action === 'disable') {
       setConfirm({
-        title: `${action === 'enable' ? '启用' : '停用'}技能「${skill.name}」？`,
+        title: t('{0}技能「{1}」？', action === 'enable' ? t('启用') : t('停用'), skill.name),
         description: action === 'enable'
-          ? '将从引擎的停用清单（config.yaml 的 skills.disabled）里移出这条技能，下次会话生效。'
-          : '将把这条技能写进引擎的停用清单（config.yaml 的 skills.disabled），下次会话不再加载。',
+          ? t('将从引擎的停用清单（config.yaml 的 skills.disabled）里移出这条技能，下次会话生效。')
+          : t('将把这条技能写进引擎的停用清单（config.yaml 的 skills.disabled），下次会话不再加载。'),
         destructive: false,
         run: () => perform(action, skill)
       })
@@ -5147,8 +5463,8 @@ function SkillMarketTab({ ctx }) {
     }
     if (action === 'uninstall') {
       setConfirm({
-        title: `卸载技能「${skill.name}」？`,
-        description: `将调用引擎自己的卸载入口删除落点目录 ${skill.installPath}，引擎的取用记录一并移除。此操作不可撤销。`,
+        title: t('卸载技能「{0}」？', skill.name),
+        description: t('将调用引擎自己的卸载入口删除落点目录 {0}，引擎的取用记录一并移除。此操作不可撤销。', skill.installPath),
         destructive: true,
         run: () => perform('uninstall', skill)
       })
@@ -5165,8 +5481,8 @@ function SkillMarketTab({ ctx }) {
 
   const requestBatchUpdate = (skills) => {
     setConfirm({
-      title: `批量更新 ${skills.length} 条技能？`,
-      description: `将依次重新下载并覆盖以下落点：${skills.map(s => s.installPath || s.name).join('、')}。批量写入不会静默执行，需你在此确认。`,
+      title: t('批量更新 {0} 条技能？', skills.length),
+      description: t('将依次重新下载并覆盖以下落点：{0}。批量写入不会静默执行，需你在此确认。', skills.map(s => s.installPath || s.name).join('、')),
       destructive: false,
       run: () => {
         // Sequential on purpose. EACH item's outcome (a resolved `{ok:false}`
@@ -5205,14 +5521,14 @@ function SkillMarketTab({ ctx }) {
   }
 
   if (state.phase === 'loading') {
-    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, { icon: 'loading~spin', title: '正在读取企业技能市场…' }) })
+    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, { icon: 'loading~spin', title: t('正在读取企业技能市场…') }) })
   }
   if (state.phase === 'error') {
     return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, {
-      action: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: '重试' }),
+      action: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: t('重试') }),
       description: state.message,
       icon: 'warning',
-      title: '读取技能市场失败'
+      title: t('读取技能市场失败')
     }) })
   }
 
@@ -5261,24 +5577,24 @@ function SkillMarketTab({ ctx }) {
         jsx(FilterChip, {
           active: installedOnly,
           onClick: () => setInstalledOnly(!installedOnly),
-          children: installedCount ? `只看已安装（${installedCount}）` : '只看已安装'
+          children: installedCount ? t('只看已安装（{0}）', installedCount) : t('只看已安装')
         }),
         updatable.length > 0
           ? jsx(Button, {
               onClick: () => requestBatchUpdate(updatable),
               size: 'sm',
               variant: 'secondary',
-              children: `批量更新 ${updatable.length} 条（需确认）`
+              children: t('批量更新 {0} 条（需确认）', updatable.length)
             })
           : null
       ] }),
-      subtitle: `我安装的 ${lockNote ? '—' : installedLedger.length} 条${installedCount ? `（目录里 ${installedCount} 条）` : ''} · 已审技能 ${catalog.ok ? catalog.count : '—'} 条 · 来源：企业 SkillHub（经 shaoke-cli skillhub）${when ? ` · ${when}` : ''}`,
-      title: '企业技能市场'
+      subtitle: t('我安装的 {0} 条{1} · 已审技能 {2} 条 · 来源：企业 SkillHub（经 shaoke-cli skillhub）{3}', lockNote ? '—' : installedLedger.length, installedCount ? t('（目录里 {0} 条）', installedCount) : '', catalog.ok ? catalog.count : '—', when ? ` · ${when}` : ''),
+      title: t('企业技能市场')
     }),
     jsxs('div', { style: S.meta, children: [
-      `引擎取用记录 ${lockNote ? '读取失败（见下方提示，非“从未装过”）' : `${installedLedger.length} 条`}`,
+      t('引擎取用记录 {0}', lockNote ? t('读取失败（见下方提示，非“从未装过”）') : t('{0} 条', installedLedger.length)),
       jsx('br', {}),
-      `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 技能落点 ${data.skillsPath || '未知'}`
+      t('CLI: {0}（来源 {1}）· 技能落点 {2}', data.cliPath || t('未知'), data.cliSource || t('未知'), data.skillsPath || t('未知'))
     ] }),
     jsx(Banner, { banner }),
 
@@ -5295,7 +5611,7 @@ function SkillMarketTab({ ctx }) {
     // collapsed into the empty list ("0 条"). Uninstall also surfaces it.
     lockNote
       ? jsxs('div', { style: { ...S.notice, borderColor: 'var(--ui-error, #d05a5a)' }, children: [
-          jsx('div', { children: '引擎取用记录读取失败/已损坏：下方「本机已取用」显示为 0 条，是「读不到记录」，不是「从未装过」；此时卸载会报“记录里没有”，更新也会按「无法判定本地是否有改动」处理，必须显式确认覆盖（不会静默替换），这类技能也不会进入批量更新。' }),
+          jsx('div', { children: t('引擎取用记录读取失败/已损坏：下方「本机已取用」显示为 0 条，是「读不到记录」，不是「从未装过」；此时卸载会报“记录里没有”，更新也会按「无法判定本地是否有改动」处理，必须显式确认覆盖（不会静默替换），这类技能也不会进入批量更新。') }),
           jsx('div', { style: S.meta, children: lockNote })
         ] })
       : null,
@@ -5303,26 +5619,26 @@ function SkillMarketTab({ ctx }) {
     // Catalog failure is INDEPENDENT of the local install facts: it is shown
     // here and never collapses the page into "no skills".
     catalog.ok
-      ? jsx('div', { style: S.meta, children: '企业已审技能目录已就绪。' })
+      ? jsx('div', { style: S.meta, children: t('企业已审技能目录已就绪。') })
       : jsxs('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: [
-          jsx('div', { children: `${SKILL_FAILURE_COPY[catalog.kind] || '目录读取失败'} — ${catalog.kind}` }),
-          jsx('div', { style: S.meta, children: '这是「取不到目录」，不是「目录为空」。本机已装技能仍列在下方。' }),
+          jsx('div', { children: t('{0} — {1}', t(SKILL_FAILURE_COPY[catalog.kind] || '目录读取失败'), catalog.kind) }),
+          jsx('div', { style: S.meta, children: t('这是「取不到目录」，不是「目录为空」。本机已装技能仍列在下方。') }),
           catalog.detail && catalog.detail.raw ? jsx(PanelBlock, { children: catalog.detail.raw }) : null
         ] }),
 
     // F6: a catalog capped at the page limit is SUCCESS but NOT the whole
     // catalog — say so instead of silently presenting a truncated list.
     catalog.ok && catalog.truncated
-      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: `目录已达分页上限（${catalog.pages} 页 × 每页 ${catalog.pageSize} 条 = 共 ${catalog.count} 条），结果已截断——上面列出的不是全量已审技能。` })
+      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: t('目录已达分页上限（{0} 页 × 每页 {1} 条 = 共 {2} 条），结果已截断——上面列出的不是全量已审技能。', catalog.pages, catalog.pageSize, catalog.count) })
       : null,
-    data.personalCliPath ? jsx('div', { style: S.meta, children: `PATH 上存在同名 CLI（个人副本）${data.personalCliPath}，已按企业口径忽略。` }) : null,
+    data.personalCliPath ? jsx('div', { style: S.meta, children: t('PATH 上存在同名 CLI（个人副本）{0}，已按企业口径忽略。', data.personalCliPath) }) : null,
 
     disabledNotice
-      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: `引擎停用清单读取失败（${disabledNotice.kind || 'unknown'}），启停开关已禁用，改动不会被静默执行。` })
+      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: t('引擎停用清单读取失败（{0}），启停开关已禁用，改动不会被静默执行。', disabledNotice.kind || 'unknown') })
       : null,
 
     catalog.ok
-      ? jsx(SearchField, { ariaLabel: '检索技能', onChange: setQuery, placeholder: '检索技能名 / 分类 / 标签…', value: query })
+      ? jsx(SearchField, { ariaLabel: t('检索技能'), onChange: setQuery, placeholder: t('检索技能名 / 分类 / 标签…'), value: query })
       : null,
 
     // Category chips. Derived from the catalog itself, so a category the
@@ -5330,7 +5646,7 @@ function SkillMarketTab({ ctx }) {
     // lives in the header (it is a view switch, not a category).
     catalog.ok && all.length > 0
       ? jsxs('div', { style: S.chips, children: [
-          jsx(FilterChip, { active: category === '', onClick: () => setCategory(''), children: '全部' }),
+          jsx(FilterChip, { active: category === '', onClick: () => setCategory(''), children: t('全部') }),
           ...categories.map(cat =>
             jsx(FilterChip, {
               active: category === cat,
@@ -5345,14 +5661,14 @@ function SkillMarketTab({ ctx }) {
     // Skills kept out of the batch are named — a silently shrunken button would
     // read as "there was nothing else to update".
     batchNeedsAck.length > 0
-      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: `以下技能不能进批量更新（批量不带逐项覆盖确认），请逐条更新并在确认框里明确是否覆盖：${batchNeedsAck.map(s => `${s.name || s.installPath || s.slug || '?'}（${s.localEdits ? '本地已改动' : '是否改动无法判定'}）`).join('、')}` })
+      ? jsx('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: t('以下技能不能进批量更新（批量不带逐项覆盖确认），请逐条更新并在确认框里明确是否覆盖：{0}', batchNeedsAck.map(s => `${s.name || s.installPath || s.slug || '?'}（${s.localEdits ? t('本地已改动') : t('是否改动无法判定')}）`).join('、')) })
       : null,
 
     catalog.ok && all.length === 0
-      ? jsx('div', { style: S.notice, children: '企业 SkillHub 当前没有已审技能（空目录是有效结果）。' })
+      ? jsx('div', { style: S.notice, children: t('企业 SkillHub 当前没有已审技能（空目录是有效结果）。') })
       : null,
     catalog.ok && all.length > 0 && skills.length === 0
-      ? jsx('div', { style: S.notice, children: `没有匹配当前筛选的技能（共 ${all.length} 条）${query ? `；关键词「${query}」` : ''}${category ? `；分类「${category}」` : ''}${installedOnly ? '；只看已安装' : ''}。` })
+      ? jsx('div', { style: S.notice, children: t('没有匹配当前筛选的技能（共 {0} 条）{1}{2}{3}。', all.length, query ? t('；关键词「{0}」', query) : '', category ? t('；分类「{0}」', category) : '', installedOnly ? t('；只看已安装') : '') })
       : null,
 
     // The market itself: a grid of SUMMARY cards (name, state, one-liner) on
@@ -5365,11 +5681,11 @@ function SkillMarketTab({ ctx }) {
         ref: measureBand,
         style: bandMore ? { ...S.cardColumn, maskImage: BAND_FADE } : S.cardColumn,
         children: [
-          skills.length > 0 ? jsx(PanelSectionLabel, { children: '企业已审技能' }) : null,
+          skills.length > 0 ? jsx(PanelSectionLabel, { children: t('企业已审技能') }) : null,
           skills.length > 0
             ? jsx(CardGrid, { children: skills.map(skill => catalogCard(skill, activeKey, setSelectedKey)) })
             : null,
-          installedLedger.length > 0 ? jsx(PanelSectionLabel, { children: '本机已取用（引擎台账）' }) : null,
+          installedLedger.length > 0 ? jsx(PanelSectionLabel, { children: t('本机已取用（引擎台账）') }) : null,
           installedLedger.length > 0
             ? jsx(CardGrid, { children: installedLedger.map((item, i) => ledgerCard(item, i, activeKey, setSelectedKey)) })
             : null
@@ -5379,7 +5695,7 @@ function SkillMarketTab({ ctx }) {
         ? (activeEntry.kind === 'catalog'
             ? jsx(SkillDetailBody, { onAction: requestAction, skill: activeEntry.skill })
             : jsx(InstalledDetailBody, { item: activeEntry.item }))
-        : jsx(PanelSectionLabel, { children: '没有可显示的技能' }) })
+        : jsx(PanelSectionLabel, { children: t('没有可显示的技能') }) })
     ] }),
 
     // The confirmation dialog. EVERY write is routed through it — a write never
@@ -5392,19 +5708,19 @@ function SkillMarketTab({ ctx }) {
           title: confirm.title,
           description: confirm.description,
           destructive: Boolean(confirm.destructive),
-          confirmLabel: '确认',
-          cancelLabel: '取消'
+          confirmLabel: t('确认'),
+          cancelLabel: t('取消')
         })
       : null,
 
-    jsx('div', { style: S.meta, children: '安装/卸载/更新全部交由引擎自己的技能管理入口执行，落点、扫描与文件语义由引擎负责；本页只做参数校验、人工确认与如实回显。技能哈希与引擎同源（引擎 tools.skills_guard.content_hash），取用记录就是引擎的 skills/.hub/lock.json。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。' })
+    jsx('div', { style: S.meta, children: t('安装/卸载/更新全部交由引擎自己的技能管理入口执行，落点、扫描与文件语义由引擎负责；本页只做参数校验、人工确认与如实回显。技能哈希与引擎同源（引擎 tools.skills_guard.content_hash），取用记录就是引擎的 skills/.hub/lock.json。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。') })
   ] })
 }
 
 export default {
   id: ID,
-  name: '企业技能与工具',
-  description: '企业已审技能市场（安装/卸载/启停/更新 + 版本对照 + 哈希）与本机工具目录（只读）。',
+  name: t('企业技能与工具'),
+  description: t('企业已审技能市场（安装/卸载/启停/更新 + 版本对照 + 哈希）与本机工具目录（只读）。'),
   defaultEnabled: true,
   register(ctx) {
     // ── W4 · the carrier entry (directive components + reference payload) ──────
@@ -5464,7 +5780,10 @@ export default {
     // then rebuild the two contributions on every locale switch — a static
     // label captured at register time would freeze the language the app loaded
     // with (kanban's `registerLabels` pattern).
-    ctx.i18n.register(TAB_LABELS)
+    ctx.i18n.register(LOCALES)
+    // Bind the module-level translator: every UI string below resolves the
+    // ACTIVE locale at call time.
+    t = ctx.i18n.t
 
     const registerTabs = () =>
       ctx.registerMany([
@@ -5476,14 +5795,14 @@ export default {
           id: SKILLS_TAB_ID,
           area: CAPABILITIES_TABS_AREA,
           order: 10,
-          data: { label: ctx.i18n.t('skillsTab') },
+          data: { label: t('企业技能') },
           render: () => jsx(SkillMarketTab, { ctx })
         },
         {
           id: TOOLS_TAB_ID,
           area: CAPABILITIES_TABS_AREA,
           order: 11,
-          data: { label: ctx.i18n.t('toolsTab') },
+          data: { label: t('企业工具') },
           render: () => jsx(ToolCatalogTab, { ctx })
         }
       ])

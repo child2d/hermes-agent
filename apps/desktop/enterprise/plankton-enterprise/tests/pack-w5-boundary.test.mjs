@@ -62,7 +62,10 @@ function capturingCtx() {
     i18n: {
       register: () => () => {},
       onLocaleChange: () => () => {},
-      t: (key) => ({ skillsTab: '企业技能', toolsTab: '企业工具' })[key] ?? key,
+      // zh is the SOURCE language: the key IS the Chinese copy, so resolving a
+      // key is identity plus `{n}` substitution — exactly what the shipped zh
+      // bundle does (see LOCALES in plugin.js).
+      t: (key, ...args) => String(key).replace(/\{(\d+)\}/g, (_, i) => String(args[Number(i)] ?? '')),
     },
     _contributions: contributions,
   })
