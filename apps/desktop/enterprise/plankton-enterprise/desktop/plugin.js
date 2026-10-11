@@ -48,7 +48,9 @@
 import {
   Button,
   CAPABILITIES_TABS_AREA,
+  CardGrid,
   ConfirmDialog,
+  EntityCard,
   PanelAction,
   PanelBlock,
   PanelBody,
@@ -4528,6 +4530,9 @@ const S = {
   // code/description spans inside a row, and the notice/banner blocks.
   panel: { display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 18px', overflowY: 'auto', height: '100%', minHeight: 0, boxSizing: 'border-box', fontSize: '13px' },
   chips: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
+  // The market's card column: the grid IS the master surface, so it takes the
+  // free width beside the detail pane (PanelBody is the flex row).
+  cardColumn: { display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column', gap: '8px', overflowY: 'auto' },
   mono: { fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
   prose: { color: 'var(--ui-text-secondary)', fontSize: '12px', lineHeight: '18px' },
   // A row's trailing meta: state pill + version comparison, one line, and the
@@ -4780,35 +4785,6 @@ function statePill(installState) {
 
 const isInstalledState = state => Boolean(state) && state !== 'not-installed' && state !== 'name-missing'
 
-/**
- * The kebab / right-click actions of one catalog row: the SAME set, gated by the
- * SAME rules (`installPath` for pickup, `canManageSkill` + a known enable bit
- * for manage), that the detail pane shows as buttons. A kebab keeps the rail one
- * line; the detail is the visible path, so nothing is reachable only by hover.
- */
-function skillRowMenu(skill, onAction) {
-  const installed = isInstalledState(skill.installState)
-  const items = [{
-    disabled: !skill.installPath,
-    label: installed ? '更新' : '取用',
-    onSelect: () => onAction(installed ? 'update' : 'install', skill)
-  }]
-  if (installed) {
-    items.push({
-      disabled: !canManageSkill(skill) || typeof skill.disabled !== 'boolean',
-      label: skill.disabled ? '启用' : '停用',
-      onSelect: () => onAction(skill.disabled ? 'enable' : 'disable', skill)
-    })
-    items.push({
-      disabled: !canManageSkill(skill),
-      label: '卸载',
-      onSelect: () => onAction('uninstall', skill),
-      tone: 'danger'
-    })
-  }
-  return items
-}
-
 /** The detail body for one catalog entry: every fact the old per-row card used
  *  to print inline, plus the actions (which stay gated exactly as before). */
 function SkillDetailBody({ onAction, skill }) {
@@ -4887,7 +4863,7 @@ const catalogKey = skill => `catalog:${skill.reference || skill.slug || skill.na
 /** Rail key for one engine ledger record. */
 const ledgerKey = (item, i) => `ledger:${item.reference || item.installPath || i}`
 
-/** Everything the rail can select, catalog entries first — the detail pane
+/** Everything the grid can select, catalog entries first — the detail pane
  *  resolves a key against this list so one lookup serves both kinds. */
 function marketEntries(skills, ledger) {
   return [
@@ -4896,51 +4872,44 @@ function marketEntries(skills, ledger) {
   ]
 }
 
-/**
- * The market rail's rows: the catalog entries, then the engine's own ledger
- * under its own section label. Catalog rows carry their state pill + the kebab
- * of actions; the ledger rows carry the disk/hash verdicts — which is what made
- * the row amber, so it stays visible without opening the detail.
- */
-function marketRows({ activeKey, ledger, onAction, onSelect, skills }) {
-  const rows = []
+/** One catalog entry as a card: name, state pill + category, the catalog's own
+ *  one-liner, and the recorded version. The full record and every write button
+ *  live in the detail pane the card selects into — a card is a summary. */
+function catalogCard(skill, activeKey, onSelect) {
+  const key = catalogKey(skill)
+  return jsx(EntityCard, {
+    active: activeKey === key,
+    badges: jsxs('span', { style: S.rowMeta, children: [
+      statePill(skill.installState),
+      skill.category ? jsx(PanelPill, { tone: 'muted', children: skill.category }) : null
+    ] }),
+    description: skill.description || '（未提供说明）',
+    key,
+    meta: skill.recordedVersion ? `记录版本 ${skill.recordedVersion}` : undefined,
+    onSelect: () => onSelect(key),
+    rowKey: key,
+    title: skill.name || '(未命名)'
+  })
+}
 
-  if (skills.length > 0) {
-    rows.push(jsx(PanelSectionLabel, { key: 'catalog:label', children: '企业已审技能' }))
-    for (const skill of skills) {
-      rows.push(jsx(PanelListRow, {
-        active: activeKey === catalogKey(skill),
-        icon: 'extensions',
-        key: catalogKey(skill),
-        menuItems: skillRowMenu(skill, onAction),
-        menuLabel: `「${skill.name || skill.slug || '?'}」的操作`,
-        meta: statePill(skill.installState),
-        onSelect: () => onSelect(catalogKey(skill)),
-        rowKey: catalogKey(skill),
-        title: skill.name || '(未命名)'
-      }))
-    }
-  }
-
-  if (ledger.length > 0) {
-    rows.push(jsx(PanelSectionLabel, { key: 'ledger:label', children: '本机已取用（引擎台账）' }))
-    ledger.forEach((item, i) => {
-      rows.push(jsx(PanelListRow, {
-        active: activeKey === ledgerKey(item, i),
-        icon: 'archive',
-        key: ledgerKey(item, i),
-        meta: jsxs('span', { style: S.rowMeta, children: [
-          jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
-          item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null
-        ] }),
-        onSelect: () => onSelect(ledgerKey(item, i)),
-        rowKey: ledgerKey(item, i),
-        title: item.name || item.reference || '(未命名)'
-      }))
-    })
-  }
-
-  return rows
+/** One ENGINE ledger record as a card: the disk verdict, the hash verdict and
+ *  the engine's own hash — the facts that made the entry interesting, before
+ *  anyone opens it. */
+function ledgerCard(item, i, activeKey, onSelect) {
+  const key = ledgerKey(item, i)
+  return jsx(EntityCard, {
+    active: activeKey === key,
+    badges: jsxs('span', { style: S.rowMeta, children: [
+      jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
+      item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null
+    ] }),
+    description: item.localHash ? `本地内容哈希 ${item.localHash}` : undefined,
+    key,
+    meta: item.installPath || undefined,
+    onSelect: () => onSelect(key),
+    rowKey: key,
+    title: item.name || item.reference || '(未命名)'
+  })
 }
 
 /**
@@ -5234,8 +5203,9 @@ function SkillMarketTab({ ctx }) {
   const when = data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''
   const entries = marketEntries(skills, installedLedger)
   // A selection a filter dropped must not keep its detail on screen: fall back
-  // to the first visible row, exactly like the row highlight does.
+  // to the first visible card, exactly like the card highlight does.
   const activeEntry = entries.find(entry => entry.key === selectedKey) || entries[0] || null
+  const activeKey = activeEntry ? activeEntry.key : null
 
   return jsxs('div', { style: S.panel, children: [
     jsx(PanelHeader, {
@@ -5337,18 +5307,21 @@ function SkillMarketTab({ ctx }) {
       ? jsx('div', { style: S.notice, children: `没有匹配当前筛选的技能（共 ${all.length} 条）${query ? `；关键词「${query}」` : ''}${category ? `；分类「${category}」` : ''}${installedOnly ? '；只看已安装' : ''}。` })
       : null,
 
-    // The market itself: core's master-detail — a dense rail of entries (with
-    // the per-row action kebab) beside the selected entry's full record: every
-    // fact, the engine hash, and the WRITE BUTTONS (the visible path; the kebab
-    // is the shortcut). A write still only ever fires through the dialog below.
+    // The market itself: core's master-detail — a grid of SUMMARY cards (name,
+    // state, one-liner) beside the selected card's full record: every fact, the
+    // engine hash, and the WRITE BUTTONS. A card selects; it never carries the
+    // record or the verbs, so nothing is reachable only by a hover affordance.
     jsxs(PanelBody, { children: [
-      jsx(PanelList, { children: marketRows({
-        activeKey: activeEntry ? activeEntry.key : null,
-        ledger: installedLedger,
-        onAction: requestAction,
-        onSelect: setSelectedKey,
-        skills
-      }) }),
+      jsxs('div', { style: S.cardColumn, children: [
+        skills.length > 0 ? jsx(PanelSectionLabel, { children: '企业已审技能' }) : null,
+        skills.length > 0
+          ? jsx(CardGrid, { children: skills.map(skill => catalogCard(skill, activeKey, setSelectedKey)) })
+          : null,
+        installedLedger.length > 0 ? jsx(PanelSectionLabel, { children: '本机已取用（引擎台账）' }) : null,
+        installedLedger.length > 0
+          ? jsx(CardGrid, { children: installedLedger.map((item, i) => ledgerCard(item, i, activeKey, setSelectedKey)) })
+          : null
+      ] }),
       jsx(PanelDetail, { children: activeEntry
         ? (activeEntry.kind === 'catalog'
             ? jsx(SkillDetailBody, { onAction: requestAction, skill: activeEntry.skill })

@@ -453,18 +453,21 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     ).toBe(true)
     expect(marketText, 'a ready catalog must report a numeric approved-skill count').toMatch(/已审技能\s*\d+\s*条/)
 
-    // ── The rail: both sections, one row per entry ──────────────────────────
-    // The market is core's master-detail (`PanelList` rail + `PanelDetail`), so
-    // the rail carries the at-a-glance state and the selected entry's detail
-    // carries the record. Both sections must be labelled and every entry must
-    // render exactly once.
+    // ── The market's cards: both sections, one card per entry ───────────────
+    // The market is core's master-detail with a CARD grid as the master surface
+    // (`CardGrid` of `EntityCard`s + `PanelDetail`), so the cards carry the
+    // summary (name, state pill, one-liner) and the selected card's detail
+    // carries the record. A card is the same click target a rail row was: the
+    // card's own button selects, and `rowKey` lands `data-panel-row` on it — so
+    // these selectors survived the row→card switch unchanged. Both sections must
+    // be labelled and every entry must render exactly once.
     expect(marketText).toContain('企业已审技能')
     expect(marketText).toContain('本机已取用（引擎台账）')
     expect(marketText, 'the deliberately-bogus record must show as a hash mismatch').toContain('哈希不符')
 
-    const catalogRow = (name: string) =>
+    const catalogCard = (name: string) =>
       page.locator('[data-panel-row^="catalog:"]', { hasText: name }).locator('button').first()
-    const ledgerRow = (name: string) =>
+    const ledgerCard = (name: string) =>
       page.locator('[data-panel-row^="ledger:"]', { hasText: name }).locator('button').first()
 
     for (const name of [
@@ -474,25 +477,25 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
       'e2e-new-skill',
       'e2e-occupied-skill'
     ]) {
-      await expect(catalogRow(name), `${name} must render as a catalog row`).toBeVisible()
+      await expect(catalogCard(name), `${name} must render as a catalog card`).toBeVisible()
     }
-    await expect(ledgerRow('e2e-market-skill'), 'the engine ledger must render').toBeVisible()
+    await expect(ledgerCard('e2e-market-skill'), 'the engine ledger must render').toBeVisible()
 
     // ── F-1: the version comparison, in the selected entry's detail ─────────
     // The state that was pinned at `version-unknown` for EVERY install, which is
     // what disabled the manage actions and the batch entry. The detail renders
     // label/value pairs (a `<dl>` grid), so `innerText` separates them with a
     // newline — match across whitespace, not with a literal space.
-    await catalogRow('e2e-outdated-skill').click()
+    await catalogCard('e2e-outdated-skill').click()
     const versionDetail = await page.locator('body').innerText()
     expect(versionDetail, 'the catalog version must be shown').toMatch(/目录版本\s+2\.5\.0/)
     expect(versionDetail, 'the recorded version must be shown').toMatch(/记录版本\s+1\.0\.0/)
     expect(versionDetail, 'record version != catalog version').toContain('已装 · 与目录不一致')
 
-    // HASH PARITY: the ledger row's detail prints the CURRENT engine-computed
+    // HASH PARITY: the ledger card's detail prints the CURRENT engine-computed
     // hash, and it must be byte-for-byte the engine's own
     // `tools.skills_guard.content_hash` (computed in a separate Python process).
-    await ledgerRow('e2e-market-skill').click()
+    await ledgerCard('e2e-market-skill').click()
     const hashDetail = await page.locator('body').innerText()
     expect(hashDetail, 'the hash comparison must be stated').toContain('本地内容哈希（与取用记录不一致）')
     const hashMatch = hashDetail.match(/sha256:[0-9a-f]{16}/)
@@ -506,7 +509,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     // F-1 acceptance: 卸载 must be ENABLED for an engine-recorded, on-disk entry.
     // Before F-1 it was permanently disabled (the version state was always
     // version-unknown), and nothing asserted it.
-    await catalogRow('e2e-consistent-skill').click()
+    await catalogCard('e2e-consistent-skill').click()
     const uninstall = page.getByRole('button', { name: '卸载', exact: true })
     await expect(uninstall, 'the selected entry renders exactly one 卸载').toHaveCount(1)
     expect(await uninstall.isEnabled(), 'F-1: 卸载 must not be permanently disabled').toBe(true)
@@ -514,7 +517,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
     // …while the slot holding content NO record claims stays disabled (uninstall
     // would be a `no-record` failure) and is flagged as "cannot confirm clean".
-    await catalogRow('e2e-occupied-skill').click()
+    await catalogCard('e2e-occupied-skill').click()
     await expect(page.getByRole('button', { name: '卸载', exact: true })).toBeDisabled()
     expect(
       await page.locator('body').innerText(),
@@ -522,7 +525,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     ).toContain('是否改动无法判定')
 
     // The engine-visible drift at a recorded landing is flagged too.
-    await catalogRow('e2e-market-skill').click()
+    await catalogCard('e2e-market-skill').click()
     expect(
       await page.locator('body').innerText(),
       'the engine-visible drift at a recorded landing must be flagged on the entry'
@@ -542,7 +545,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     await expect(dialog).toHaveCount(0)
 
     // A plain first install (nothing at the landing): no loss warning.
-    await catalogRow('e2e-new-skill').click()
+    await catalogCard('e2e-new-skill').click()
     const pickup = page.getByRole('button', { name: '取用', exact: true })
     await expect(pickup, 'the not-installed catalog entry must offer 取用').toHaveCount(1)
     await pickup.click()
@@ -557,7 +560,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     // The occupied landing (content, no record) warns in plain language — that
     // dialog is the path that lets the acknowledgement be SENT, instead of the
     // backend's `local-edits` refusal being a dead end.
-    await catalogRow('e2e-occupied-skill').click()
+    await catalogCard('e2e-occupied-skill').click()
     await page.getByRole('button', { name: '更新', exact: true }).click()
     await expect(dialog).toContainText('更新技能「e2e-occupied-skill」？')
     await expect(dialog).toContainText('无法判定本地是否有改动')
@@ -566,7 +569,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
     // HUMAN CONFIRMATION for the drifted entry: the update dialog states the
     // loss plainly (F-3: the backend's `local-edits` refusal is answerable).
-    await catalogRow('e2e-market-skill').click()
+    await catalogCard('e2e-market-skill').click()
     await page.getByRole('button', { name: '更新', exact: true }).click()
     await expect(dialog).toContainText('更新技能「e2e-market-skill」？')
     await expect(dialog).toContainText('本地已修改')

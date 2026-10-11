@@ -486,20 +486,20 @@
 | `M7-008` | 配置范围选择器 | 标签页上方（插件标签在 Agent 列） | 默认可见 | `src/app/capabilities/scope-selector.tsx:210` |
 | `M7-009` | 范围解析（多连接/跨后端） | 范围选择器内部 | 默认可见 | `src/app/capabilities/scope-selector.tsx:69` |
 | `M7-010` | 能力中心固定连接能力探测 | SDK 特性位 | 默认可见 | `src/app/capabilities/index.tsx:209` |
-| `M7-011` | 技能列表 | 技能标签左侧列表 | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:83` |
-| `M7-012` | 技能启用开关 | 技能行开关 | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:154` |
+| `M7-011` | 技能列表 | 技能标签卡片网格（`CardGrid` + `EntityCard`） | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:83` |
+| `M7-012` | 技能启用开关 | 技能卡片开关 | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:154` |
 | `M7-013` | 技能批量启停 | 列表条开关（全选） | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:172` |
 | `M7-014` | 停用未使用技能 | 列表条菜单项 | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:216` |
 | `M7-015` | 技能详情 | 右栏详情 | 默认可见 | `src/app/capabilities/skills/skill-detail.tsx:18` |
 | `M7-016` | 编辑技能内容 | 技能详情操作 | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:244` |
 | `M7-017` | 归档技能 | 技能详情/列表操作 | 默认可见 | `src/app/capabilities/skills/skills-tab.tsx:368` |
 | `M7-018` | 归档技能确认对话框 | 技能归档弹窗 | 默认可见 | `src/app/learning/archive-skill-confirm-dialog.tsx:43` |
-| `M7-019` | 官方可选技能安装 | 技能列表「官方可选」区 | 需安装 | `src/app/capabilities/skills/skills-tab.tsx:332` |
-| `M7-020` | 官方技能预览详情 | 官方技能行右栏 | 需安装 | `src/app/capabilities/skills/official-skill-detail.tsx:18` |
+| `M7-019` | 官方可选技能安装 | 技能列表「官方可选」区 | 已去掉（见附录 B） | ~~`src/app/capabilities/skills/skills-tab.tsx`~~ |
+| `M7-020` | 官方技能预览详情 | 官方技能行右栏 | 已去掉（见附录 B） | ~~`src/app/capabilities/skills/official-skill-detail.tsx`~~ |
 | `M7-021` | 技能来源分类与可编辑性 | 技能来源徽标 | 默认可见 | `src/app/capabilities/skills/skill-provenance.ts:10` |
-| `M7-022` | Skills Hub 浏览器 | 技能标签底部可调面板 | 默认可见 | `src/app/capabilities/skills/embedded-hub-picker.tsx:71` |
-| `M7-023` | Hub 一键安装（卡片） | Hub 浏览器卡片 | 需安装 | `src/app/capabilities/skills/embedded-hub-picker.tsx:158` |
-| `M7-024` | Hub 更新全部 | Hub 浏览器头部 | 默认可见 | `src/app/capabilities/skills/embedded-hub-picker.tsx:166` |
+| `M7-022` | Skills Hub 浏览器 | 技能标签底部可调面板 | 已去掉（见附录 B） | ~~`src/app/capabilities/skills/embedded-hub-picker.tsx`~~ |
+| `M7-023` | Hub 一键安装（卡片） | Hub 浏览器卡片 | 已去掉（见附录 B） | ~~`src/app/capabilities/skills/embedded-hub-picker.tsx`~~ |
+| `M7-024` | Hub 更新全部 | Hub 浏览器头部 | 已去掉（见附录 B） | ~~`src/app/capabilities/skills/embedded-hub-picker.tsx`~~ |
 | `M7-025` | Hub 安装安全扫描门禁 | Hub 安装失败 toast | 默认可见 | `src/store/hub-actions.ts:209` |
 | `M7-026` | 工具集列表 | 工具集标签左侧列表 | 默认可见 | `src/app/capabilities/toolsets/toolsets-tab.tsx:45` |
 | `M7-027` | 工具集启用开关 | 工具集行开关 | 默认可见 | `src/app/capabilities/toolsets/toolsets-tab.tsx:85` |

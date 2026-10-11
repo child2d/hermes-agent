@@ -13,7 +13,9 @@
  */
 export const Button: any
 export const CAPABILITIES_TABS_AREA: any
+export const CardGrid: any
 export const ConfirmDialog: any
+export const EntityCard: any
 export const GlyphSpinner: any
 export const PanelAction: any
 export const PanelBlock: any

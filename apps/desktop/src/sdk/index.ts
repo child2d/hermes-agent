@@ -1857,6 +1857,15 @@ export {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 export { EmptyState } from '@/components/ui/empty-state'
+/** The CARD form of a browse-able collection: `CardGrid` (a responsive
+ *  auto-fill grid) of `EntityCard`s (title + chips + a two-line summary + a
+ *  quiet fact + an optional control row; the whole card selects). Use it where a
+ *  `PanelList` row is too terse — a catalog whose entries are worth reading
+ *  before you pick one. A card carries a summary, not the record: the full
+ *  record belongs in the detail pane the card selects into. Pass `rowKey` to
+ *  land `data-panel-row` on the card (the same hook `PanelListRow` uses), so a
+ *  selector survives a list↔card switch. */
+export { CardGrid, EntityCard, type EntityCardProps } from '@/components/ui/entity-card'
 export { ErrorState } from '@/components/ui/error-state'
 export { FadeScroll } from '@/components/ui/fade-scroll'
 export { GlyphSpinner } from '@/components/ui/glyph-spinner'

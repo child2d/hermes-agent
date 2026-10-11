@@ -6,6 +6,8 @@ import { ArchiveSkillConfirmDialog } from '@/app/learning/archive-skill-confirm-
 import { CodeEditor } from '@/components/chat/code-editor'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CardGrid, EntityCard } from '@/components/ui/entity-card'
+import { Switch } from '@/components/ui/switch'
 import {
   editLearningNode,
   getLearningNode,
@@ -16,11 +18,11 @@ import { useI18n } from '@/i18n'
 import { Codecs, persistentAtom } from '@/lib/persisted'
 import { queryClient } from '@/lib/query-client'
 import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
+import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import type { SkillInfo } from '@/types/hermes'
 
 import {
-  CapRow,
   DetailColumn,
   DetailPane,
   ListColumn,
@@ -39,14 +41,14 @@ import { categoryFor, filteredSkills, skillsQueryKey, usageOf } from './skills-d
 // most/least-used across navigations and restarts.
 const $skillsSortDesc = persistentAtom('hermes.desktop.capabilities.skillsSortDesc', true, Codecs.bool)
 
-// Row subtitle: category, with non-default origins badged.
-function skillSubtitle(skill: SkillInfo): ReactNode {
+// Card chips: category, with non-default origins badged.
+function skillBadges(skill: SkillInfo): ReactNode {
   const category = prettyName(categoryFor(skill))
   const provenance = skill.provenance
 
   return (
     <>
-      <span className="truncate">{category}</span>
+      <span className="truncate text-2xs text-muted-foreground/50">{category}</span>
       {provenance === 'agent' && (
         <Badge className="shrink-0 normal-case" variant="default">
           learned
@@ -259,20 +261,31 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
             />
           }
         >
-          {visibleSkills.map(skill => (
-            <CapRow
-              active={activeSkill?.name === skill.name}
-              busy={bulkBusy}
-              enabled={skill.enabled}
-              key={skill.name}
-              meta={usageOf(skill) > 0 ? `×${compactNumber(usageOf(skill))}` : undefined}
-              onSelect={() => setSelectedSkill(skill.name)}
-              onToggle={enabled => void handleToggleSkill(skill, enabled)}
-              subtitle={skillSubtitle(skill)}
-              title={skill.name}
-              toggleLabel={skill.name}
-            />
-          ))}
+          <CardGrid>
+            {visibleSkills.map(skill => (
+              <EntityCard
+                actions={
+                  <Switch
+                    aria-label={skill.name}
+                    checked={skill.enabled}
+                    className={cn('cursor-pointer', !skill.enabled && 'opacity-60')}
+                    disabled={bulkBusy}
+                    onCheckedChange={enabled => void handleToggleSkill(skill, enabled)}
+                    title={skill.name}
+                  />
+                }
+                active={activeSkill?.name === skill.name}
+                badges={skillBadges(skill)}
+                className={cn(!skill.enabled && 'opacity-70')}
+                description={skill.description}
+                key={skill.name}
+                meta={usageOf(skill) > 0 ? `×${compactNumber(usageOf(skill))}` : undefined}
+                onSelect={() => setSelectedSkill(skill.name)}
+                rowKey={`skill:${skill.name}`}
+                title={skill.name}
+              />
+            ))}
+          </CardGrid>
         </ListColumn>
         <DetailColumn footer={t.skills.changesApplyNewSessions}>
           {activeSkill && (

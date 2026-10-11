@@ -29,7 +29,8 @@ async function loadPlugin() {
   fs.writeFileSync(
     sdk,
     'export const Button = () => null; export const CAPABILITIES_TABS_AREA = "capabilities.tabs"; ' +
-      'export const ConfirmDialog = () => null; export const GlyphSpinner = () => null; ' +
+      'export const CardGrid = () => null; export const ConfirmDialog = () => null; ' +
+      'export const EntityCard = () => null; export const GlyphSpinner = () => null; ' +
       'export const PanelAction = () => null; export const PanelBlock = () => null; ' +
       'export const PanelBody = () => null; export const PanelDetail = () => null; ' +
       'export const PanelEmpty = () => null; export const PanelHeader = () => null; ' +
