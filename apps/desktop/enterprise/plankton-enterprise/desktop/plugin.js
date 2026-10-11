@@ -4892,9 +4892,10 @@ function catalogCard(skill, activeKey, onSelect) {
   })
 }
 
-/** One ENGINE ledger record as a card: the disk verdict, the hash verdict and
- *  the engine's own hash — the facts that made the entry interesting, before
- *  anyone opens it. */
+/** One ENGINE ledger record as a card: the name, the disk verdict and the hash
+ *  verdict — the facts that made the entry interesting, before anyone opens it.
+ *  The hashes themselves (and every write button) belong to the record, so they
+ *  stay in the detail pane: a card is a summary, not the record. */
 function ledgerCard(item, i, activeKey, onSelect) {
   const key = ledgerKey(item, i)
   return jsx(EntityCard, {
@@ -4903,7 +4904,7 @@ function ledgerCard(item, i, activeKey, onSelect) {
       jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
       item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null
     ] }),
-    description: item.localHash ? `本地内容哈希 ${item.localHash}` : undefined,
+    description: `记录版本 ${item.version || '—'} · 取用于 ${item.installedAt || '未知'}`,
     key,
     meta: item.installPath || undefined,
     onSelect: () => onSelect(key),
