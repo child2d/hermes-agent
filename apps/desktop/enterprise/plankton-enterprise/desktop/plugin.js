@@ -4488,6 +4488,15 @@ const TOOLS_TAB_ID = 'enterprise-tools'
  * agent-facing prompt/face payloads, and the pack contract data — those are
  * content, not interface copy.
  */
+/** `{0}`/`{1}` substitution — the ONE formatter both bundles share. */
+const fillTemplate = (template, args) =>
+  template.replace(/\{(\d+)\}/g, (_, index) => String(args[Number(index)] ?? ''))
+
+/** A templated entry: the registry calls a FUNCTION value with the call-site
+ *  args, while a plain string is rendered as-is (placeholders and all) — so
+ *  every `{n}` entry has to be a function, in BOTH bundles. */
+const en = template => (...args) => fillTemplate(template, args)
+
 const EN = {
   // ── shared ────────────────────────────────────────────────────────────────
   '（未提供说明）': '(no description provided)',
@@ -4527,20 +4536,18 @@ const EN = {
   '检索企业工具': 'Search enterprise tools',
   '检索系统 / 命令 / 说明…': 'Search systems / commands / descriptions…',
   '全部': 'All',
-  '批量更新 {0} 条（需确认）': 'Batch update {0} item(s) (needs confirmation)',
-  '只看已安装（{0}）': 'Installed only ({0})',
-  '记录版本 {0}': 'Recorded version {0}',
-  '记录版本 {0} · 取用于 {1}': 'Recorded version {0} · taken {1}',
-  '{0} — {1}': '{0} — {1}',
-  '{0} 条': '{0}',
-  '（引擎取用记录读取失败：{0}）': '(the engine pickup record failed to read: {0})',
+  '批量更新 {0} 条（需确认）': en('Batch update {0} item(s) (needs confirmation)'),
+  '只看已安装（{0}）': en('Installed only ({0})'),
+  '记录版本 {0}': en('Recorded version {0}'),
+  '记录版本 {0} · 取用于 {1}': en('Recorded version {0} · taken {1}'),
+  '{0} — {1}': en('{0} — {1}'),
+  '{0} 条': en('{0}'),
+  '（引擎取用记录读取失败：{0}）': en('(the engine pickup record failed to read: {0})'),
   '引擎里这条技能已不在落点上，取用记录已移除。':
     'This skill is no longer at that landing in the engine; its pickup record was removed.',
-  '引擎停用清单读取失败（{0}），启停开关已禁用，改动不会被静默执行。':
-    'The engine’s disabled list failed to read ({0}); the enable/disable switches are disabled and no change runs silently.',
-  '我安装的 {0} 条{1} · 已审技能 {2} 条 · 来源：企业 SkillHub（经 shaoke-cli skillhub）{3}':
-    'I installed {0}{1} · {2} approved skills · source: enterprise SkillHub (via shaoke-cli skillhub){3}',
-  '（目录里 {0} 条）': ' ({0} in the catalog)',
+  '引擎停用清单读取失败（{0}），启停开关已禁用，改动不会被静默执行。': en('The engine’s disabled list failed to read ({0}); the enable/disable switches are disabled and no change runs silently.'),
+  '我安装的 {0} 条{1} · 已审技能 {2} 条 · 来源：企业 SkillHub（经 shaoke-cli skillhub）{3}': en('I installed {0}{1} · {2} approved skills · source: enterprise SkillHub (via shaoke-cli skillhub){3}'),
+  '（目录里 {0} 条）': en(' ({0} in the catalog)'),
   '目录读取失败': 'Could not read the catalog',
   '目录版本': 'Catalog version',
   '记录版本': 'Recorded version',
@@ -4554,7 +4561,7 @@ const EN = {
   '目录未给技能名': 'the catalog gives no skill name',
   '本地已改动': 'Modified locally',
   '是否改动无法判定': 'Cannot tell whether it changed',
-  '本地内容哈希 {0}': 'Local content hash {0}',
+  '本地内容哈希 {0}': en('Local content hash {0}'),
   '本地内容哈希': 'Local content hash',
   '本地内容哈希（与取用记录不一致）': 'Local content hash (differs from the pickup record)',
   '落点存在': 'Landing exists',
@@ -4572,12 +4579,11 @@ const EN = {
   '启用': 'Enable',
   '停用': 'Disable',
   '卸载': 'Uninstall',
-  '更新技能「{0}」？': 'Update skill “{0}”?',
-  '取用技能「{0}」？': 'Take skill “{0}”?',
-  '卸载技能「{0}」？': 'Uninstall skill “{0}”?',
-  '{0}技能「{1}」？': '{0} skill “{1}”?',
-  '将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：{0}。':
-    'The skill package will be downloaded again and handed to the engine’s own install entry point (the engine owns the landing, the safety scan and file semantics). Landing: {0}.',
+  '更新技能「{0}」？': en('Update skill “{0}”?'),
+  '取用技能「{0}」？': en('Take skill “{0}”?'),
+  '卸载技能「{0}」？': en('Uninstall skill “{0}”?'),
+  '{0}技能「{1}」？': en('{0} skill “{1}”?'),
+  '将从平台重新下载技能包，并交给引擎自己的安装入口落盘（引擎负责落点、安全扫描与文件语义）。落点：{0}。': en('The skill package will be downloaded again and handed to the engine’s own install entry point (the engine owns the landing, the safety scan and file semantics). Landing: {0}.'),
   '注意：该落点已被一个非引擎取用记录在案的目录占用，引擎会整体替换它。':
     'Note: that landing is occupied by a directory no engine pickup record attests; the engine replaces it wholesale.',
   '企业侧技能目录之外的任何内容都不会被改动。':
@@ -4586,28 +4592,20 @@ const EN = {
     '⚠ Modified locally: the content on disk no longer matches the hash in the engine’s pickup record. Continuing overwrites and loses those local changes.',
   '⚠ 无法判定本地是否有改动：引擎取用记录里没有这条技能、读不出（损坏或不可读），或记录里没有可比对的内容哈希，而该落点已存在内容。继续可能覆盖并丢失本地改动。':
     '⚠ Cannot tell whether it changed locally: the engine’s pickup record has no such skill, cannot be read (damaged or unreadable), or carries no comparable content hash, while the landing already holds content. Continuing may overwrite and lose local changes.',
-  '（该技能在引擎取用记录里的落点是 {0}，与本次计划落点不同。）':
-    '(the engine’s pickup record places this skill at {0}, which differs from this planned landing.)',
-  '将调用引擎自己的卸载入口删除落点目录 {0}，引擎的取用记录一并移除。此操作不可撤销。':
-    'The engine’s own uninstall entry point deletes the landing directory {0}; the engine’s pickup record goes with it. This cannot be undone.',
+  '（该技能在引擎取用记录里的落点是 {0}，与本次计划落点不同。）': en('(the engine’s pickup record places this skill at {0}, which differs from this planned landing.)'),
+  '将调用引擎自己的卸载入口删除落点目录 {0}，引擎的取用记录一并移除。此操作不可撤销。': en('The engine’s own uninstall entry point deletes the landing directory {0}; the engine’s pickup record goes with it. This cannot be undone.'),
   '将从引擎的停用清单（config.yaml 的 skills.disabled）里移出这条技能，下次会话生效。':
     'This skill is removed from the engine’s disabled list (config.yaml → skills.disabled) and loads again from the next session.',
   '将把这条技能写进引擎的停用清单（config.yaml 的 skills.disabled），下次会话不再加载。':
     'This skill is written into the engine’s disabled list (config.yaml → skills.disabled) and stops loading from the next session.',
-  '批量更新 {0} 条技能？': 'Batch-update {0} skills?',
-  '将依次重新下载并覆盖以下落点：{0}。批量写入不会静默执行，需你在此确认。':
-    'These landings are re-downloaded and overwritten one by one: {0}. A batch write never runs silently — it needs your confirmation here.',
-  '批量更新完成（{0} 条）。默认在下一个会话生效。':
-    'Batch update finished ({0}). Applies to new sessions by default.',
-  '批量更新：成功 {0} 条、失败 {1} 条。失败项：{2}':
-    'Batch update: {0} succeeded, {1} failed. Failures: {2}',
-  '已取用到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。':
-    'Taken into the enterprise skill directory: {0} ({1} file(s)); content hash {2}. The engine wrote it ({3}). Applies to new sessions by default.',
-  '已更新到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。':
-    'Updated in the enterprise skill directory: {0} ({1} file(s)); content hash {2}. The engine wrote it ({3}). Applies to new sessions by default.',
+  '批量更新 {0} 条技能？': en('Batch-update {0} skills?'),
+  '将依次重新下载并覆盖以下落点：{0}。批量写入不会静默执行，需你在此确认。': en('These landings are re-downloaded and overwritten one by one: {0}. A batch write never runs silently — it needs your confirmation here.'),
+  '批量更新完成（{0} 条）。默认在下一个会话生效。': en('Batch update finished ({0}). Applies to new sessions by default.'),
+  '批量更新：成功 {0} 条、失败 {1} 条。失败项：{2}': en('Batch update: {0} succeeded, {1} failed. Failures: {2}'),
+  '已取用到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。': en('Taken into the enterprise skill directory: {0} ({1} file(s)); content hash {2}. The engine wrote it ({3}). Applies to new sessions by default.'),
+  '已更新到企业侧技能目录：{0}（{1} 个文件）；内容哈希 {2}。由引擎完成落盘（{3}）。默认在下一个会话生效。': en('Updated in the enterprise skill directory: {0} ({1} file(s)); content hash {2}. The engine wrote it ({3}). Applies to new sessions by default.'),
   '已覆盖既有落点。': 'The existing landing was overwritten.',
-  '已由引擎删除落点 {0}（引擎取用记录一并移除）。':
-    'The engine deleted the landing {0} (its pickup record went with it).',
+  '已由引擎删除落点 {0}（引擎取用记录一并移除）。': en('The engine deleted the landing {0} (its pickup record went with it).'),
   '已写进引擎的停用清单（config.yaml）。默认在下一个会话生效。':
     'Written into the engine’s disabled list (config.yaml). Applies to new sessions by default.',
   '已从引擎的停用清单里移出。默认在下一个会话生效。':
@@ -4615,42 +4613,35 @@ const EN = {
   '企业已审技能目录已就绪。': 'The approved-skill catalog is ready.',
   '企业 SkillHub 当前没有已审技能（空目录是有效结果）。':
     'The enterprise SkillHub currently has no approved skill (an empty catalog is a valid result).',
-  '没有匹配当前筛选的技能（共 {0} 条）{1}{2}{3}。':
-    'No skill matches the current filter (of {0}){1}{2}{3}.',
-  '；关键词「{0}」': '; keyword “{0}”',
-  '；分类「{0}」': '; category “{0}”',
+  '没有匹配当前筛选的技能（共 {0} 条）{1}{2}{3}。': en('No skill matches the current filter (of {0}){1}{2}{3}.'),
+  '；关键词「{0}」': en('; keyword “{0}”'),
+  '；分类「{0}」': en('; category “{0}”'),
   '；只看已安装': '; installed only',
-  '没有匹配「{0}」的系统或命令（共 {1} 个系统）。':
-    'No system or command matches “{0}” (of {1} systems).',
+  '没有匹配「{0}」的系统或命令（共 {1} 个系统）。': en('No system or command matches “{0}” (of {1} systems).'),
   'shaoke-cli 可用，但当前没有声明任何工具系统（空清单是有效结果）。':
     'shaoke-cli is available but declares no tool system (an empty listing is a valid result).',
-  '目录已达分页上限（{0} 页 × 每页 {1} 条 = 共 {2} 条），结果已截断——上面列出的不是全量已审技能。':
-    'The catalog hit its paging ceiling ({0} pages × {1} per page = {2} total); the list is truncated — what you see above is not every approved skill.',
-  'PATH 上存在同名 CLI（个人副本）{0}，已按企业口径忽略。':
-    'A same-named CLI (personal copy) exists on PATH at {0}; it is ignored under the enterprise policy.',
-  '只读 · 无执行入口、无开关 · 共 {0} 个系统 / {1} 条命令{2}':
-    'Read-only · no execution entry, no switches · {0} systems / {1} commands{2}',
-  'CLI: {0}（来源 {1}）': 'CLI: {0} (source {1})',
-  'CLI: {0}（来源 {1}）· 技能落点 {2}': 'CLI: {0} (source {1}) · skill landing {2}',
-  'CLI: {0}（来源 {1}）· 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。':
-    'CLI: {0} (source {1}) · this page only lists the local CLI’s command inventory; authorisation and execution belong to shaoke-cli itself, and this app reads no token.',
+  '目录已达分页上限（{0} 页 × 每页 {1} 条 = 共 {2} 条），结果已截断——上面列出的不是全量已审技能。': en('The catalog hit its paging ceiling ({0} pages × {1} per page = {2} total); the list is truncated — what you see above is not every approved skill.'),
+  'PATH 上存在同名 CLI（个人副本）{0}，已按企业口径忽略。': en('A same-named CLI (personal copy) exists on PATH at {0}; it is ignored under the enterprise policy.'),
+  '只读 · 无执行入口、无开关 · 共 {0} 个系统 / {1} 条命令{2}': en('Read-only · no execution entry, no switches · {0} systems / {1} commands{2}'),
+  'CLI: {0}（来源 {1}）': en('CLI: {0} (source {1})'),
+  'CLI: {0}（来源 {1}）· 技能落点 {2}': en('CLI: {0} (source {1}) · skill landing {2}'),
+  'CLI: {0}（来源 {1}）· 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。': en('CLI: {0} (source {1}) · this page only lists the local CLI’s command inventory; authorisation and execution belong to shaoke-cli itself, and this app reads no token.'),
   '未知原因': 'unknown reason',
   '安装/卸载/更新全部交由引擎自己的技能管理入口执行，落点、扫描与文件语义由引擎负责；本页只做参数校验、人工确认与如实回显。技能哈希与引擎同源（引擎 tools.skills_guard.content_hash），取用记录就是引擎的 skills/.hub/lock.json。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。':
     'Install / uninstall / update all run through the engine’s own skill management entry point; the engine owns the landing, the scan and file semantics, while this page only validates parameters, asks a human and reports back honestly. Skill hashes share the engine’s implementation (tools.skills_guard.content_hash) and the pickup records are the engine’s own skills/.hub/lock.json. “Disable” writes the engine’s enable state (config.yaml → skills.disabled). Every write needs human confirmation, and this app reads no token.',
-  '引擎取用记录 {0}': 'Engine pickup records {0}',
+  '引擎取用记录 {0}': en('Engine pickup records {0}'),
   '读取失败（见下方提示，非“从未装过”）': 'read failed (see the notice below — this is NOT “never installed”)',
   '引擎取用记录读取失败/已损坏：下方「本机已取用」显示为 0 条，是「读不到记录」，不是「从未装过」；此时卸载会报“记录里没有”，更新也会按「无法判定本地是否有改动」处理，必须显式确认覆盖（不会静默替换），这类技能也不会进入批量更新。':
     'The engine’s pickup record failed to read or is damaged: “taken on this machine” below shows 0 because the record cannot be read, NOT because nothing was ever installed. In this state an uninstall reports “not in the record”, an update is treated as “cannot tell whether it changed locally” and needs an explicit overwrite confirmation (nothing is replaced silently), and such skills are excluded from batch updates.',
-  '引擎停用清单读取失败（{0}）': 'The engine’s disabled list failed to read ({0})',
+  '引擎停用清单读取失败（{0}）': en('The engine’s disabled list failed to read ({0})'),
   '这是「取不到目录」，不是「目录为空」。本机已装技能仍列在下方。':
     'This is “the catalog could not be fetched”, not “the catalog is empty”. Locally installed skills are still listed below.',
-  '以下技能不能进批量更新（批量不带逐项覆盖确认），请逐条更新并在确认框里明确是否覆盖：{0}':
-    'These skills cannot join a batch update (a batch carries no per-item overwrite confirmation). Update them one by one and state the overwrite decision in each dialog: {0}',
+  '以下技能不能进批量更新（批量不带逐项覆盖确认），请逐条更新并在确认框里明确是否覆盖：{0}': en('These skills cannot join a batch update (a batch carries no per-item overwrite confirmation). Update them one by one and state the overwrite decision in each dialog: {0}'),
   '技能写路径自检未通过：已按 fail-closed 拒绝全部写动作（取用 / 卸载 / 启用 / 停用 / 更新）。':
     'The skill write-path self-check failed: every write (take / uninstall / enable / disable / update) is refused, fail-closed.',
   '本页的列表与状态仍可读，但在这条问题修好之前，任何写操作都不会被执行。':
     'The lists and states on this page stay readable, but no write runs until this is fixed.',
-  '· {0}（{1} @ {2}）': '· {0} ({1} @ {2})',
+  '· {0}（{1} @ {2}）': en('· {0} ({1} @ {2})'),
   '自检未通过': 'self-check failed',
   // ── failure copy (the catalog / tool read paths) ──────────────────────────
   '未找到本机 shaoke-cli（企业副本应位于引擎数据目录的 bin 下）':
@@ -4705,10 +4696,8 @@ const EN = {
   '今日截止': 'Due today',
   '无截止日期': 'No due date',
   '统计': 'Stats',
-  '统计口径：待办＝记录条数；已逾期＝{0}早于今天；':
-    'Counting: open = record count; overdue = {0} earlier than today;',
-  '今日截止＝{0}落在未来 24 小时窗口内（服务端场景口径是 24 小时窗口而非自然日；日界取本机时区）。':
-    'Due today = {0} falls inside the next 24-hour window (the server’s scenario window is 24 h, not a calendar day; the day boundary is the local timezone).',
+  '统计口径：待办＝记录条数；已逾期＝{0}早于今天；': en('Counting: open = record count; overdue = {0} earlier than today;'),
+  '今日截止＝{0}落在未来 24 小时窗口内（服务端场景口径是 24 小时窗口而非自然日；日界取本机时区）。': en('Due today = {0} falls inside the next 24-hour window (the server’s scenario window is 24 h, not a calendar day; the day boundary is the local timezone).'),
   'agent 起草': 'Drafted by the agent',
   '须本人给': 'You must supply it',
   '须本人指定': 'You must specify it',
@@ -4727,42 +4716,31 @@ const EN = {
   '这一张已经丢了，': 'This card was already discarded;',
   '这一条已经写进台账了，卡片不再接受新版本。要改内容，请让助手另发一个「更新」类块（改既有工单的那一种，不是新建）。':
     'This record is already in the ledger, so the card accepts no new version. To change the content, have the assistant send an “update” block (the kind that edits an existing ticket, not a new one).',
-  'ok:true 但读回未确认（{0}）': 'ok:true but the read-back was not confirmed ({0})',
-  '{0} · 但回执是 {1}，先核对': '{0} · but the receipt is {1}; verify first',
+  'ok:true 但读回未确认（{0}）': en('ok:true but the read-back was not confirmed ({0})'),
+  '{0} · 但回执是 {1}，先核对': en('{0} · but the receipt is {1}; verify first'),
   '执行未返回结果': 'The action returned no result',
-  '未写入：{0}': 'Not written: {0}',
-  '已写入并读回确认{0}': 'Written and confirmed by read-back{0}',
-  '已提交，结果待核对{0}': 'Submitted; the outcome needs verification{0}',
-  '结果未知（{0}）{1}': 'Outcome unknown ({0}){1}',
+  '未写入：{0}': en('Not written: {0}'),
+  '已写入并读回确认{0}': en('Written and confirmed by read-back{0}'),
+  '已提交，结果待核对{0}': en('Submitted; the outcome needs verification{0}'),
+  '结果未知（{0}）{1}': en('Outcome unknown ({0}){1}'),
   '执行失败': 'The action failed',
   '正在取回内容…': 'Fetching content…',
   '草稿': 'Draft',
   '（等你给）': '(waiting for you)',
-  '还缺：{0}': 'Still missing: {0}',
+  '还缺：{0}': en('Still missing: {0}'),
   '未取到登录身份：确认写动作将被拒绝（fail-closed）。':
     'No signed-in identity was found: confirming a write will be refused (fail-closed).',
-  '确认以「{0}」执行：{1}': 'Confirm running as “{0}”: {1}',
+  '确认以「{0}」执行：{1}': en('Confirm running as “{0}”: {1}'),
   '未知身份': 'unknown identity',
   '未命名': 'unnamed',
-  '参数 {0}': 'parameter {0}',
+  '参数 {0}': en('parameter {0}'),
   '这一笔的结果还没弄清楚 —— 这一状态下不许丢草稿（丢草稿只会把线索藏起来）。先去台账按标题／编号核对清楚，这期间改内容不会落到卡片上。':
     'The outcome of this one is not settled yet — in this state discarding the draft is not allowed (discarding only hides the trail). Check the ledger by title / id first; until then, edits will not reach the card.',
   '同一个块（同一组字段键）不会再进卡。要重新落卡，请换一个块名、或在记录里多给一个字段，作为新的一条重发。':
     'The same block (the same set of field keys) never re-enters a card. To land a new draft, rename the block or add one more field, and resend it as a new item.',
-  '正文里这一段照旧可见，卡片上还是它原来那一版。{0}':
-    'This passage stays visible in the body, and the card still holds its earlier version. {0}'
+  '正文里这一段照旧可见，卡片上还是它原来那一版。{0}': en('This passage stays visible in the body, and the card still holds its earlier version. {0}')
 }
 
-/** `{0}`/`{1}` substitution — the ONE formatter both bundles share. */
-const fillTemplate = (template, args) =>
-  template.replace(/\{(\d+)\}/g, (_, index) => String(args[Number(index)] ?? ''))
-
-/**
- * Chinese is the source language, so the zh bundle IS the key set: a plain key
- * maps to itself, a `{n}` template maps to a formatter over the same template.
- * Nothing to keep in sync by hand — and the Chinese rendering stays byte-for-byte
- * what it was before this plugin spoke two languages.
- */
 const LOCALES = {
   en: EN,
   zh: Object.fromEntries(
