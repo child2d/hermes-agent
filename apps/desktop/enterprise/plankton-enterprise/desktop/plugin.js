@@ -4474,6 +4474,15 @@ const TAB_LABELS = {
   zh: { skillsTab: '企业技能', toolsTab: '企业工具' }
 }
 
+/**
+ * The card band's "more below" mask: the last 2rem fade out, applied ONLY when
+ * the band actually has more below the fold (see `measureBand` in
+ * SkillMarketTab). Without the measurement a short catalog would dim its own
+ * last row of cards — the exact artifact the fade is meant to explain away.
+ * Core's skills tab carries the same literal (`BAND_FADE`).
+ */
+const BAND_FADE = 'linear-gradient(to bottom, #000 calc(100% - 2rem), transparent)'
+
 const FAILURE_COPY = {
   'cli-missing': '未找到本机 shaoke-cli（企业副本应位于引擎数据目录的 bin 下）',
   'cli-failed': 'shaoke-cli 执行失败',
@@ -4547,11 +4556,9 @@ const S = {
   chips: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
   // The market's master surface: the card grid sits ABOVE the selected record's
   // detail (top/bottom, never left/right — a card grid needs width, a record
-  // needs a reading measure), so the grid is a basis-sized scrollable band. The
-  // bottom mask fades the last ~2rem so a clipped row reads as "more below"
-  // rather than as a rendering cut (same maskImage-in-style move as core's
-  // profile switcher / churn bar).
-  cardColumn: { display: 'flex', flex: '0 1 42%', minWidth: 0, minHeight: 0, flexDirection: 'column', gap: '8px', overflowY: 'auto', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 2rem), transparent)' },
+  // needs a reading measure), so the grid is a basis-sized scrollable band. Its
+  // bottom fade is applied at render time, only while there is more below.
+  cardColumn: { display: 'flex', flex: '0 1 42%', minWidth: 0, minHeight: 0, flexDirection: 'column', gap: '8px', overflowY: 'auto' },
   // Holds [card grid] over [detail] as a plain column: no sash, no rail.
   stack: { display: 'flex', flex: '1 1 auto', minHeight: 0, flexDirection: 'column', gap: '10px', overflow: 'hidden' },
   mono: { fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
@@ -5040,6 +5047,19 @@ function SkillMarketTab({ ctx }) {
   // Which row the detail pane shows: a catalog entry key or a ledger key. A
   // selection that a filter drops falls back to the first visible row.
   const [selectedKey, setSelectedKey] = useState(null)
+  // The card band's bottom fade: on ONLY while the grid has more below the fold
+  // (a callback ref measures at mount, `onScroll` keeps it honest), so a short
+  // catalog never dims its own last row of cards.
+  const [bandMore, setBandMore] = useState(false)
+  const measureBand = el => {
+    if (!el) {
+      return
+    }
+
+    const more = el.scrollHeight - el.scrollTop - el.clientHeight > 8
+
+    setBandMore(current => (current === more ? current : more))
+  }
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -5340,16 +5360,21 @@ function SkillMarketTab({ ctx }) {
     // and the WRITE BUTTONS. A card selects; it never carries the record or the
     // verbs, so nothing is reachable only by a hover affordance.
     jsxs('div', { style: S.stack, children: [
-      jsxs('div', { style: S.cardColumn, children: [
-        skills.length > 0 ? jsx(PanelSectionLabel, { children: '企业已审技能' }) : null,
-        skills.length > 0
-          ? jsx(CardGrid, { children: skills.map(skill => catalogCard(skill, activeKey, setSelectedKey)) })
-          : null,
-        installedLedger.length > 0 ? jsx(PanelSectionLabel, { children: '本机已取用（引擎台账）' }) : null,
-        installedLedger.length > 0
-          ? jsx(CardGrid, { children: installedLedger.map((item, i) => ledgerCard(item, i, activeKey, setSelectedKey)) })
-          : null
-      ] }),
+      jsxs('div', {
+        onScroll: event => measureBand(event.currentTarget),
+        ref: measureBand,
+        style: bandMore ? { ...S.cardColumn, maskImage: BAND_FADE } : S.cardColumn,
+        children: [
+          skills.length > 0 ? jsx(PanelSectionLabel, { children: '企业已审技能' }) : null,
+          skills.length > 0
+            ? jsx(CardGrid, { children: skills.map(skill => catalogCard(skill, activeKey, setSelectedKey)) })
+            : null,
+          installedLedger.length > 0 ? jsx(PanelSectionLabel, { children: '本机已取用（引擎台账）' }) : null,
+          installedLedger.length > 0
+            ? jsx(CardGrid, { children: installedLedger.map((item, i) => ledgerCard(item, i, activeKey, setSelectedKey)) })
+            : null
+        ]
+      }),
       jsx(PanelDetail, { children: activeEntry
         ? (activeEntry.kind === 'catalog'
             ? jsx(SkillDetailBody, { onAction: requestAction, skill: activeEntry.skill })

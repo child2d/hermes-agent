@@ -1,6 +1,6 @@
 import { compactNumber } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
-import { type ReactNode, useCallback, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArchiveSkillConfirmDialog } from '@/app/learning/archive-skill-confirm-dialog'
 import { CodeEditor } from '@/components/chat/code-editor'
@@ -34,6 +34,12 @@ import { CapabilityEmpty, SortButton } from '../primitives'
 
 import { SkillDetail } from './skill-detail'
 import { categoryFor, filteredSkills, skillsQueryKey, usageOf } from './skills-data'
+
+// The "more below" hint for the card band — a scroll container that clips a
+// whole row of cards. Fades the last 2rem ONLY while something is still below
+// the fold, so a short list never dims its own last row (same maskImage idea as
+// the profile switcher's scroll mask; see the plugin's BAND_FADE twin).
+const BAND_FADE = 'linear-gradient(to bottom, #000 calc(100% - 2rem), transparent)'
 
 // Sort direction for the Skills list — persisted so the tab remembers
 // most/least-used across navigations and restarts.
@@ -176,6 +182,39 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
       false
     )
 
+  // The band's bottom fade, measured rather than assumed: it is on only while
+  // the grid has more below the fold, so a short list (or a scrolled-to-bottom
+  // one) never dims its own last row.
+  const bandRef = useRef<HTMLDivElement>(null)
+  const [bandMore, setBandMore] = useState(false)
+
+  const measureBand = useCallback(() => {
+    const el = bandRef.current
+
+    if (!el) {
+      return
+    }
+
+    const more = el.scrollHeight - el.scrollTop - el.clientHeight > 8
+
+    setBandMore(current => (current === more ? current : more))
+  }, [])
+
+  useEffect(() => {
+    const el = bandRef.current
+
+    measureBand()
+    el?.addEventListener('scroll', measureBand, { passive: true })
+    window.addEventListener('resize', measureBand)
+
+    return () => {
+      el?.removeEventListener('scroll', measureBand)
+      window.removeEventListener('resize', measureBand)
+    }
+    // Re-measure when the grid's own height changes (a filter, a resize of the
+    // band): the element identity is stable, the content is not.
+  }, [measureBand, visibleSkills.length])
+
   const openSkillEditor = async (name: string) => {
     try {
       const node = await getLearningNode(name, profile)
@@ -262,7 +301,9 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
             }
           />
           <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [mask-image:linear-gradient(to_bottom,#000_calc(100%_-_2rem),transparent)]"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+            ref={bandRef}
+            style={bandMore ? { maskImage: BAND_FADE } : undefined}
           >
             <CardGrid>
               {visibleSkills.map(skill => (
