@@ -305,8 +305,11 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
               />
             }
           />
+          {/* px-2 on top of the container's pl-3 lands every card BOX at 20px,
+              the same left edge as the strip text above it and the record's text
+              below it. */}
           <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 [scrollbar-gutter:stable]"
             ref={bandRef}
             style={bandMore ? { maskImage: BAND_FADE } : undefined}
           >
