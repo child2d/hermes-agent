@@ -76,6 +76,14 @@ function capturingCtx() {
     storage: { get: (_k, fallback) => fallback, set: () => {}, remove: () => {} },
     registerMany: (cs) => contributions.push(...cs),
     register: (c) => contributions.push(c),
+    // The plugin's only localized strings are its tab labels; the stub resolves
+    // the same keys the shipped bundle does, so label assertions keep meaning
+    // the same thing.
+    i18n: {
+      register: () => () => {},
+      onLocaleChange: () => () => {},
+      t: (key) => ({ skillsTab: '企业技能', toolsTab: '企业工具' })[key] ?? key,
+    },
     _contributions: contributions,
   }
 }

@@ -25,11 +25,9 @@ import type { SkillInfo } from '@/types/hermes'
 import {
   DetailColumn,
   DetailPane,
-  ListColumn,
   ListStrip,
   ListStripMenu,
-  type ListStripMenuToggle,
-  MasterDetail
+  type ListStripMenuToggle
 } from '../../master-detail'
 import { prettyName } from '../../settings/helpers'
 import { CapabilityEmpty, SortButton } from '../primitives'
@@ -240,64 +238,71 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
 
   return (
     <>
-      <MasterDetail pane={skillEditorPane} resizeId="capabilities-split" split="wide">
-        <ListColumn
-          header={
-            <ListStrip
-              left={<SortButton desc={skillsSortDesc} onFlip={() => $skillsSortDesc.set(!$skillsSortDesc.get())} />}
-              right={
-                <ListStripMenu
-                  items={[
-                    {
-                      disabled: bulkBusy,
-                      label: t.skills.disableUnused,
-                      onSelect: () => void disableUnused()
-                    }
-                  ]}
-                  label={t.skills.tabSkills}
-                  toggle={bulkSwitch}
-                />
-              }
-            />
-          }
-        >
-          <CardGrid>
-            {visibleSkills.map(skill => (
-              <EntityCard
-                actions={
-                  <Switch
-                    aria-label={skill.name}
-                    checked={skill.enabled}
-                    className={cn('cursor-pointer', !skill.enabled && 'opacity-60')}
-                    disabled={bulkBusy}
-                    onCheckedChange={enabled => void handleToggleSkill(skill, enabled)}
-                    title={skill.name}
-                  />
-                }
-                active={activeSkill?.name === skill.name}
-                badges={skillBadges(skill)}
-                className={cn(!skill.enabled && 'opacity-70')}
-                description={skill.description}
-                key={skill.name}
-                meta={usageOf(skill) > 0 ? `×${compactNumber(usageOf(skill))}` : undefined}
-                onSelect={() => setSelectedSkill(skill.name)}
-                rowKey={`skill:${skill.name}`}
-                title={skill.name}
+      {/* Top/Bottom, never left/right. A card grid needs WIDTH (columns) where a
+          record needs the reading measure, so the grid takes a 40% band ABOVE
+          the detail instead of a rail beside it. The SKILL.md editor
+          (`skillEditorPane`) still docks at the very bottom, exactly as it did
+          in the `pane` slot of `MasterDetail`. */}
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex min-h-0 shrink-0 basis-2/5 flex-col border-b border-(--ui-stroke-tertiary) p-2">
+          <ListStrip
+            left={<SortButton desc={skillsSortDesc} onFlip={() => $skillsSortDesc.set(!$skillsSortDesc.get())} />}
+            right={
+              <ListStripMenu
+                items={[
+                  {
+                    disabled: bulkBusy,
+                    label: t.skills.disableUnused,
+                    onSelect: () => void disableUnused()
+                  }
+                ]}
+                label={t.skills.tabSkills}
+                toggle={bulkSwitch}
               />
-            ))}
-          </CardGrid>
-        </ListColumn>
-        <DetailColumn footer={t.skills.changesApplyNewSessions}>
-          {activeSkill && (
-            <SkillDetail
-              onArchive={() => setArchiveTarget(activeSkill.name)}
-              onEdit={() => void openSkillEditor(activeSkill.name)}
-              profile={profile}
-              skill={activeSkill}
-            />
-          )}
-        </DetailColumn>
-      </MasterDetail>
+            }
+          />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+            <CardGrid>
+              {visibleSkills.map(skill => (
+                <EntityCard
+                  actions={
+                    <Switch
+                      aria-label={skill.name}
+                      checked={skill.enabled}
+                      className={cn('cursor-pointer', !skill.enabled && 'opacity-60')}
+                      disabled={bulkBusy}
+                      onCheckedChange={enabled => void handleToggleSkill(skill, enabled)}
+                      title={skill.name}
+                    />
+                  }
+                  active={activeSkill?.name === skill.name}
+                  badges={skillBadges(skill)}
+                  className={cn(!skill.enabled && 'opacity-70')}
+                  description={skill.description}
+                  key={skill.name}
+                  meta={usageOf(skill) > 0 ? `×${compactNumber(usageOf(skill))}` : undefined}
+                  onSelect={() => setSelectedSkill(skill.name)}
+                  rowKey={`skill:${skill.name}`}
+                  title={skill.name}
+                />
+              ))}
+            </CardGrid>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <DetailColumn footer={t.skills.changesApplyNewSessions}>
+            {activeSkill && (
+              <SkillDetail
+                onArchive={() => setArchiveTarget(activeSkill.name)}
+                onEdit={() => void openSkillEditor(activeSkill.name)}
+                profile={profile}
+                skill={activeSkill}
+              />
+            )}
+          </DetailColumn>
+        </div>
+        {skillEditorPane}
+      </div>
       {archiveTarget && (
         <ArchiveSkillConfirmDialog
           onApply={() => {

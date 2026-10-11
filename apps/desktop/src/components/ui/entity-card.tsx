@@ -17,7 +17,14 @@ import { cn } from '@/lib/utils'
 export function CardGrid({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="@container">
-      <div className={cn('grid content-start gap-3 @sm:grid-cols-2', className)}>{children}</div>
+      <div
+        className={cn(
+          'grid content-start gap-3 @sm:grid-cols-2 @3xl:grid-cols-3 @6xl:grid-cols-4',
+          className
+        )}
+      >
+        {children}
+      </div>
     </div>
   )
 }

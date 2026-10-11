@@ -4459,6 +4459,21 @@ const ID = 'plankton-enterprise'
 const SKILLS_TAB_ID = 'enterprise-skills'
 const TOOLS_TAB_ID = 'enterprise-tools'
 
+/**
+ * The TWO strings this plugin localizes: its Capabilities tab labels. They are
+ * registered under the plugin id (`ctx.i18n.register`) and resolved through
+ * `ctx.i18n.t`, exactly like kanban's labels — no core catalog is touched, and
+ * `en` doubles as the translator's fallback for any locale without a bundle.
+ *
+ * Scope note: only the TAB LABELS follow the UI language. Everything the two
+ * panels render is still a Chinese literal, so an English UI shows English
+ * tabs over Chinese panels until the panel copy itself is localized.
+ */
+const TAB_LABELS = {
+  en: { skillsTab: 'Enterprise Skills', toolsTab: 'Enterprise Tools' },
+  zh: { skillsTab: '企业技能', toolsTab: '企业工具' }
+}
+
 const FAILURE_COPY = {
   'cli-missing': '未找到本机 shaoke-cli（企业副本应位于引擎数据目录的 bin 下）',
   'cli-failed': 'shaoke-cli 执行失败',
@@ -4530,9 +4545,12 @@ const S = {
   // code/description spans inside a row, and the notice/banner blocks.
   panel: { display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 18px', overflowY: 'auto', height: '100%', minHeight: 0, boxSizing: 'border-box', fontSize: '13px' },
   chips: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
-  // The market's card column: the grid IS the master surface, so it takes the
-  // free width beside the detail pane (PanelBody is the flex row).
-  cardColumn: { display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column', gap: '8px', overflowY: 'auto' },
+  // The market's master surface: the card grid sits ABOVE the selected record's
+  // detail (top/bottom, never left/right — a card grid needs width, a record
+  // needs a reading measure), so the grid is a basis-sized scrollable band.
+  cardColumn: { display: 'flex', flex: '0 1 42%', minWidth: 0, minHeight: 0, flexDirection: 'column', gap: '8px', overflowY: 'auto' },
+  // Holds [card grid] over [detail] as a plain column: no sash, no rail.
+  stack: { display: 'flex', flex: '1 1 auto', minHeight: 0, flexDirection: 'column', gap: '10px', overflow: 'hidden' },
   mono: { fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
   prose: { color: 'var(--ui-text-secondary)', fontSize: '12px', lineHeight: '18px' },
   // A row's trailing meta: state pill + version comparison, one line, and the
@@ -5308,11 +5326,11 @@ function SkillMarketTab({ ctx }) {
       ? jsx('div', { style: S.notice, children: `没有匹配当前筛选的技能（共 ${all.length} 条）${query ? `；关键词「${query}」` : ''}${category ? `；分类「${category}」` : ''}${installedOnly ? '；只看已安装' : ''}。` })
       : null,
 
-    // The market itself: core's master-detail — a grid of SUMMARY cards (name,
-    // state, one-liner) beside the selected card's full record: every fact, the
-    // engine hash, and the WRITE BUTTONS. A card selects; it never carries the
-    // record or the verbs, so nothing is reachable only by a hover affordance.
-    jsxs(PanelBody, { children: [
+    // The market itself: a grid of SUMMARY cards (name, state, one-liner) on
+    // TOP, the selected card's full record BELOW — every fact, the engine hash,
+    // and the WRITE BUTTONS. A card selects; it never carries the record or the
+    // verbs, so nothing is reachable only by a hover affordance.
+    jsxs('div', { style: S.stack, children: [
       jsxs('div', { style: S.cardColumn, children: [
         skills.length > 0 ? jsx(PanelSectionLabel, { children: '企业已审技能' }) : null,
         skills.length > 0
@@ -5406,28 +5424,42 @@ export default {
       identityProvider,
     })
 
-    ctx.registerMany([
-      // The two Capabilities-page tabs. They are the ONLY entry points to these
-      // catalogs — no `routes` page and no `sidebar.nav` row of their own, so the
-      // same surface can never be reached (or maintained) twice. The id is the
-      // `?tab=` value: `#/capabilities?tab=enterprise-skills` is the deep link.
-      {
-        id: SKILLS_TAB_ID,
-        area: CAPABILITIES_TABS_AREA,
-        order: 10,
-        data: { label: '企业技能' },
-        render: () => jsx(SkillMarketTab, { ctx })
-      },
-      {
-        id: TOOLS_TAB_ID,
-        area: CAPABILITIES_TABS_AREA,
-        order: 11,
-        data: { label: '企业工具' },
-        render: () => jsx(ToolCatalogTab, { ctx })
-      },
-      // W4 · the carrier directives (one per declared block tag).
-      ...carrier
-    ])
+    ctx.registerMany([...carrier])
+
+    // Tab labels follow the app language: register this plugin's (tiny) bundle,
+    // then rebuild the two contributions on every locale switch — a static
+    // label captured at register time would freeze the language the app loaded
+    // with (kanban's `registerLabels` pattern).
+    ctx.i18n.register(TAB_LABELS)
+
+    const registerTabs = () =>
+      ctx.registerMany([
+        // The two Capabilities-page tabs. They are the ONLY entry points to these
+        // catalogs — no `routes` page and no `sidebar.nav` row of their own, so the
+        // same surface can never be reached (or maintained) twice. The id is the
+        // `?tab=` value: `#/capabilities?tab=enterprise-skills` is the deep link.
+        {
+          id: SKILLS_TAB_ID,
+          area: CAPABILITIES_TABS_AREA,
+          order: 10,
+          data: { label: ctx.i18n.t('skillsTab') },
+          render: () => jsx(SkillMarketTab, { ctx })
+        },
+        {
+          id: TOOLS_TAB_ID,
+          area: CAPABILITIES_TABS_AREA,
+          order: 11,
+          data: { label: ctx.i18n.t('toolsTab') },
+          render: () => jsx(ToolCatalogTab, { ctx })
+        }
+      ])
+
+    let disposeTabs = registerTabs()
+
+    ctx.i18n.onLocaleChange(() => {
+      disposeTabs()
+      disposeTabs = registerTabs()
+    })
   }
 }
 

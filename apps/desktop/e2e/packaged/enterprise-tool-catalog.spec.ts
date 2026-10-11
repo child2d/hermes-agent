@@ -238,15 +238,20 @@ function packagedEnv(sandbox: Sandbox): Record<string, string> {
  * in the enterprise build's resting Simple mode anyway, which is why this no
  * longer matches nav rows by label.
  */
-async function openEnterpriseTab(page: Page, label: string) {
+async function openEnterpriseTab(page: Page, tab: 'skills' | 'tools') {
   await page.evaluate(() => {
     window.location.hash = '/capabilities'
   })
 
-  const tab = page.getByRole('button', { name: label }).first()
-  await tab.waitFor({ state: 'visible', timeout: 60_000 })
-  await tab.click()
-  await expect(tab, `clicking "${label}" must make it the active tab`).toHaveAttribute('data-active', 'true')
+  // The plugin's tab labels now follow the UI language (`ctx.i18n`), and this
+  // sandbox boots in English — so match EITHER language: the assertion is about
+  // the tab being a real clickable contribution, not about which language the
+  // sandbox happens to run in.
+  const name = tab === 'skills' ? /^(企业技能|Enterprise Skills)$/ : /^(企业工具|Enterprise Tools)$/
+  const button = page.getByRole('button', { name }).first()
+  await button.waitFor({ state: 'visible', timeout: 60_000 })
+  await button.click()
+  await expect(button, `clicking "${String(name)}" must make it the active tab`).toHaveAttribute('data-active', 'true')
 }
 
 test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog', async () => {
@@ -385,7 +390,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
       'the launched artifact must report enterprise identity'
     ).toBe(true)
 
-    await openEnterpriseTab(page, '企业工具')
+    await openEnterpriseTab(page, 'tools')
 
     await expect(page.getByText('企业工具目录', { exact: false }).first()).toBeVisible({ timeout: 30_000 })
 
@@ -418,7 +423,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     expect(text).not.toContain('#62')
 
     // ── 企业技能市场 (batch 2 step 2) ──────────────────────────────────────
-    await openEnterpriseTab(page, '企业技能')
+    await openEnterpriseTab(page, 'skills')
 
     // Wait for POST-LOAD content, not the loading text (which itself contains
     // "企业技能市场" — matching it would read the page mid-load and see neither
