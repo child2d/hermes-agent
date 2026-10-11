@@ -30,6 +30,12 @@ async function loadPlugin() {
     sdk,
     'export const Button = () => null; export const CAPABILITIES_TABS_AREA = "capabilities.tabs"; ' +
       'export const ConfirmDialog = () => null; export const GlyphSpinner = () => null; ' +
+      'export const PanelAction = () => null; export const PanelBlock = () => null; ' +
+      'export const PanelBody = () => null; export const PanelDetail = () => null; ' +
+      'export const PanelEmpty = () => null; export const PanelHeader = () => null; ' +
+      'export const PanelList = () => null; export const PanelListRow = () => null; ' +
+      'export const PanelMeta = () => null; export const PanelPill = () => null; ' +
+      'export const PanelSectionLabel = () => null; ' +
       'export const SearchField = () => null; ' +
       'export const icons = { Info: () => null };\n'
   )

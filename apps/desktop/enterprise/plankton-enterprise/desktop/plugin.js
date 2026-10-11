@@ -45,7 +45,23 @@
  * Plain ESM + `jsx()` calls — exactly the shape the runtime loader evaluates.
  */
 
-import { Button, CAPABILITIES_TABS_AREA, ConfirmDialog, GlyphSpinner, SearchField, icons } from '@hermes/plugin-sdk'
+import {
+  Button,
+  CAPABILITIES_TABS_AREA,
+  ConfirmDialog,
+  PanelAction,
+  PanelBlock,
+  PanelBody,
+  PanelDetail,
+  PanelEmpty,
+  PanelHeader,
+  PanelList,
+  PanelListRow,
+  PanelMeta,
+  PanelPill,
+  PanelSectionLabel,
+  SearchField
+} from '@hermes/plugin-sdk'
 import { useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
@@ -4498,30 +4514,26 @@ const TONE_COLOR = {
 }
 
 const S = {
-  page: { display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 20px', overflowY: 'auto', height: '100%', fontSize: '13px' },
-  title: { fontSize: '15px', fontWeight: 600, margin: 0 },
   meta: { color: 'var(--ui-text-tertiary)', fontSize: '11px', lineHeight: '16px' },
-  card: { border: '1px solid var(--chrome-border, var(--ui-border))', borderRadius: '6px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' },
-  row: { display: 'flex', alignItems: 'baseline', gap: '8px', padding: '3px 0', borderTop: '1px solid var(--chrome-action-hover, transparent)' },
-  toolName: { fontFamily: 'var(--font-mono, monospace)', fontSize: '11px', flexShrink: 0 },
-  toolDesc: { color: 'var(--ui-text-secondary)', fontSize: '11px', minWidth: 0 },
-  systemName: { fontWeight: 600, fontSize: '12px' },
-  systemDesc: { color: 'var(--ui-text-tertiary)', fontSize: '11px' },
-  badge: { fontSize: '10px', padding: '0 5px', borderRadius: '999px', border: '1px solid currentColor', flexShrink: 0 },
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '40px 20px', color: 'var(--ui-text-secondary)' },
   notice: { border: '1px solid var(--chrome-border, var(--ui-border))', borderRadius: '6px', padding: '10px 12px', color: 'var(--ui-text-secondary)', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' },
-  pre: { fontFamily: 'var(--font-mono, monospace)', fontSize: '10px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, color: 'var(--ui-text-tertiary)', maxHeight: '140px', overflowY: 'auto' },
   banner: { borderRadius: '6px', padding: '8px 12px', fontSize: '12px', border: '1px solid' },
   actions: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' },
   hash: { fontFamily: 'var(--font-mono, monospace)', fontSize: '10px', color: 'var(--ui-text-tertiary)' },
   // ── Capabilities-tab chrome ─────────────────────────────────────────────────
-  // The host hands a contributed tab the pane's full height and no chrome, so
-  // each tab body renders its own strip: the page's tab strip above already
-  // names it, hence no <h1> — just a compact title/metrics line.
+  // The host hands a contributed tab the pane's full height and no chrome. The
+  // tab's own chrome is core's: `PanelHeader` / `PanelList` / `PanelListRow` /
+  // `PanelDetail` / `PanelPill` / `PanelSectionLabel` / `PanelBlock` (the same
+  // primitives core's overlay panels and the master-detail surfaces use). Only
+  // what core does NOT export lives here — the tab's padding box, the inline
+  // code/description spans inside a row, and the notice/banner blocks.
   panel: { display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 18px', overflowY: 'auto', height: '100%', minHeight: 0, boxSizing: 'border-box', fontSize: '13px' },
-  toolbar: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' },
-  panelTitle: { fontSize: '13px', fontWeight: 600, margin: 0 },
   chips: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
+  mono: { fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
+  prose: { color: 'var(--ui-text-secondary)', fontSize: '12px', lineHeight: '18px' },
+  // A row's trailing meta: state pill + version comparison, one line, and the
+  // hash for a ledger row (the engine's own `sha256:…`, shown as-is).
+  rowMeta: { display: 'inline-flex', alignItems: 'center', gap: '6px' },
+  detail: { display: 'flex', flexDirection: 'column', gap: '12px' },
   // ── W4 · the carrier directive card (HTML-first; markdown fallback) ──────────
   carrierMuted: { color: 'var(--ui-text-tertiary)', fontSize: '12px', padding: '4px 0' },
   carrierCard: { border: '1px solid var(--chrome-border, var(--ui-border))', borderRadius: '6px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '640px' },
@@ -4545,31 +4557,6 @@ const BANNER_TONE = {
   error: { color: 'var(--ui-error, #d05a5a)', borderColor: 'var(--ui-error, #d05a5a)' }
 }
 
-function riskColor(risk) {
-  return risk === 'write' ? 'var(--ui-warning, #d08a00)' : 'var(--ui-text-tertiary)'
-}
-
-function ToolRow({ tool }) {
-  return jsxs('div', { style: S.row, children: [
-    jsx('span', { style: S.toolName, children: tool.full_name || tool.name }),
-    jsx('span', { style: { color: riskColor(tool.risk) }, children: jsx('span', { style: S.badge, children: tool.risk || '?' }) }),
-    jsx('span', { style: S.toolDesc, children: tool.description || '' })
-  ] })
-}
-
-function SystemCard({ system }) {
-  const tools = Array.isArray(system.tools) ? system.tools : []
-  return jsxs('div', { style: S.card, children: [
-    jsxs('div', { children: [
-      jsx('div', { style: S.systemName, children: system.name }),
-      system.description ? jsx('div', { style: S.systemDesc, children: system.description }) : null
-    ] }),
-    tools.length === 0
-      ? jsx('div', { style: S.systemDesc, children: '（该系统未声明工具）' })
-      : jsx('div', { children: tools.map((tool, i) => jsx(ToolRow, { tool }, `${system.name}:${i}:${tool.full_name || tool.name}`)) })
-  ] })
-}
-
 function FailureBox({ data, onRetry, copyMap }) {
   const kind = data && data.kind
   const copy = copyMap || FAILURE_COPY
@@ -4579,10 +4566,11 @@ function FailureBox({ data, onRetry, copyMap }) {
     data && data.note ? jsx('div', { style: S.meta, children: data.note }) : null,
     data && data.error ? jsx('div', { style: S.meta, children: data.error }) : null,
     data && data.detail && data.detail.message ? jsx('div', { style: S.meta, children: String(data.detail.message) }) : null,
-    data && data.rawExcerpt ? jsx('pre', { style: S.pre, children: data.rawExcerpt }) : null,
+    data && data.rawExcerpt ? jsx(PanelBlock, { children: data.rawExcerpt }) : null,
     jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: onRetry, children: '重试' }) })
   ] })
 }
+
 
 function Banner({ banner }) {
   if (!banner) return null
@@ -4590,10 +4578,22 @@ function Banner({ banner }) {
 }
 
 // ── Tool catalog tab ─────────────────────────────────────────────────────────
+//
+// A read-only browser over the bundled `shaoke-cli`'s command catalog, built
+// from core's own master-detail primitives — the same `PanelList` → `PanelDetail`
+// shape core's overlay panels use: systems are the rail's section labels,
+// commands are rows, and the selected command's risk + full description fill the
+// detail. Nothing here writes.
+
+/** Stable row key for one command (`<system>::<command>`). */
+function toolRowKey(system, tool) {
+  return `${system.name}::${tool.full_name || tool.name}`
+}
 
 function ToolCatalogTab({ ctx }) {
   const [state, setState] = useState({ phase: 'loading' })
   const [query, setQuery] = useState('')
+  const [selectedKey, setSelectedKey] = useState(null)
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -4606,14 +4606,15 @@ function ToolCatalogTab({ ctx }) {
   useEffect(() => { load() }, [])
 
   if (state.phase === 'loading') {
-    return jsxs('div', { style: S.center, children: [jsx(GlyphSpinner, { ariaLabel: '正在读取' }), jsx('span', { children: '正在读取本机工具目录…' })] })
+    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, { icon: 'loading~spin', title: '正在读取本机工具目录…' }) })
   }
   if (state.phase === 'error') {
-    return jsxs('div', { style: S.notice, children: [
-      jsx('div', { children: '读取工具目录失败' }),
-      jsx('div', { style: S.meta, children: state.message }),
-      jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: '重试' }) })
-    ] })
+    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, {
+      action: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: '重试' }),
+      description: state.message,
+      icon: 'warning',
+      title: '读取工具目录失败'
+    }) })
   }
 
   const data = state.data
@@ -4639,25 +4640,65 @@ function ToolCatalogTab({ ctx }) {
         .filter(system => match(system.name, system.description) || system.tools.length > 0)
     : all
 
+  // Every VISIBLE command, flattened: the detail resolves its selection through
+  // this list and falls back to the first hit, so a filter that drops the
+  // selected row cannot leave its detail on screen.
+  const flat = []
+  for (const system of systems) {
+    for (const tool of Array.isArray(system.tools) ? system.tools : []) {
+      flat.push({ key: toolRowKey(system, tool), system, tool })
+    }
+  }
+  const active = flat.find(entry => entry.key === selectedKey) || flat[0] || null
+
   return jsxs('div', { style: S.panel, children: [
-    jsxs('div', { style: S.toolbar, children: [
-      jsx('h2', { style: S.panelTitle, children: '企业工具目录' }),
-      jsx('span', { style: S.meta, children: `只读 · 无执行入口、无开关 · 共 ${data.count != null ? data.count : all.length} 个系统 / ${toolCount} 条命令` })
-    ] }),
-    jsx(SearchField, { placeholder: '检索系统 / 命令 / 说明…', value: query, onChange: setQuery, ariaLabel: '检索企业工具' }),
+    jsx(PanelHeader, {
+      actions: jsx(PanelAction, { icon: 'refresh', onClick: load, children: '刷新' }),
+      subtitle: `只读 · 无执行入口、无开关 · 共 ${data.count != null ? data.count : all.length} 个系统 / ${toolCount} 条命令${when ? ` · ${when}` : ''}`,
+      title: '企业工具目录'
+    }),
+    jsx(SearchField, { ariaLabel: '检索企业工具', onChange: setQuery, placeholder: '检索系统 / 命令 / 说明…', value: query }),
     all.length === 0
       ? jsx('div', { style: S.notice, children: 'shaoke-cli 可用，但当前没有声明任何工具系统（空清单是有效结果）。' })
       : null,
     q && systems.length === 0
       ? jsx('div', { style: S.notice, children: `没有匹配「${query}」的系统或命令（共 ${all.length} 个系统）。` })
       : null,
-    systems.length > 0
-      ? jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: systems.map((system, i) => jsx(SystemCard, { system }, `${i}:${system.name}`)) })
-      : null,
-    jsxs('div', { style: S.meta, children: [
-      jsx(icons.Info, { size: 11, style: { verticalAlign: '-1px' } }),
-      ` CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）${when ? ` · ${when}` : ''} · 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。`
-    ] })
+    jsxs(PanelBody, { children: [
+      jsx(PanelList, { children: systems.flatMap(system => {
+        const tools = Array.isArray(system.tools) ? system.tools : []
+        const rows = [jsx(PanelSectionLabel, { key: `system:${system.name}`, children: system.name })]
+        if (tools.length === 0) {
+          rows.push(jsx('div', { key: `empty:${system.name}`, style: S.meta, children: '（该系统未声明工具）' }))
+        } else {
+          for (const tool of tools) {
+            const key = toolRowKey(system, tool)
+            rows.push(jsx(PanelListRow, {
+              active: Boolean(active) && active.key === key,
+              icon: 'symbol-method',
+              key,
+              meta: jsx(PanelPill, { tone: tool.risk === 'write' ? 'warn' : 'muted', children: tool.risk || '?' }),
+              onSelect: () => setSelectedKey(key),
+              rowKey: key,
+              title: jsx('span', { style: S.mono, children: tool.full_name || tool.name })
+            }))
+          }
+        }
+        return rows
+      }) }),
+      jsx(PanelDetail, { children: active
+        ? jsxs('div', { style: S.detail, children: [
+            jsx(PanelMeta, { rows: [
+              { label: '系统', value: active.system.name },
+              { label: '命令', value: jsx('span', { style: S.mono, children: active.tool.full_name || active.tool.name }) },
+              { label: '风险', value: jsx(PanelPill, { tone: active.tool.risk === 'write' ? 'warn' : 'muted', children: active.tool.risk || '?' }) }
+            ] }),
+            active.system.description ? jsx('div', { style: S.prose, children: active.system.description }) : null,
+            jsx(PanelBlock, { children: active.tool.description || '（未提供说明）' })
+          ] })
+        : jsx(PanelSectionLabel, { children: '没有可显示的命令' }) })
+    ] }),
+    jsx('div', { style: S.meta, children: `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 本页仅列出本机 CLI 的命令清单；授权与执行由 shaoke-cli 自己负责，本应用不读取任何令牌。` })
   ] })
 }
 
@@ -4728,56 +4769,178 @@ export function overwriteLocalEditsFor(skill) {
   return Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
 }
 
-function SkillRow({ skill, onAction }) {
-  const meta = stateMeta(skill.installState)
-  const canPickup = Boolean(skill.installPath)
-  const installed = skill.installState && skill.installState !== 'not-installed' && skill.installState !== 'name-missing'
+/** One `PanelPill` per engine-computed install state (tone mapped onto core's
+ *  pill vocabulary). */
+const PILL_TONE_BY_STATE = { info: 'muted', muted: 'muted', ok: 'good', warn: 'warn' }
+
+function statePill(installState) {
+  const meta = stateMeta(installState)
+  return jsx(PanelPill, { tone: PILL_TONE_BY_STATE[meta.tone] || 'muted', children: meta.label })
+}
+
+const isInstalledState = state => Boolean(state) && state !== 'not-installed' && state !== 'name-missing'
+
+/**
+ * The kebab / right-click actions of one catalog row: the SAME set, gated by the
+ * SAME rules (`installPath` for pickup, `canManageSkill` + a known enable bit
+ * for manage), that the detail pane shows as buttons. A kebab keeps the rail one
+ * line; the detail is the visible path, so nothing is reachable only by hover.
+ */
+function skillRowMenu(skill, onAction) {
+  const installed = isInstalledState(skill.installState)
+  const items = [{
+    disabled: !skill.installPath,
+    label: installed ? '更新' : '取用',
+    onSelect: () => onAction(installed ? 'update' : 'install', skill)
+  }]
+  if (installed) {
+    items.push({
+      disabled: !canManageSkill(skill) || typeof skill.disabled !== 'boolean',
+      label: skill.disabled ? '启用' : '停用',
+      onSelect: () => onAction(skill.disabled ? 'enable' : 'disable', skill)
+    })
+    items.push({
+      disabled: !canManageSkill(skill),
+      label: '卸载',
+      onSelect: () => onAction('uninstall', skill),
+      tone: 'danger'
+    })
+  }
+  return items
+}
+
+/** The detail body for one catalog entry: every fact the old per-row card used
+ *  to print inline, plus the actions (which stay gated exactly as before). */
+function SkillDetailBody({ onAction, skill }) {
+  const installed = isInstalledState(skill.installState)
   const manage = canManageSkill(skill)
   const disabledKnown = typeof skill.disabled === 'boolean'
   // A landing whose local-edit status is not CONFIRMED clean: the update also
   // needs the human's overwrite acknowledgement (backend: `local-edits`).
   const needsOverwriteAck = Boolean(skill.localEdits || skill.hashState === 'mismatch' || skill.localEditsUnknown)
 
-  return jsxs('div', { style: { ...S.card, gap: '4px' }, children: [
-    jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }, children: [
-      jsx('span', { style: { fontWeight: 600 }, children: skill.name || '(未命名)' }),
-      skill.category ? jsx('span', { style: { ...S.badge, color: 'var(--ui-text-tertiary)' }, children: skill.category }) : null,
-      jsx('span', { style: { ...S.badge, color: TONE_COLOR[meta.tone] }, children: meta.label }),
-      needsOverwriteAck ? jsx('span', { style: { ...S.badge, color: TONE_COLOR.warn }, children: skill.localEdits ? '本地已改动' : '是否改动无法判定' }) : null,
-      skill.version ? jsx('span', { style: S.meta, children: `目录版本 ${skill.version}` }) : jsx('span', { style: S.meta, children: '目录未给版本' }),
-      skill.recordedVersion ? jsx('span', { style: S.meta, children: `记录版本 ${skill.recordedVersion}` }) : null
+  return jsxs('div', { style: S.detail, children: [
+    jsxs('div', { style: S.rowMeta, children: [
+      statePill(skill.installState),
+      skill.category ? jsx(PanelPill, { tone: 'muted', children: skill.category }) : null,
+      needsOverwriteAck ? jsx(PanelPill, { tone: 'warn', children: skill.localEdits ? '本地已改动' : '是否改动无法判定' }) : null
     ] }),
-    jsx('div', { style: { color: 'var(--ui-text-secondary)', fontSize: '11px' }, children: skill.description || '' }),
-    jsxs('div', { style: S.meta, children: [
-      `作者 ${skill.author || '未标注'}`,
-      skill.tags && skill.tags.length ? ` · 标签 ${skill.tags.join('、')}` : '',
-      skill.installPath ? ` · 落点 ${skill.installPath}` : ' · 目录未给技能名'
+    jsx('div', { style: S.prose, children: skill.description || '（未提供说明）' }),
+    jsx(PanelMeta, { rows: [
+      { label: '目录版本', value: skill.version || '目录未给版本' },
+      { label: '记录版本', value: skill.recordedVersion || '—' },
+      { label: '作者', value: skill.author || '未标注' },
+      { label: '标签', value: skill.tags && skill.tags.length ? skill.tags.join('、') : '—' },
+      { label: '落点', value: jsx('span', { style: S.hash, children: skill.installPath || '目录未给技能名' }) }
     ] }),
-    skill.localHash ? jsx('div', { style: S.hash, children: `本地内容哈希 ${skill.localHash}` }) : null,
-    jsx('div', { style: S.actions, children: [
-      jsx(Button, { size: 'sm', variant: 'secondary', disabled: !canPickup, onClick: () => onAction(installed ? 'update' : 'install', skill), children: installed ? '更新' : '取用' }),
+    skill.localHash ? jsx(PanelBlock, { children: `本地内容哈希 ${skill.localHash}` }) : null,
+    jsxs('div', { style: S.actions, children: [
+      jsx(PanelAction, {
+        disabled: !skill.installPath,
+        icon: installed ? 'sync' : 'cloud-download',
+        onClick: () => onAction(installed ? 'update' : 'install', skill),
+        primary: !installed,
+        children: installed ? '更新' : '取用'
+      }),
       installed
-        ? jsx(Button, { size: 'sm', variant: 'secondary', disabled: !manage || !disabledKnown, onClick: () => onAction(skill.disabled ? 'enable' : 'disable', skill), children: skill.disabled ? '启用' : '停用' })
+        ? jsx(PanelAction, {
+            disabled: !manage || !disabledKnown,
+            icon: skill.disabled ? 'play' : 'circle-slash',
+            onClick: () => onAction(skill.disabled ? 'enable' : 'disable', skill),
+            children: skill.disabled ? '启用' : '停用'
+          })
         : null,
       installed
-        ? jsx(Button, { size: 'sm', variant: 'secondary', disabled: !manage, onClick: () => onAction('uninstall', skill), children: '卸载' })
+        ? jsx(PanelAction, {
+            disabled: !manage,
+            icon: 'trash',
+            onClick: () => onAction('uninstall', skill),
+            children: '卸载'
+          })
         : null
     ] })
   ] })
 }
 
-function InstalledRow({ item }) {
+/** The detail body for one ENGINE ledger record (what is on disk for a skill the
+ *  engine recorded taking, plus the hash comparison that made the row amber). */
+function InstalledDetailBody({ item }) {
   const hashLabel = item.hashState === 'mismatch' ? '本地内容哈希（与取用记录不一致）' : '本地内容哈希'
-  return jsxs('div', { style: { ...S.card, gap: '4px' }, children: [
-    jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }, children: [
-      jsx('span', { style: { fontWeight: 600 }, children: item.name || item.reference || '(未命名)' }),
-      item.version ? jsx('span', { style: S.meta, children: `记录版本 ${item.version}` }) : null,
-      jsx('span', { style: { ...S.badge, color: item.onDisk ? TONE_COLOR.info : TONE_COLOR.warn }, children: item.onDisk ? '落点存在' : '落点已不在' }),
-      item.hashState === 'mismatch' ? jsx('span', { style: { ...S.badge, color: TONE_COLOR.warn }, children: '哈希不符' }) : null
+  return jsxs('div', { style: S.detail, children: [
+    jsxs('div', { style: S.rowMeta, children: [
+      jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
+      item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null
     ] }),
-    jsx('div', { style: S.meta, children: `落点 ${item.installPath} · 取用时间 ${item.installedAt || '未知'}${item.uninstalledAt ? ` · 卸载时间 ${item.uninstalledAt}` : ''}` }),
-    item.localHash ? jsx('div', { style: S.hash, children: `${hashLabel} ${item.localHash}` }) : null
+    jsx(PanelMeta, { rows: [
+      { label: '记录版本', value: item.version || '—' },
+      { label: '落点', value: jsx('span', { style: S.hash, children: item.installPath }) },
+      { label: '取用时间', value: item.installedAt || '未知' },
+      ...(item.uninstalledAt ? [{ label: '卸载时间', value: item.uninstalledAt }] : [])
+    ] }),
+    item.localHash ? jsx(PanelBlock, { children: `${hashLabel} ${item.localHash}` }) : null
   ] })
+}
+
+/** Rail key for one catalog entry. */
+const catalogKey = skill => `catalog:${skill.reference || skill.slug || skill.name}`
+
+/** Rail key for one engine ledger record. */
+const ledgerKey = (item, i) => `ledger:${item.reference || item.installPath || i}`
+
+/** Everything the rail can select, catalog entries first — the detail pane
+ *  resolves a key against this list so one lookup serves both kinds. */
+function marketEntries(skills, ledger) {
+  return [
+    ...skills.map(skill => ({ key: catalogKey(skill), kind: 'catalog', skill })),
+    ...ledger.map((item, i) => ({ key: ledgerKey(item, i), kind: 'installed', item }))
+  ]
+}
+
+/**
+ * The market rail's rows: the catalog entries, then the engine's own ledger
+ * under its own section label. Catalog rows carry their state pill + the kebab
+ * of actions; the ledger rows carry the disk/hash verdicts — which is what made
+ * the row amber, so it stays visible without opening the detail.
+ */
+function marketRows({ activeKey, ledger, onAction, onSelect, skills }) {
+  const rows = []
+
+  if (skills.length > 0) {
+    rows.push(jsx(PanelSectionLabel, { key: 'catalog:label', children: '企业已审技能' }))
+    for (const skill of skills) {
+      rows.push(jsx(PanelListRow, {
+        active: activeKey === catalogKey(skill),
+        icon: 'extensions',
+        key: catalogKey(skill),
+        menuItems: skillRowMenu(skill, onAction),
+        menuLabel: `「${skill.name || skill.slug || '?'}」的操作`,
+        meta: statePill(skill.installState),
+        onSelect: () => onSelect(catalogKey(skill)),
+        rowKey: catalogKey(skill),
+        title: skill.name || '(未命名)'
+      }))
+    }
+  }
+
+  if (ledger.length > 0) {
+    rows.push(jsx(PanelSectionLabel, { key: 'ledger:label', children: '本机已取用（引擎台账）' }))
+    ledger.forEach((item, i) => {
+      rows.push(jsx(PanelListRow, {
+        active: activeKey === ledgerKey(item, i),
+        icon: 'archive',
+        key: ledgerKey(item, i),
+        meta: jsxs('span', { style: S.rowMeta, children: [
+          jsx(PanelPill, { tone: item.onDisk ? 'muted' : 'warn', children: item.onDisk ? '落点存在' : '落点已不在' }),
+          item.hashState === 'mismatch' ? jsx(PanelPill, { tone: 'warn', children: '哈希不符' }) : null
+        ] }),
+        onSelect: () => onSelect(ledgerKey(item, i)),
+        rowKey: ledgerKey(item, i),
+        title: item.name || item.reference || '(未命名)'
+      }))
+    })
+  }
+
+  return rows
 }
 
 /**
@@ -4877,6 +5040,9 @@ function SkillMarketTab({ ctx }) {
   // filter can never quietly shrink what an action covers.
   const [category, setCategory] = useState('')
   const [installedOnly, setInstalledOnly] = useState(false)
+  // Which row the detail pane shows: a catalog entry key or a ledger key. A
+  // selection that a filter drops falls back to the first visible row.
+  const [selectedKey, setSelectedKey] = useState(null)
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -5022,14 +5188,15 @@ function SkillMarketTab({ ctx }) {
   }
 
   if (state.phase === 'loading') {
-    return jsxs('div', { style: S.center, children: [jsx(GlyphSpinner, { ariaLabel: '正在读取' }), jsx('span', { children: '正在读取企业技能市场…' })] })
+    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, { icon: 'loading~spin', title: '正在读取企业技能市场…' }) })
   }
   if (state.phase === 'error') {
-    return jsxs('div', { style: S.notice, children: [
-      jsx('div', { children: '读取技能市场失败' }),
-      jsx('div', { style: S.meta, children: state.message }),
-      jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: '重试' }) })
-    ] })
+    return jsx('div', { style: { ...S.panel, alignItems: 'center', justifyContent: 'center' }, children: jsx(PanelEmpty, {
+      action: jsx(Button, { size: 'sm', variant: 'secondary', onClick: load, children: '重试' }),
+      description: state.message,
+      icon: 'warning',
+      title: '读取技能市场失败'
+    }) })
   }
 
   const data = state.data
@@ -5065,16 +5232,35 @@ function SkillMarketTab({ ctx }) {
   const batchNeedsAck = all.filter(s => s.installState === 'version-differs' && !canBatchUpdate(s))
   const updatable = all.filter(canBatchUpdate)
   const when = data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''
+  const entries = marketEntries(skills, installedLedger)
+  // A selection a filter dropped must not keep its detail on screen: fall back
+  // to the first visible row, exactly like the row highlight does.
+  const activeEntry = entries.find(entry => entry.key === selectedKey) || entries[0] || null
 
   return jsxs('div', { style: S.panel, children: [
-    jsxs('div', { style: S.toolbar, children: [
-      jsx('h2', { style: S.panelTitle, children: '企业技能市场' }),
-      jsx('span', { style: S.meta, children: `我安装的 ${lockNote ? '—' : installedLedger.length} 条${installedCount ? `（目录里 ${installedCount} 条）` : ''} · 已审技能 ${catalog.ok ? catalog.count : '—'} 条` })
-    ] }),
+    jsx(PanelHeader, {
+      actions: jsxs('div', { style: S.actions, children: [
+        jsx(FilterChip, {
+          active: installedOnly,
+          onClick: () => setInstalledOnly(!installedOnly),
+          children: installedCount ? `只看已安装（${installedCount}）` : '只看已安装'
+        }),
+        updatable.length > 0
+          ? jsx(Button, {
+              onClick: () => requestBatchUpdate(updatable),
+              size: 'sm',
+              variant: 'secondary',
+              children: `批量更新 ${updatable.length} 条（需确认）`
+            })
+          : null
+      ] }),
+      subtitle: `我安装的 ${lockNote ? '—' : installedLedger.length} 条${installedCount ? `（目录里 ${installedCount} 条）` : ''} · 已审技能 ${catalog.ok ? catalog.count : '—'} 条 · 来源：企业 SkillHub（经 shaoke-cli skillhub）${when ? ` · ${when}` : ''}`,
+      title: '企业技能市场'
+    }),
     jsxs('div', { style: S.meta, children: [
-      `来源：企业 SkillHub（经 shaoke-cli skillhub）· 引擎取用记录 ${lockNote ? '读取失败（见下方提示，非“从未装过”）' : `${installedLedger.length} 条`}`,
+      `引擎取用记录 ${lockNote ? '读取失败（见下方提示，非“从未装过”）' : `${installedLedger.length} 条`}`,
       jsx('br', {}),
-      `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 技能落点 ${data.skillsPath || '未知'}${when ? ` · ${when}` : ''}`
+      `CLI: ${data.cliPath || '未知'}（来源 ${data.cliSource || '未知'}）· 技能落点 ${data.skillsPath || '未知'}`
     ] }),
     jsx(Banner, { banner }),
 
@@ -5103,7 +5289,7 @@ function SkillMarketTab({ ctx }) {
       : jsxs('div', { style: { ...S.notice, borderColor: 'var(--ui-warning, #d08a00)' }, children: [
           jsx('div', { children: `${SKILL_FAILURE_COPY[catalog.kind] || '目录读取失败'} — ${catalog.kind}` }),
           jsx('div', { style: S.meta, children: '这是「取不到目录」，不是「目录为空」。本机已装技能仍列在下方。' }),
-          catalog.detail && catalog.detail.raw ? jsx('pre', { style: S.pre, children: catalog.detail.raw }) : null
+          catalog.detail && catalog.detail.raw ? jsx(PanelBlock, { children: catalog.detail.raw }) : null
         ] }),
 
     // F6: a catalog capped at the page limit is SUCCESS but NOT the whole
@@ -5118,11 +5304,12 @@ function SkillMarketTab({ ctx }) {
       : null,
 
     catalog.ok
-      ? jsx(SearchField, { placeholder: '检索技能名 / 分类 / 标签…', value: query, onChange: setQuery, ariaLabel: '检索技能' })
+      ? jsx(SearchField, { ariaLabel: '检索技能', onChange: setQuery, placeholder: '检索技能名 / 分类 / 标签…', value: query })
       : null,
 
-    // Category chips + the installed filter. Derived from the catalog itself, so
-    // a category the platform adds shows up without a code change.
+    // Category chips. Derived from the catalog itself, so a category the
+    // platform adds shows up without a code change. The installed-only filter
+    // lives in the header (it is a view switch, not a category).
     catalog.ok && all.length > 0
       ? jsxs('div', { style: S.chips, children: [
           jsx(FilterChip, { active: category === '', onClick: () => setCategory(''), children: '全部' }),
@@ -5133,17 +5320,8 @@ function SkillMarketTab({ ctx }) {
               children: `${cat}`,
               key: `cat:${cat}`
             })
-          ),
-          jsx(FilterChip, {
-            active: installedOnly,
-            onClick: () => setInstalledOnly(!installedOnly),
-            children: installedCount ? `只看已安装（${installedCount}）` : '只看已安装'
-          })
+          )
         ] })
-      : null,
-
-    updatable.length > 0
-      ? jsx('div', { children: jsx(Button, { size: 'sm', variant: 'secondary', onClick: () => requestBatchUpdate(updatable), children: `批量更新 ${updatable.length} 条（需确认）` }) })
       : null,
 
     // Skills kept out of the batch are named — a silently shrunken button would
@@ -5159,16 +5337,24 @@ function SkillMarketTab({ ctx }) {
       ? jsx('div', { style: S.notice, children: `没有匹配当前筛选的技能（共 ${all.length} 条）${query ? `；关键词「${query}」` : ''}${category ? `；分类「${category}」` : ''}${installedOnly ? '；只看已安装' : ''}。` })
       : null,
 
-    skills.length > 0
-      ? jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: skills.map((skill, i) => jsx(SkillRow, { skill, onAction: requestAction }, `${i}:${skill.reference || skill.slug}`)) })
-      : null,
-
-    installedLedger.length > 0
-      ? jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: [
-          jsx('h2', { style: { ...S.title, fontSize: '13px' }, children: '本机已取用（引擎台账）' }),
-          installedLedger.map((item, i) => jsx(InstalledRow, { item }, `ledger:${i}:${item.reference || item.installPath}`))
-        ] })
-      : null,
+    // The market itself: core's master-detail — a dense rail of entries (with
+    // the per-row action kebab) beside the selected entry's full record: every
+    // fact, the engine hash, and the WRITE BUTTONS (the visible path; the kebab
+    // is the shortcut). A write still only ever fires through the dialog below.
+    jsxs(PanelBody, { children: [
+      jsx(PanelList, { children: marketRows({
+        activeKey: activeEntry ? activeEntry.key : null,
+        ledger: installedLedger,
+        onAction: requestAction,
+        onSelect: setSelectedKey,
+        skills
+      }) }),
+      jsx(PanelDetail, { children: activeEntry
+        ? (activeEntry.kind === 'catalog'
+            ? jsx(SkillDetailBody, { onAction: requestAction, skill: activeEntry.skill })
+            : jsx(InstalledDetailBody, { item: activeEntry.item }))
+        : jsx(PanelSectionLabel, { children: '没有可显示的技能' }) })
+    ] }),
 
     // The confirmation dialog. EVERY write is routed through it — a write never
     // fires on the first click. `onConfirm` runs the already-chosen action.
@@ -5185,10 +5371,7 @@ function SkillMarketTab({ ctx }) {
         })
       : null,
 
-    jsxs('div', { style: S.meta, children: [
-      jsx(icons.Info, { size: 11, style: { verticalAlign: '-1px' } }),
-      ' 安装/卸载/更新全部交由引擎自己的技能管理入口执行，落点、扫描与文件语义由引擎负责；本页只做参数校验、人工确认与如实回显。技能哈希与引擎同源（引擎 tools.skills_guard.content_hash），取用记录就是引擎的 skills/.hub/lock.json。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。'
-    ] })
+    jsx('div', { style: S.meta, children: '安装/卸载/更新全部交由引擎自己的技能管理入口执行，落点、扫描与文件语义由引擎负责；本页只做参数校验、人工确认与如实回显。技能哈希与引擎同源（引擎 tools.skills_guard.content_hash），取用记录就是引擎的 skills/.hub/lock.json。「停用」写的是引擎自己的启用态（config.yaml 的 skills.disabled）。所有写动作都需人工确认；本应用不读取任何令牌。' })
   ] })
 }
 

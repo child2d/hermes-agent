@@ -15,6 +15,17 @@ export const Button: any
 export const CAPABILITIES_TABS_AREA: any
 export const ConfirmDialog: any
 export const GlyphSpinner: any
+export const PanelAction: any
+export const PanelBlock: any
+export const PanelBody: any
+export const PanelDetail: any
+export const PanelEmpty: any
+export const PanelHeader: any
+export const PanelList: any
+export const PanelListRow: any
+export const PanelMeta: any
+export const PanelPill: any
+export const PanelSectionLabel: any
 export const SearchField: any
 export const icons: any
 export const useEffect: any
