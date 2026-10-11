@@ -283,7 +283,12 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
           (`skillEditorPane`) still docks at the very bottom, exactly as it did
           in the `pane` slot of `MasterDetail`. */}
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex min-h-0 shrink-0 basis-2/5 flex-col border-b border-(--ui-stroke-tertiary) p-2">
+        {/* One gutter, three edges: the strip's own pl-2 + this pl-3 lands the
+            strip text at 20px, the grid's p-2 lands every card BOX at the same
+            20px, and `DetailColumn width="full"` puts the record's text there
+            too. Before this the strip sat at 16px, the cards at 8px and the
+            detail at 20px — three different left edges in one stack. */}
+        <div className="flex min-h-0 shrink-0 basis-2/5 flex-col border-b border-(--ui-stroke-tertiary) py-2 pr-3 pl-3">
           <ListStrip
             left={<SortButton desc={skillsSortDesc} onFlip={() => $skillsSortDesc.set(!$skillsSortDesc.get())} />}
             right={
