@@ -47,9 +47,9 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof ComposerC
   )
 }
 
-// The keybind hint used to ride along inside the tooltip (TipKeybindLabel).
-// Stock `TooltipContent` carries the label only, so the shortcut is no longer
-// part of the bubble — the shortcut itself still works.
+// Only the Queue button still carries a hover bubble. Send / Stop deliberately
+// do not: the composer's control row answers on the label (`aria-label`) and the
+// bubble was noise there. The shortcut itself is unaffected either way.
 async function expectShortcutTooltip(label: string) {
   fireEvent.pointerMove(screen.getByLabelText(label), { pointerType: 'mouse' })
 
@@ -142,17 +142,17 @@ describe('narrow tiles', () => {
   })
 })
 
-describe('ComposerControls shortcut tooltips', () => {
-  it('keeps Send (not Steer) while a turn is running if there is a payload', async () => {
+describe('ComposerControls mid-turn action labels', () => {
+  it('keeps Send (not Steer) while a turn is running if there is a payload', () => {
     renderControls({ busy: true, busyAction: 'steer' })
 
-    await expectShortcutTooltip('Send')
+    expect(screen.getByLabelText('Send')).toBeTruthy()
   })
 
-  it('shows Stop only when the composer is empty mid-turn', async () => {
+  it('shows Stop only when the composer is empty mid-turn', () => {
     renderControls({ busy: true, busyAction: 'stop', canSubmit: true, hasComposerPayload: false })
 
-    await expectShortcutTooltip('Stop')
+    expect(screen.getByLabelText('Stop')).toBeTruthy()
   })
 
   it('shows Ctrl+Enter for Queue as the secondary mid-turn action', async () => {

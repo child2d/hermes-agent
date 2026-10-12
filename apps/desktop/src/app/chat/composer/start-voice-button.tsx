@@ -1,10 +1,5 @@
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { AudioLines, ChevronDown, iconSize } from '@/lib/icons'
@@ -38,38 +33,34 @@ export function StartVoiceButton({
 
   return (
     <span className="flex items-center">
-      <Tooltip><TooltipTrigger asChild>
-        <Button
-          aria-label={label}
-          className={cn(PRIMARY_ICON_BTN, engine && 'rounded-r-none')}
-          disabled={disabled}
-          onClick={() => {
-            triggerHaptic('open')
-            recordAction('composer.voice', 'click')
-            onStart()
-          }}
-          size="icon"
-          type="button"
-        >
-          <AudioLines className={iconSize.sm} />
-        </Button>
-      </TooltipTrigger><TooltipContent>{engine ? `${label} — ${engine}` : label}</TooltipContent></Tooltip>
+            <Button
+        aria-label={label}
+        className={cn(PRIMARY_ICON_BTN, engine && 'rounded-r-none')}
+        disabled={disabled}
+        onClick={() => {
+          triggerHaptic('open')
+          recordAction('composer.voice', 'click')
+          onStart()
+        }}
+        size="icon"
+        type="button"
+      >
+        <AudioLines className={iconSize.sm} />
+      </Button>
       {engine ? (
         <DropdownMenu>
-          <Tooltip><TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                aria-label={t.composer.voiceEngine}
-                className={cn(GHOST_ICON_BTN, 'w-5 rounded-l-none p-0')}
-                disabled={disabled}
-                size="icon"
-                type="button"
-                variant="ghost"
-              >
-                <ChevronDown className={iconSize.xs} />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger><TooltipContent>{t.composer.voiceEngine}</TooltipContent></Tooltip>
+                    <DropdownMenuTrigger asChild>
+            <Button
+              aria-label={t.composer.voiceEngine}
+              className={cn(GHOST_ICON_BTN, 'w-5 rounded-l-none p-0')}
+              disabled={disabled}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <ChevronDown className={iconSize.xs} />
+            </Button>
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-52">
             <VoiceEngineRows disabled={disabled} />
           </DropdownMenuContent>

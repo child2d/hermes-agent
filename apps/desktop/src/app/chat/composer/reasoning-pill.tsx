@@ -8,11 +8,6 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { releaseTypingFocus } from '@/components/ui/keyboard-first'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { ChevronDown } from '@/lib/icons'
 import { reasoningEffortClamp, reasoningEffortLabel } from '@/lib/reasoning-effort'
@@ -76,21 +71,19 @@ export function ReasoningPill({ disabled, model }: { disabled: boolean; model: C
 
   return (
     <DropdownMenu onOpenChange={setMenuOpen} open={open}>
-      <Tooltip><TooltipTrigger asChild>
-        <DropdownMenuTrigger asChild>
-          <Button
-            aria-label={title}
-            className={PILL}
-            data-testid="reasoning-pill"
-            disabled={disabled}
-            type="button"
-            variant="ghost"
-          >
-            {pending ? <GlyphSpinner className="opacity-50" spinner="braille" /> : <span>{label}</span>}
-            <ChevronDown className="size-2.5 shrink-0 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipTrigger><TooltipContent side="top">{title}</TooltipContent></Tooltip>
+            <DropdownMenuTrigger asChild>
+        <Button
+          aria-label={title}
+          className={PILL}
+          data-testid="reasoning-pill"
+          disabled={disabled}
+          type="button"
+          variant="ghost"
+        >
+          {pending ? <GlyphSpinner className="opacity-50" spinner="braille" /> : <span>{label}</span>}
+          <ChevronDown className="size-2.5 shrink-0 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52 p-0" side="top" sideOffset={8}>
         <ModelMenuCloseContext.Provider value={() => setMenuOpen(false)}>
           {model.reasoningMenuContent}

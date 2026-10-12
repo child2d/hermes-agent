@@ -148,8 +148,7 @@ export function ComposerControls({
       {showVoicePrimary ? (
         <StartVoiceButton disabled={disabled} label={c.startVoice} onStart={conversation.onStart} />
       ) : (
-        <Tooltip><TooltipTrigger asChild>
-          <Button
+        <Button
             aria-label={showStop ? c.stop : c.send}
             className={PRIMARY_ICON_BTN}
             disabled={disabled || !canSubmit}
@@ -161,14 +160,7 @@ export function ComposerControls({
             ) : (
               <Codicon name="arrow-up" size="0.875rem" />
             )}
-          </Button>
-        </TooltipTrigger><TooltipContent>{
-            showStop ? (
-              c.stop
-            ) : (
-              c.send
-            )
-          }</TooltipContent></Tooltip>
+        </Button>
       )}
       {/* The way out of HUD mode, riding the controls row rather than floating
           above the bar. The old chip lived in a 26px transparent strip reserved
@@ -245,8 +237,7 @@ function ConversationPill({
       {/* Keep the ear visible during voice chat — shown paused, since the
           conversation holds the mic (the one time wake must not listen). */}
       <WakeWordButton disabled={disabled} pausedForVoice />
-      <Tooltip><TooltipTrigger asChild>
-        <Button
+      <Button
           aria-label={muted ? c.unmuteMic : c.muteMic}
           aria-pressed={muted}
           className={cn(GHOST_ICON_BTN, 'p-0', muted && 'bg-muted text-muted-foreground')}
@@ -261,7 +252,6 @@ function ConversationPill({
         >
           <Codicon name={muted ? 'mic-off' : 'mic'} size="1rem" />
         </Button>
-      </TooltipTrigger><TooltipContent>{muted ? c.unmuteMic : c.muteMic}</TooltipContent></Tooltip>
       {listening && (
         <Button
           aria-label={c.stopListening}
