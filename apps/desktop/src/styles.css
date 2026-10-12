@@ -527,10 +527,16 @@
     --conversation-caption-font-size: var(--conversation-caption-base-size);
     --conversation-line-height: var(--conversation-base-line-height);
     --conversation-caption-line-height: var(--conversation-caption-base-line-height);
-    --conversation-turn-gap: 0.375rem;
+    /* Reading line-height for assistant prose only. Unitless on purpose: it
+       rides the chat-text scale through the font-size, not through a px value,
+       and prose is the one place a looser measure is worth the extra height.
+       Every other conversation surface (tool rows, captions, status lines)
+       stays on --conversation-line-height. */
+    --conversation-prose-line-height: 1.6;
+    --conversation-turn-gap: 0.5rem;
     /* Gap between top-level turn blocks (prose ↔ tools ↔ thinking) — enough air
        that scaffolding reads as separate from the reply, not crammed into it. */
-    --turn-block-gap: 0.75rem;
+    --turn-block-gap: 1rem;
     /* Between adjacent scaffolding, though: a back-to-back run of thinking
        headers and tool rows is one sequence, not blocks to hold apart. Derived
        so retuning the block gap carries it along. */
@@ -544,7 +550,7 @@
     /* Paragraph spacing — vertical gap between prose paragraphs, both inside a
        markdown block and between consecutive prose parts. Single knob; tweak
        freely. */
-    --paragraph-gap: 0.7rem;
+    --paragraph-gap: 0.875rem;
     --sticky-human-top: 0.23rem;
     --file-tree-row-height: 1.375rem;
 
@@ -552,14 +558,18 @@
     --composer-control-size: 1.5rem;
     --composer-control-primary-size: 1.625rem;
     --composer-control-gap: 0.25rem;
-    --composer-row-gap: 0.25rem;
+    --composer-row-gap: 0.375rem;
     --composer-ring-strength: 1;
-    --composer-surface-pad-x: 0.5rem;
-    --composer-surface-pad-y: 0.3125rem;
+    --composer-surface-pad-x: 0.75rem;
+    --composer-surface-pad-y: 0.5rem;
     --composer-input-min-height: 1.625rem;
     --composer-input-max-height: 9.375rem;
     --composer-input-inline-min-width: 8rem;
-    --composer-fallback-height: 2.75rem;
+    /* Pre-measure surface height only — useComposerMetrics overwrites both
+       measured vars from the live DOM on the first observer pass. Measured
+       surface height with the padding below is 47px (was 41px); this keeps the
+       +3px headroom the old 2.75rem carried over its 41px. */
+    --composer-fallback-height: 3.125rem;
     --composer-measured-height: calc(0.5rem + var(--composer-shell-pad-block-end) + var(--composer-fallback-height));
     --composer-surface-measured-height: var(--composer-fallback-height);
     --thread-viewport-height: max(
@@ -1636,7 +1646,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 [data-slot='aui_assistant-message-content'] {
   padding-left: var(--message-text-indent);
   font-size: var(--conversation-text-font-size);
-  line-height: 1.5;
+  line-height: var(--conversation-prose-line-height);
 }
 
 [data-slot='aui_assistant-message-root'] {
@@ -1786,7 +1796,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 [data-slot='aui_user-message-root'],
 [data-slot='aui_edit-composer-root'] {
-  --human-msg-line-height: 1.3;
+  --human-msg-line-height: 1.4;
   font-size: var(--conversation-text-font-size);
 }
 
@@ -1827,7 +1837,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 [data-slot='aui_thread-content'] {
   max-width: var(--composer-width);
-  padding-inline: 1.5rem;
+  padding-inline: 1.75rem;
 }
 
 [data-slot='aui_intro'] {
