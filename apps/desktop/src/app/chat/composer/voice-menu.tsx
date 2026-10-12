@@ -11,11 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { AudioLines, Ear, EarOff, iconSize, Loader2, Square, Volume2, VolumeX } from '@/lib/icons'
@@ -83,8 +78,7 @@ export function VoiceMenu({
 
   return (
     <DropdownMenu>
-      <Tooltip><TooltipTrigger asChild>
-        <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild>
           <Button
             aria-label={triggerLabel}
             className={cn(GHOST_ICON_BTN, 'p-0', active && ACTIVE_ICON_BTN)}
@@ -103,8 +97,7 @@ export function VoiceMenu({
               <Codicon name="mic" size="0.875rem" />
             )}
           </Button>
-        </DropdownMenuTrigger>
-      </TooltipTrigger><TooltipContent>{wake.notice && !dictating ? `${triggerLabel} — ${wake.notice}` : triggerLabel}</TooltipContent></Tooltip>
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-52">
         <DropdownMenuItem
           className={dropdownMenuRow}

@@ -47,17 +47,6 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof ComposerC
   )
 }
 
-// Only the Queue button still carries a hover bubble. Send / Stop deliberately
-// do not: the composer's control row answers on the label (`aria-label`) and the
-// bubble was noise there. The shortcut itself is unaffected either way.
-async function expectShortcutTooltip(label: string) {
-  fireEvent.pointerMove(screen.getByLabelText(label), { pointerType: 'mouse' })
-
-  const tooltip = await screen.findByRole('tooltip')
-
-  expect(tooltip.textContent).toContain(label)
-}
-
 afterEach(() => {
   cleanup()
   $hudMode.set(false)
@@ -155,10 +144,10 @@ describe('ComposerControls mid-turn action labels', () => {
     expect(screen.getByLabelText('Stop')).toBeTruthy()
   })
 
-  it('shows Ctrl+Enter for Queue as the secondary mid-turn action', async () => {
+  it('shows the Queue action as the secondary mid-turn action', () => {
     renderControls({ busy: true, busyAction: 'queue' })
 
-    await expectShortcutTooltip('Queue message')
+    expect(screen.getByLabelText('Queue message')).toBeTruthy()
   })
 
   it('hides Queue while idle even if the composer has a payload', () => {

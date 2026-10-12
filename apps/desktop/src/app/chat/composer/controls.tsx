@@ -131,8 +131,7 @@ export function ComposerControls({
         </>
       )}
       {showQueueButton ? (
-        <Tooltip><TooltipTrigger asChild>
-          <Button
+        <Button
             aria-label={c.queueMessage}
             className={GHOST_ICON_BTN}
             disabled={disabled}
@@ -142,8 +141,7 @@ export function ComposerControls({
             variant="ghost"
           >
             <Layers3 className={iconSize.sm} />
-          </Button>
-        </TooltipTrigger><TooltipContent>{c.queueMessage}</TooltipContent></Tooltip>
+        </Button>
       ) : null}
       {showVoicePrimary ? (
         <StartVoiceButton disabled={disabled} label={c.startVoice} onStart={conversation.onStart} />
