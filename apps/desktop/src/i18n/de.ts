@@ -666,8 +666,7 @@ export const deOverrides = {
     openStarmap: 'Speicher-Graph öffnen',
     enterHud: 'HUD-Modus',
     exitHud: 'HUD-Modus beenden',
-    resetHudLayout: 'HUD-Größe und -Position zurücksetzen',
-    notifications: 'Benachrichtigungen'
+    resetHudLayout: 'HUD-Größe und -Position zurücksetzen'
   },
   keybinds: {
     title: 'Tastaturkürzel',
@@ -1164,8 +1163,6 @@ export const deOverrides = {
       appActionsTitle: 'App-Aktionen',
       appActionsDesc:
         'Auf welcher Seite die App-Aktionen in der Titelleiste sitzen. Rechts lässt Platz für Tabs auf der linken Seite.',
-      layoutEditorTitle: 'Layout-Editor',
-      layoutEditorDesc: 'Bereiche per Ziehen neu anordnen, teilen und zusammenführen. Esc beendet den Modus.',
       appActionsLeft: 'Links',
       appActionsRight: 'Rechts',
       terminalFontTitle: 'Terminalschrift',

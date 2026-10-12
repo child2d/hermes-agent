@@ -341,8 +341,7 @@ export const ja = defineLocale({
     muteHaptics: '触覚フィードバックをオフ',
     unmuteHaptics: '触覚フィードバックをオン',
     openStarmap: 'メモリグラフを開く',
-    resetHudLayout: 'HUD のサイズと位置をリセット',
-    notifications: '通知'
+    resetHudLayout: 'HUD のサイズと位置をリセット'
   },
 
   language: {
@@ -660,8 +659,6 @@ export const ja = defineLocale({
       appActionsTitle: 'アプリ操作',
       appActionsDesc:
         'タイトルバーのアプリ操作を左右どちらに置くか。右にするとタブ用のスペースが左に残ります。',
-      layoutEditorTitle: 'レイアウトエディター',
-      layoutEditorDesc: 'ドラッグでペインの並べ替え・分割・結合ができます。Esc で終了。',
       appActionsLeft: '左',
       appActionsRight: '右',
       terminalFontTitle: 'ターミナルフォント',

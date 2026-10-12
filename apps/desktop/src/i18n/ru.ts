@@ -320,8 +320,7 @@ export const ru = defineLocale({
     unmuteHaptics: 'Включить вибрацию',
     openStarmap: 'Открыть граф памяти',
     enterHud: 'Режим HUD',
-    exitHud: 'Выйти из режима HUD',
-    notifications: 'Уведомления'
+    exitHud: 'Выйти из режима HUD'
   },
   keybinds: {
     title: 'Горячие клавиши',
@@ -691,8 +690,6 @@ export const ru = defineLocale({
       tabStripNever: 'Никогда',
       appActionsTitle: 'Действия приложения',
       appActionsDesc: 'С какой стороны в заголовке окна находятся действия приложения. Справа оставляют место для вкладок слева.',
-      layoutEditorTitle: 'Редактор раскладки',
-      layoutEditorDesc: 'Переставляйте, разделяйте и объединяйте панели перетаскиванием. Esc — выход.',
       appActionsLeft: 'Слева',
       appActionsRight: 'Справа',
       terminalFontTitle: 'Шрифт терминала',

@@ -666,8 +666,7 @@ export const frOverrides = {
     openStarmap: 'Ouvrir le graphe de mémoire',
     enterHud: 'Mode HUD',
     exitHud: 'Quitter le mode HUD',
-    resetHudLayout: 'Réinitialiser la taille et la position du HUD',
-    notifications: 'Notifications'
+    resetHudLayout: 'Réinitialiser la taille et la position du HUD'
   },
   keybinds: {
     title: 'Raccourcis clavier',
@@ -1169,8 +1168,6 @@ export const frOverrides = {
       appActionsTitle: "Actions de l'application",
       appActionsDesc:
         "De quel côté de la barre de titre placer les actions de l'application. À droite laisse la place aux onglets à gauche.",
-      layoutEditorTitle: 'Éditeur de disposition',
-      layoutEditorDesc: 'Réorganisez, divisez et fusionnez les panneaux par glisser-déposer. Échap quitte.',
       appActionsLeft: 'À gauche',
       appActionsRight: 'À droite',
       terminalFontTitle: 'Police du terminal',

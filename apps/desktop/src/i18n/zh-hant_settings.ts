@@ -275,8 +275,6 @@ export const zhHantSettings = {
       tabStripNever: '永不',
       appActionsTitle: '應用操作',
       appActionsDesc: '應用操作按鈕放在標題列的哪一側。選右側可把左側留給分頁。',
-      layoutEditorTitle: '版面編輯器',
-      layoutEditorDesc: '拖曳即可重新排列、分割、合併面板；Esc 結束。',
       appActionsLeft: '左側',
       appActionsRight: '右側',
       terminalFontTitle: '終端機字型',
