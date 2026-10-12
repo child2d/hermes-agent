@@ -76,6 +76,259 @@ export const zh = defineLocale({
     authorizedToolsUnavailable: '已授权。工具不可用。',
     required: '必填'
   },
+
+  // 连接器整页（`en.ts` 的 `connectorsPage` 镜像）。这一块此前只有英文，中文界面
+  // 下整页回落成英文；术语沿用上面 `connectors` 与设置页的既有译法。
+  connectorsPage: {
+    title: '连接器',
+    searchPlaceholder: (count: number) => `搜索 ${count} 个应用`,
+    filterCategory: '分类',
+    categoryAll: '全部分类',
+    uncategorised: '未分类',
+
+    residencyLocal: '在本机运行',
+
+    segment: {
+      all: '全部',
+      available: '可用',
+      connected: '已连接',
+      off: '已关闭'
+    },
+
+    group: {
+      connected: '已连接',
+      connectedNote: '先看断开的那几个。',
+      available: '可用',
+      off: '已关闭',
+      offNote: '登录状态仍然保留。'
+    },
+
+    card: {
+      kindManaged: '托管',
+      kindCatalog: 'MCP · 目录',
+      kindCustom: 'MCP · 自定义',
+      kindPlugin: (plugin: string) => `MCP · 插件 ${plugin}`,
+      inCatalog: '在 Hermes 目录中',
+      hostedTwin: '有托管版本可用',
+      alsoLocal: '本机也能运行',
+      open: (name: string) => `打开 ${name}`,
+      turnServerOn: (name: string) => `开启 ${name}`,
+      turnServerOff: (name: string) => `关闭 ${name}`,
+      state: {
+        accessExpired: '授权已过期',
+        available: '可用',
+        connected: '已连接',
+        connecting: '正在连接',
+        connectionUnknown: '状态未知',
+        couldNotConnect: '无法连接',
+        offByYourOrganisation: '已被你的组织关闭',
+        offForYou: '已对你关闭',
+        serverConnecting: '正在连接…',
+        serverError: '出错',
+        serverNeedsAuth: '需要授权',
+        serverOff: '已关闭',
+        serverOn: '已开启',
+        serverOnUnused: '已开启，未使用'
+      },
+      fact: {
+        tools: (count: number) => `${count} 个工具`,
+        toolsOff: (count: number) => `${count} 个工具已关闭`,
+        toolsOn: (count: number) => `${count} 个工具已开启`,
+        toolsSomeOn: (total: number, on: number) => `${total} 个工具，其中 ${on} 个已开启`
+      },
+      verb: {
+        authenticate: '去授权',
+        connect: '连接',
+        install: '安装',
+        openLogs: '查看日志',
+        reconnect: '重新连接',
+        stopWaiting: '停止等待',
+        tryAgain: '重试',
+        turnBackOn: '重新开启'
+      },
+      reason: {
+        finishSignIn: '请在浏览器里完成登录。',
+        reconnect: '重新连接以继续使用这个应用。',
+        serverError: '服务端拒绝了这次连接。',
+        serverNeedsAuth: '登录后这个服务端才会回应。'
+      }
+    },
+
+    page: {
+      loading: '正在读取目录与本机的服务端',
+      emptyTitle: '这里还没有应用。先在本机添加一个服务端吧。',
+      noMatchTitle: '没有匹配的应用',
+      noMatchBody: '这里没有匹配项。可以把 Hermes 指向你自己的 MCP 服务端来添加。',
+      clearSearch: '清空搜索',
+      hostedFailedTitle: '无法连接托管应用。',
+      hostedFailedBody: '本机的服务端不受影响，仍在运行；没有任何东西被关闭。',
+      retry: '重试',
+      matchesElsewhere: (count: number) => `其他分组里还有 ${count} 个匹配。`,
+      showAllMatches: '显示全部匹配',
+      segmentNoMatch: (segment: string) => `${segment} 里没有匹配，因此显示全部匹配。`,
+      freeTierNote: '登录之前，连接只保留在这台电脑上。',
+      signInLine: '登录 Nous 后即可使用托管应用。',
+      signIn: '登录',
+      managedUnavailable: '此账号暂时无法使用托管应用。',
+      writeFailed: '这次改动没有保存。',
+      refreshFailed: '工具列表没有刷新。',
+      disconnectNoAccount: '这里没有可供 Hermes 断开连接的账号。请刷新页面后重试。',
+      disconnectRefused: 'Nous 目前无法移除这次登录。可以用开关关闭该应用，或稍后重试。'
+    },
+
+    add: {
+      action: '添加自定义',
+      title: '连接自定义 MCP',
+      hint: '在本机 mcp.json 里新增一条记录',
+      pasteLabel: '粘贴命令或片段',
+      pastePlaceholder: 'npx -y @modelcontextprotocol/server-filesystem /path/to/dir',
+      pasteNoMatch: '这里没有识别出服务端。请改为填写下面的字段。',
+      name: '名称',
+      nameTaken: '这个名称已被占用。',
+      type: '类型',
+      typeStdio: 'STDIO',
+      typeHttp: 'Streamable HTTP',
+      command: '启动命令',
+      args: '参数',
+      addArg: '+ 添加参数',
+      envVars: '环境变量',
+      addEnvVar: '+ 添加环境变量',
+      passthrough: '透传环境变量',
+      addPassthrough: '+ 添加变量',
+      cwd: '工作目录',
+      url: 'URL',
+      headers: '请求头',
+      addHeader: '+ 添加请求头',
+      auth: '认证',
+      authNone: '无',
+      authOauth: 'OAuth',
+      authBearer: 'Bearer 令牌',
+      keyPlaceholder: 'KEY',
+      valuePlaceholder: '值',
+      removeRow: '删除这一行',
+      editJson: '编辑 mcp.json',
+      saveFailed: '这个服务端没有保存。'
+    },
+
+    dialog: {
+      disconnect: '断开连接',
+      disconnectTitle: (name: string) => `断开 ${name}？`,
+      disconnectBody: 'Hermes 将不再以这个账号身份活动。你随时可以重新连接。',
+      menuRefreshTools: '刷新工具',
+      moreActions: '更多操作',
+      removeServerTitle: (name: string) => `移除 ${name}？`,
+      removeServerBody: '这条记录会从本机 mcp.json 里移除，其他内容都不会被删除。',
+      appSwitch: (name: string) => `Hermes 可以使用 ${name}`,
+      waysTitle: (name: string) => `${name} 的运行位置`,
+      wayNotConnected: (name: string) => `尚未连接。请在浏览器里登录 ${name}。`,
+      wayHosted: '托管',
+      bothOn: (name: string) => `两者都开着，因此 Hermes 会看到 ${name} 的每个工具两次。`,
+      turnOffLocal: '关闭本机服务端',
+      providedByPlugin: (plugin: string) => `由插件 ${plugin} 提供`,
+      openPlugins: '打开「插件」页签',
+      nousLine: 'Nous 应用跟随你的账号，而不是配置档案（Profile）。',
+      rulesReadOnly: '当前无法修改规则。',
+      rulesAppOff: (name: string) => `开启 ${name} 才能修改它的工具。`,
+      rulesSignIn: '登录后才能修改 Hermes 在这里可以做什么。',
+      orgNote: (count: number) => `你的组织关闭了 ${count} 个工具。`,
+      orgLink: '打开连接器管理后台',
+      connectEnded: '登录没有完成。',
+      connectOpenAgain: '重新打开链接',
+      tokensPerCall: '每次调用的 token',
+      usesPerMonth: '30 天内的使用次数',
+      advanced: '高级',
+      advancedHint: 'mcp.json 记录与日志'
+    },
+
+    tools: {
+      title: '工具',
+      notInstalledBody: '在本机安装后即可看到它带来的工具。',
+      summaryTitle: (name: string) => `Hermes 可以用 ${name} 做什么`,
+      summaryPreviewTitle: (name: string) => `连接之后 Hermes 可以用 ${name} 做什么`,
+      summaryCount: (count: number) => `${count} 个工具`,
+      summaryAllTools: '全部工具',
+      summaryOther: '其他',
+      allToolsSwitch: '开启或关闭所有工具',
+      summaryAllOn: '全部开启',
+      summarySomeOn: (on: number, total: number) => `${total} 个中 ${on} 个已开启`,
+      summaryOff: '已关闭',
+      showAllTools: (count: number) => `显示全部 ${count} 个工具`,
+      showSummary: '显示概览',
+      facetSwitch: (facet: string) => `开启或关闭「${facet}」类工具`,
+      moreHints: (count: number) => `+${count}`,
+      staleSignIn: '登录后读取最新的工具列表。',
+      searchCountPlaceholder: (count: number) => `搜索 ${count} 个工具`,
+      toolList: (name: string) => `${name} 的工具`,
+      categorySelect: (count: number) => `${count} 个分类`,
+      showDeprecated: (count: number) => `显示 ${count} 个已废弃工具`,
+      hideDeprecated: (count: number) => `隐藏 ${count} 个已废弃工具`,
+      quickReadOnly: '只读',
+      quickNoDestructive: '关闭破坏性工具',
+      quickEverythingOn: '全部开启',
+      lockedHint: '已被你的组织关闭',
+      turnToolOn: (tool: string) => `开启 ${tool}`,
+      turnToolOff: (tool: string) => `关闭 ${tool}`,
+      showDetails: (tool: string) => `查看 ${tool} 的作用`,
+      hideDetails: (tool: string) => `收起 ${tool} 的作用`,
+      noMatch: '没有工具匹配这些筛选条件。',
+      loading: '正在读取工具列表',
+      unavailableLine: '工具列表不可用。',
+      needsAuthTitle: (name: string) => `登录 ${name} 才能读取它的工具。`,
+      needsAuthBody: '登录信息只留在本机，不会外发。',
+      retry: '重试',
+      goneTitle: (name: string) => `${name} 已从目录中移除。`,
+      goneBody: 'Hermes 无法再调用它。这一行会保留到你移除它为止，不会有东西悄悄消失。',
+      remove: '移除',
+      offTitle: (name: string) => `${name} 已关闭。`,
+      offBody: '用上面的开关开启它，即可读取它带来的工具。',
+      signedOutTitle: '登录 Nous 后才能读取工具列表。',
+      signedOutBody: '本机的服务端不受影响。',
+      conflictTitle: '你编辑期间，有人改动了这条规则。',
+      conflictBody: (theyOff: number, theyOn: number) => {
+        const they = [
+          theyOff > 0 ? `关掉了 ${theyOff} 个你正开着的工具` : '',
+          theyOn > 0 ? `留下了 ${theyOn} 个你已关掉的工具` : ''
+        ].filter(Boolean)
+
+        return `${they.length > 0 ? `对方${they.join('，并')}。` : ''}你的改动仍然留在页面上，没有写入任何内容。`
+      },
+      conflictReload: '载入对方的版本',
+      conflictSave: '覆盖对方的版本',
+      saveFailed: '这些工具规则没有保存。',
+      footerDirty: (off: number, backOn: number) =>
+        `${off} 个工具已关闭，${backOn === 0 ? '无' : backOn} 个重新开启`,
+      discard: '放弃',
+      save: '保存更改',
+      saving: '正在保存…'
+    },
+
+    // 这个标签会出现在每一行工具里，保持简短以免把行撑宽。
+    vocabulary: {
+      facetRead: { label: '读取', long: '从该应用读出数据，不改动任何东西。' },
+      facetWrite: { label: '写入', long: '在该应用里创建或改动内容。' },
+      facetDestructive: { label: '破坏性', long: '可能在该应用里永久删除内容。' },
+      facetUnclassified: { label: '影响不明', long: '该应用没有说明这个工具做什么。' },
+      hintReadOnly: { label: '只读', long: '该工具声明自己只读取。' },
+      hintCreate: { label: '新建', long: '创建一个新对象。' },
+      hintUpdate: { label: '更新', long: '改动已经存在的对象。' },
+      hintDelete: { label: '删除', long: '移除某个对象。' },
+      hintDestructive: { label: '破坏性', long: '它造成的改动在这里无法撤销。' },
+      hintIdempotent: { label: '可重复', long: '跑两次和跑一次的效果相同。' },
+      hintOpenWorld: { label: '外部', long: '会触达该应用之外的东西。' }
+    }
+  },
+
+  // 首次交接导览（`en.ts` 的 `handoffTour` 镜像）。
+  handoffTour: {
+    profileTitle: '你的第一个任务跑在默认配置档案上',
+    profileText:
+      '这条侧栏用来切换配置档案。当前高亮的是 default，任务会话就在它下面。另一个是 setup 档案，欢迎对话在那边。',
+    sessionsTitle: '每个档案各自保留会话',
+    sessionsText:
+      '这个列表属于 default 档案。「新建会话」会在当前选中的档案下创建。切换侧栏上的档案，列表会跟着变。',
+    stayTitle: 'Hermes 随时都在',
+    stayText: '需要帮忙时，切到 setup 档案并打开 Welcome to Hermes 即可。它一直在那儿。'
+  },
   sessionImport: {
     title: '从其他应用继续',
     subtitle: '将对话导入 Hermes，接着上次的进度继续。',
