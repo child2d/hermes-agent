@@ -1,4 +1,3 @@
-import { useAuiState } from '@assistant-ui/react'
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 import {
@@ -14,7 +13,6 @@ import {
   COMPOSER_COMPACT_PILL_PX,
   COMPOSER_FOLD_VOICE_PX,
   COMPOSER_MINIMAL_PX,
-  COMPOSER_SINGLE_LINE_MAX_PX,
   COMPOSER_STACK_BREAKPOINT_PX
 } from '../composer-utils'
 
@@ -46,16 +44,16 @@ const fitForWidth = (width: number): ComposerFit => ({
 const sameFit = (a: ComposerFit, b: ComposerFit) =>
   a.compactPill === b.compactPill && a.foldVoice === b.foldVoice && a.minimal === b.minimal && a.tight === b.tight
 
-interface UseComposerMetricsResult extends ComposerFit {
-  stacked: boolean
-}
-
 /**
- * Owns the composer's *sizing* engine: the stacked-vs-inline layout decision
- * and the measured-height CSS vars the thread reads for bottom clearance. All
- * work is edge-gated — the ResizeObserver only fires on real size changes, the
- * height vars are 8px-bucketed so per-keystroke growth never invalidates the
- * tree's computed style, and the fit only re-renders when it crosses a stage.
+ * Owns the composer's *sizing* engine: the width-driven control ladder and the
+ * measured-height CSS vars the thread reads for bottom clearance. All work is
+ * edge-gated — the ResizeObserver only fires on real size changes, the height
+ * vars are 8px-bucketed so per-keystroke growth never invalidates the tree's
+ * computed style, and the fit only re-renders when it crosses a stage.
+ *
+ * There is no stacked-vs-inline decision to make here: the composer's row
+ * layout is fixed (input on its own row, controls below), so the only thing the
+ * measured width still decides is how much of the control cluster survives.
  */
 export function useComposerMetrics({
   composerDockRef,
@@ -63,41 +61,8 @@ export function useComposerMetrics({
   composerSurfaceRef,
   editorRef,
   poppedOut
-}: UseComposerMetricsArgs): UseComposerMetricsResult {
-  const [expanded, setExpanded] = useState(false)
+}: UseComposerMetricsArgs): ComposerFit {
   const [fit, setFit] = useState<ComposerFit>(ROOMY)
-
-  // Edge signals, not the live text: these only re-render when emptiness / the
-  // presence of a non-trailing newline actually flips, so typing within a line
-  // costs nothing here.
-  const isEmpty = useAuiState(s => s.composer.text.length === 0)
-  const hasHardNewline = useAuiState(s => s.composer.text.trimEnd().includes('\n'))
-
-  // Expansion (input on its own full-width row, controls below) is driven by
-  // the editor's *actual* rendered height via the ResizeObserver in
-  // syncComposerMetrics — it only fires when the text genuinely wraps to a
-  // second line, so the layout flips exactly at the wrap point rather than at
-  // a guessed character count. We only handle the two cases the observer
-  // can't: an explicit newline (expand before layout settles) and an emptied
-  // draft (collapse back). We never read scrollHeight per keystroke.
-  useEffect(() => {
-    if (isEmpty) {
-      setExpanded(false)
-
-      return
-    }
-
-    if (expanded) {
-      return
-    }
-
-    // Only a non-trailing newline forces an immediate expand. A trailing newline
-    // (or phantom \n from contenteditable junk) is left to the ResizeObserver,
-    // which expands only when the editor's real height actually grows.
-    if (hasHardNewline) {
-      setExpanded(true)
-    }
-  }, [expanded, hasHardNewline, isEmpty])
 
   // Bucket measured heights so we only invalidate the global CSS var when
   // the size crosses a meaningful threshold. Without bucketing, the editor
@@ -138,18 +103,6 @@ export function useComposerMetrics({
       }
     }
 
-    // Expand once the input has actually wrapped past a single line. The
-    // observer only fires on real size changes, so this reads scrollHeight at
-    // most once per wrap (not per keystroke). One line ≈ 28px (1.625rem
-    // min-height + padding); a second line clears ~36px. We only ever expand
-    // here — collapse is handled by the emptied-draft effect to avoid
-    // oscillating across the wrap boundary as the input switches widths.
-    const editor = editorRef.current
-
-    if (editor && editor.scrollHeight > COMPOSER_SINGLE_LINE_MAX_PX) {
-      setExpanded(true)
-    }
-
     // Floats still need their width-driven controls, but no pane reserves
     // bottom clearance while the shared composer is detached.
     if (poppedOutRef.current) {
@@ -178,7 +131,7 @@ export function useComposerMetrics({
         setSurfaceVar(composer, COMPOSER_SURFACE_HEIGHT_VAR, `${bucket}px`)
       }
     }
-  }, [composerDockRef, composerRef, composerSurfaceRef, editorRef])
+  }, [composerDockRef, composerRef, composerSurfaceRef])
 
   useResizeObserver(syncComposerMetrics, composerDockRef, composerRef, composerSurfaceRef, editorRef)
 
@@ -224,13 +177,12 @@ export function useComposerMetrics({
   // not a proxy for it.
   //
   // The ladder is monotonic: each stage implies the ones above it, so the pill
-  // is always compact by the time the row stacks, and the voice controls are
-  // always folded before minimal drops them.
+  // is always compact by the time the pane is too narrow for the cluster, and
+  // the voice controls are always folded before minimal drops them.
   return {
     compactPill: fit.compactPill || fit.tight,
     foldVoice: fit.foldVoice || fit.minimal,
     minimal: fit.minimal,
-    stacked: expanded || fit.tight,
     tight: fit.tight
   }
 }

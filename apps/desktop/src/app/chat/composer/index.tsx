@@ -46,7 +46,6 @@ import { AttachmentList } from './attachments'
 import {
   acceptsTriggerCompletion,
   COMPOSER_FADE_BACKGROUND,
-  composerInputWidthClass,
   implicitSlashAcceptIndex,
   liveComposerDraft,
   type QueueEditState,
@@ -406,7 +405,7 @@ export function ChatBar({
     return onCancel()
   }, [activeQueueSessionKeyRef, onCancel])
 
-  const { compactPill, foldVoice, minimal, stacked } = useComposerMetrics({
+  const { compactPill, foldVoice, minimal } = useComposerMetrics({
     composerDockRef,
     composerRef,
     composerSurfaceRef,
@@ -1166,10 +1165,8 @@ export function ChatBar({
     />
   )
 
-  const inputWidthClass = composerInputWidthClass(stacked)
-
   const input = (
-    <div className={cn('relative', inputWidthClass)}>
+    <div className="relative w-full">
       <div
         aria-disabled={inputDisabled ? true : undefined}
         aria-label={t.composer.message}
@@ -1178,10 +1175,8 @@ export function ChatBar({
         // Keeping spellcheck off below still excludes smart quotes and dashes.
         autoCorrect={isMacPlatform() ? 'on' : 'off'}
         className={cn(
-          'min-h-[1.625rem] min-h-(--composer-input-min-height) max-h-(--composer-input-max-height) cursor-text overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-transparent pb-1 pr-1 pt-1 leading-normal text-foreground outline-none disabled:cursor-not-allowed',
+          'min-h-[1.625rem] min-h-(--composer-input-min-height) max-h-(--composer-input-max-height) cursor-text overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-transparent pl-3 pb-1 pr-1 pt-1 leading-normal text-foreground outline-none disabled:cursor-not-allowed w-full',
           '**:data-ref-text:cursor-default',
-          stacked && 'pl-3',
-          inputWidthClass,
           // Inside the native Wayland HUD drag region: a drag region swallows
           // the page's mouse input whole, so the input must opt back out or it
           // becomes unclickable. Buttons use the global no-drag rule.
@@ -1487,7 +1482,15 @@ export function ChatBar({
                 )}
                 <div
                   className={cn(
-                    'relative z-1 flex min-h-0 w-full flex-col gap-(--composer-row-gap) overflow-hidden rounded-[inherit] px-(--composer-surface-pad-x) py-(--composer-surface-pad-y) transition-opacity duration-200 ease-out',
+                    // Explicitly row 2: the surface has no min-height of its own
+                    // beyond the empty-box floor, but it DOES carry
+                    // --composer-surface-min-height — and with the status drawer
+                    // absent the fade is the grid's first in-flow child, which
+                    // auto-placement drops into row 1 (auto) and leaves the 1fr
+                    // row empty, so the box grew but the input did not.
+                    // row-start-2 keeps the status drawer on row 1 and the fade
+                    // on the row that stretches, in both cases.
+                    'relative z-1 row-start-2 flex min-h-0 w-full flex-col gap-(--composer-row-gap) overflow-hidden rounded-[inherit] px-(--composer-surface-pad-x) py-(--composer-surface-pad-y) transition-opacity duration-200 ease-out',
                     scrolledUp
                       ? 'opacity-30 group-hover/composer:opacity-100 group-focus-within/composer-surface:opacity-100'
                       : 'opacity-100'
@@ -1530,15 +1533,21 @@ export function ChatBar({
                     </div>
                   )}
                   {attachments.length > 0 && <AttachmentList attachments={attachments} onRemove={onRemoveAttachment} />}
+                  {/* One row layout, always: the input owns a full-width row and
+                    the "+" menu and the control cluster ride the row below it.
+                    The input row is the 1fr one, so a surface taller than the
+                    content (the empty box, --composer-surface-min-height) puts
+                    the text at the top and pins the controls to the bottom
+                    instead of leaving the slack under the whole row. */}
                   <div
                     className={cn(
-                      'grid w-full',
-                      stacked
-                        ? 'grid-cols-[auto_1fr] gap-(--composer-row-gap) [grid-template-areas:"input_input"_"menu_controls"]'
-                        : 'grid-cols-[auto_1fr_auto] items-center gap-(--composer-control-gap) [grid-template-areas:"menu_input_controls"]'
+                      'grid w-full flex-1 grid-cols-[auto_1fr] grid-rows-[1fr_auto] gap-(--composer-row-gap) [grid-template-areas:"input_input"_"menu_controls"]'
                     )}
                   >
-                    <div className="flex translate-y-[3px] items-start gap-(--composer-control-gap) self-start [grid-area:menu]">
+                    {/* `/` menu and the contributed leading slot. Centred in the
+                      control row — the old +3px nudge aligned the "+" with the
+                      input's first text line back when it shared that row. */}
+                    <div className="flex items-center gap-(--composer-control-gap) self-center [grid-area:menu]">
                       {contextMenu}
                       <ContribSlot area={COMPOSER_AREAS.leading} />
                     </div>

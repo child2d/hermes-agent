@@ -42,11 +42,6 @@ export const COMPOSER_FOLD_VOICE_PX = 260
 // spare at any width the layout tree allows (~74 all-in).
 export const COMPOSER_MINIMAL_PX = 180
 
-// A single editor line is ~28px (--composer-input-min-height 1.625rem + 0.5rem
-// vertical padding). Anything taller means the text wrapped to a second line,
-// which is when the composer should expand to the stacked layout.
-export const COMPOSER_SINGLE_LINE_MAX_PX = 36
-
 export const COMPOSER_FADE_BACKGROUND =
   'linear-gradient(to bottom, transparent, color-mix(in srgb, var(--dt-background) 10%, transparent))'
 
@@ -67,19 +62,6 @@ export function shouldDisableComposerInput(disabled: boolean, gatewayState: Conn
 }
 
 export const pickPlaceholder = (pool: readonly string[]) => pool[Math.floor(Math.random() * pool.length)]
-
-/**
- * Width classes for the unstacked vs stacked composer editor.
- *
- * The inline (unstacked) editor lives in a CSS-grid `1fr` column — not a flex
- * row — so `flex-1` never grows it. Pairing that with
- * `--composer-input-inline-min-width` (8rem) pinned the field to the ~129pt
- * sliver measured in #99728 while mid-run controls kept their intrinsic width.
- * `w-full min-w-0` fills the grid track and lets the column shrink cleanly.
- */
-export function composerInputWidthClass(stacked: boolean): string {
-  return stacked ? 'w-full' : 'w-full min-w-0'
-}
 
 /** Completion items can carry an `action` (set in use-slash-completions) that
  *  runs a side effect on pick instead of inserting a chip — e.g. the session

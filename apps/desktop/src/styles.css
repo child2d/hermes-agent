@@ -562,14 +562,19 @@
     --composer-ring-strength: 1;
     --composer-surface-pad-x: 0.75rem;
     --composer-surface-pad-y: 0.5rem;
+    /* The composer's empty height. It is a roomy box at rest, not a one-line
+       bar: the input owns the top and the control row is pinned to the bottom
+       (the row layout is the stacked one, always). 8rem is the surface's
+       BORDER-BOX height — measure it on [data-slot='composer-surface'].
+       HUD mode overrides this to 0: the bar there is a strip on someone's game,
+       not a text area. */
+    --composer-surface-min-height: 8rem;
     --composer-input-min-height: 1.625rem;
     --composer-input-max-height: 9.375rem;
-    --composer-input-inline-min-width: 8rem;
     /* Pre-measure surface height only — useComposerMetrics overwrites both
-       measured vars from the live DOM on the first observer pass. Measured
-       surface height with the padding below is 47px (was 41px); this keeps the
-       +3px headroom the old 2.75rem carried over its 41px. */
-    --composer-fallback-height: 3.125rem;
+       measured vars from the live DOM on the first observer pass. Equal to
+       --composer-surface-min-height, since an empty composer IS the floor now. */
+    --composer-fallback-height: 8rem;
     --composer-measured-height: calc(0.5rem + var(--composer-shell-pad-block-end) + var(--composer-fallback-height));
     --composer-surface-measured-height: var(--composer-fallback-height);
     --thread-viewport-height: max(
@@ -2008,6 +2013,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 [data-slot='composer-surface'] {
   border-color: var(--ui-stroke-secondary) !important;
+  min-height: var(--composer-surface-min-height);
 }
 
 [data-slot='composer-fade'] {
@@ -3443,6 +3449,9 @@ button[data-slot='aui_msg-reactions'] svg {
   --turn-block-gap: 0.375rem;
   --paragraph-gap: 0.4rem;
   --composer-shell-pad-block-end: 0px;
+  /* The bar is a one-line strip: no reserved empty area, the input and the
+     controls stay on the same visual row's budget. */
+  --composer-surface-min-height: 0px;
   /* The viewport fills the band, period. The app's calc shortens the viewport
      to leave the dock's strips visible below it; the HUD hides those strips, so
      applying it here just strands a dead zone at the end of the thread that
