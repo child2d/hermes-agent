@@ -204,6 +204,16 @@ describe('titlebar app-action cluster', () => {
     expect(within(right).queryByLabelText('HUD mode')).toBeNull()
   })
 
+  it('renders the notification placeholder with its unread dot', () => {
+    renderControls('/')
+
+    // The bell is the untiered placeholder that keeps the cluster occupied in
+    // Simple mode — see the tool's own comment for why it carries no action.
+    const bell = within(screen.getByLabelText('App controls')).getByLabelText('Notifications')
+
+    expect(bell.querySelector('.bg-destructive')).not.toBeNull()
+  })
+
   it('carries no Settings or layout button — both live elsewhere now', () => {
     renderControls('/')
 

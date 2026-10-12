@@ -320,7 +320,8 @@ export const ru = defineLocale({
     unmuteHaptics: 'Включить вибрацию',
     openStarmap: 'Открыть граф памяти',
     enterHud: 'Режим HUD',
-    exitHud: 'Выйти из режима HUD'
+    exitHud: 'Выйти из режима HUD',
+    notifications: 'Уведомления'
   },
   keybinds: {
     title: 'Горячие клавиши',

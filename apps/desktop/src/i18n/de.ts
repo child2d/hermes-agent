@@ -666,7 +666,8 @@ export const deOverrides = {
     openStarmap: 'Speicher-Graph öffnen',
     enterHud: 'HUD-Modus',
     exitHud: 'HUD-Modus beenden',
-    resetHudLayout: 'HUD-Größe und -Position zurücksetzen'
+    resetHudLayout: 'HUD-Größe und -Position zurücksetzen',
+    notifications: 'Benachrichtigungen'
   },
   keybinds: {
     title: 'Tastaturkürzel',

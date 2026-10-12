@@ -16,14 +16,14 @@ describe('titlebarAppActionsClusterCounts', () => {
   })
 
   it('releases the space of every tool Simple mode hides, on both sides', () => {
-    // Everything left in the app-action cluster is instrumentation, so Simple
-    // keeps none of it on either side — only the sidebar toggle remains.
-    expect(titlebarAppActionsClusterCounts('right', 0, 0, 'simple')).toEqual({ left: 1, right: 0 })
-    expect(titlebarAppActionsClusterCounts('left', 0, 0, 'simple')).toEqual({ left: 1, right: 0 })
-    // And the whole cluster in Advanced: HUD follows the side, the two fixed
-    // pane toggles never do.
-    expect(titlebarAppActionsClusterCounts('right', 0, 0, 'advanced')).toEqual({ left: 1, right: 3 })
-    expect(titlebarAppActionsClusterCounts('left', 0, 0, 'advanced')).toEqual({ left: 2, right: 2 })
+    // Only the notification placeholder survives Simple in the app-action
+    // cluster; the sidebar toggle is the other untiered entry.
+    expect(titlebarAppActionsClusterCounts('right', 0, 0, 'simple')).toEqual({ left: 1, right: 1 })
+    expect(titlebarAppActionsClusterCounts('left', 0, 0, 'simple')).toEqual({ left: 2, right: 0 })
+    // And the whole cluster in Advanced: HUD joins the notification placeholder
+    // and follows the side, the two fixed pane toggles never do.
+    expect(titlebarAppActionsClusterCounts('right', 0, 0, 'advanced')).toEqual({ left: 1, right: 4 })
+    expect(titlebarAppActionsClusterCounts('left', 0, 0, 'advanced')).toEqual({ left: 3, right: 2 })
   })
 })
 

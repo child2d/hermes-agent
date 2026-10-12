@@ -86,6 +86,27 @@ function withCountBadge(icon: ReactNode, count: number | undefined): ReactNode {
   )
 }
 
+/**
+ * The badge vocabulary's smallest form: a dot, for "something is unread" with no
+ * number to show. Ring in the chrome fill so it reads as punched out of the bar
+ * rather than sitting on top of it (same trick as the layout glyph's reset badge).
+ */
+function withUnreadDot(icon: ReactNode, show: boolean): ReactNode {
+  if (!show) {
+    return icon
+  }
+
+  return (
+    <span className="relative inline-flex">
+      {icon}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-destructive ring-2 ring-(--ui-bg-chrome)"
+      />
+    </span>
+  )
+}
+
 export function TitlebarControls({ leftTools = [], tools = [] }: TitlebarControlsProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -168,6 +189,18 @@ export function TitlebarControls({ leftTools = [], tools = [] }: TitlebarControl
   // Settings → Appearance → Window & layout, with ⌘⇧\ and the palette as the
   // fast paths). What remains is instrumentation, not navigation.
   const systemTools: TitlebarTool[] = [
+    {
+      // PLACEHOLDER, by request: there is no notification centre in this app yet,
+      // and the button is deliberately inert — no `onSelect`, no `actionId`, no
+      // `to`, so a click does nothing at all. It holds the cluster's shape in
+      // Simple mode (both this and the sidebar toggle are the only untiered
+      // entries) and the red dot marks where unread state will live. Give it an
+      // `onSelect` the day a real inbox lands; nothing else here has to change.
+      ...TITLEBAR_FIXED_TOOLS.notifications,
+      icon: withUnreadDot(<TitlebarIcon name="bell" />, true),
+      id: 'notifications',
+      label: t.titlebar.notifications
+    },
     {
       ...TITLEBAR_FIXED_TOOLS.hud,
       // No `title`: TitlebarToolButton passes `title` to TipKeybindLabel as a

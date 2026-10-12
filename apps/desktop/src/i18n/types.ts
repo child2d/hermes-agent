@@ -680,6 +680,7 @@ export interface Translations {
     enterHud: string
     exitHud: string
     resetHudLayout: string
+    notifications: string
   }
 
   keybinds: {

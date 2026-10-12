@@ -27,11 +27,13 @@ export function setTitlebarAppActionsSide(side: TitlebarAppActionsSide) {
  * The fixed titlebar tools and which of them are instrumentation. ONE table:
  * the buttons spread their entry to render, the width reservation counts the
  * same entries, so a tool Simple hides also releases the space it held.
- * Layout never carries a tier — it is the way back.
+ * The sidebar toggle and the notification placeholder never carry a tier — one
+ * is the way back to the sidebar, the other is not instrumentation to hide.
  */
 export const TITLEBAR_FIXED_TOOLS = {
   'flip-panes': { tier: 'advanced' },
   hud: { tier: 'advanced' },
+  notifications: {},
   'right-sidebar': { tier: 'advanced' },
   sidebar: {}
 } satisfies Record<string, Tiered>
@@ -39,7 +41,7 @@ export const TITLEBAR_FIXED_TOOLS = {
 export type TitlebarFixedToolId = keyof typeof TITLEBAR_FIXED_TOOLS
 
 /** The app actions that follow `side`; the sidebar toggle is always left, flip and the right-sidebar toggle always right. */
-const APP_ACTION_IDS: readonly TitlebarFixedToolId[] = ['hud']
+const APP_ACTION_IDS: readonly TitlebarFixedToolId[] = ['notifications', 'hud']
 const RIGHT_FIXED_IDS: readonly TitlebarFixedToolId[] = ['flip-panes', 'right-sidebar']
 
 /** Button counts for the two titlebar clusters, for the mode that is rendering them. */

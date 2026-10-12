@@ -666,7 +666,8 @@ export const frOverrides = {
     openStarmap: 'Ouvrir le graphe de mémoire',
     enterHud: 'Mode HUD',
     exitHud: 'Quitter le mode HUD',
-    resetHudLayout: 'Réinitialiser la taille et la position du HUD'
+    resetHudLayout: 'Réinitialiser la taille et la position du HUD',
+    notifications: 'Notifications'
   },
   keybinds: {
     title: 'Raccourcis clavier',

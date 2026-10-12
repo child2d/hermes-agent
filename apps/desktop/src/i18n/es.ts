@@ -667,7 +667,8 @@ export const esOverrides = {
     openStarmap: 'Abrir grafo de memoria',
     enterHud: 'Modo HUD',
     exitHud: 'Salir del modo HUD',
-    resetHudLayout: 'Restablecer el tamaño y la posición del HUD'
+    resetHudLayout: 'Restablecer el tamaño y la posición del HUD',
+    notifications: 'Notificaciones'
   },
   keybinds: {
     title: 'Atajos de teclado',

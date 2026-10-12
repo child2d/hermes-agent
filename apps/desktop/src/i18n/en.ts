@@ -661,7 +661,8 @@ export const en: Translations = {
     openStarmap: 'Open memory graph',
     enterHud: 'HUD mode',
     exitHud: 'Exit HUD mode',
-    resetHudLayout: 'Reset HUD size and position'
+    resetHudLayout: 'Reset HUD size and position',
+    notifications: 'Notifications'
   },
 
   keybinds: {

@@ -341,7 +341,8 @@ export const ja = defineLocale({
     muteHaptics: '触覚フィードバックをオフ',
     unmuteHaptics: '触覚フィードバックをオン',
     openStarmap: 'メモリグラフを開く',
-    resetHudLayout: 'HUD のサイズと位置をリセット'
+    resetHudLayout: 'HUD のサイズと位置をリセット',
+    notifications: '通知'
   },
 
   language: {
