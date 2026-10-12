@@ -28,7 +28,7 @@ function renderControls(pathname: string, props?: { leftTools?: TitlebarTool[]; 
     <MemoryRouter initialEntries={[pathname]}>
       <I18nProvider configClient={null} initialLocale="en">
         <NavigateProbe />
-        <TitlebarControls leftTools={props?.leftTools} onOpenSettings={() => {}} tools={props?.tools} />
+        <TitlebarControls leftTools={props?.leftTools} tools={props?.tools} />
       </I18nProvider>
     </MemoryRouter>
   )
@@ -193,16 +193,24 @@ describe('titlebar app-action cluster', () => {
     cleanup()
   })
 
-  it('moves settings, layout, and HUD to the left when the appearance setting says left', () => {
+  it('moves layout and HUD to the left when the appearance setting says left', () => {
     setTitlebarAppActionsSide('left')
     renderControls('/')
 
     const left = screen.getByLabelText('Window controls')
     const right = screen.getByLabelText('App controls')
 
-    expect(within(left).getByLabelText('Open settings')).toBeTruthy()
     expect(within(left).getByLabelText('Layout editor')).toBeTruthy()
     expect(within(left).getByLabelText('HUD mode')).toBeTruthy()
-    expect(within(right).queryByLabelText('Open settings')).toBeNull()
+    expect(within(right).queryByLabelText('Layout editor')).toBeNull()
+  })
+
+  it('carries no Settings button — the sidebar account menu owns that entry', () => {
+    renderControls('/')
+
+    // Non-vacuous: the cluster is up (getByLabelText throws otherwise) ...
+    expect(within(screen.getByLabelText('App controls')).getByLabelText('Layout editor')).toBeTruthy()
+    // ... and no cluster offers a second door to the same page.
+    expect(screen.queryByLabelText('Open settings')).toBeNull()
   })
 })

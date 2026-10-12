@@ -1340,11 +1340,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
             the clusters are `fixed`, so without this they'd float over the
             surface as orphaned buttons. */}
         {!isHudWindow() && !isBrowserWindow() && (
-          <TitlebarControls
-            leftTools={leftTitlebarTools}
-            onOpenSettings={() => navigate(SETTINGS_ROUTE)}
-            tools={rightTitlebarTools}
-          />
+          <TitlebarControls leftTools={leftTitlebarTools} tools={rightTitlebarTools} />
         )}
         {!isHudWindow() && customWindowControls && (
           <WslgWindowControls

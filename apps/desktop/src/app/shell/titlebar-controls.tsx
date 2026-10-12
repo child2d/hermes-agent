@@ -71,7 +71,6 @@ export type SetTitlebarToolGroup = (id: string, tools: readonly TitlebarTool[], 
 interface TitlebarControlsProps extends ComponentProps<'div'> {
   leftTools?: readonly TitlebarTool[]
   tools?: readonly TitlebarTool[]
-  onOpenSettings: () => void
 }
 
 /**
@@ -138,7 +137,7 @@ function useModifierHeld(): boolean {
   return held
 }
 
-export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }: TitlebarControlsProps) {
+export function TitlebarControls({ leftTools = [], tools = [] }: TitlebarControlsProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -214,18 +213,12 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
 
   // Static system tools — always pinned to the screen's right edge so the
   // left titlebar stays free for tabs (#107351).
+  //
+  // No Settings tool: Plankton's sidebar account menu carries it, and two
+  // entries to the same page was the kind of duplication this band doesn't have
+  // room for. Settings stays reachable from the keybind (⌘,) and the command
+  // palette, which is what those two already existed for.
   const systemTools: TitlebarTool[] = [
-    {
-      ...TITLEBAR_FIXED_TOOLS.settings,
-      actionId: 'nav.settings',
-      icon: <TitlebarIcon name="settings-gear" />,
-      id: 'settings',
-      label: t.titlebar.openSettings,
-      onSelect: () => {
-        triggerHaptic('open')
-        onOpenSettings()
-      }
-    },
     {
       ...TITLEBAR_FIXED_TOOLS.layout,
       className: 'group/tool',

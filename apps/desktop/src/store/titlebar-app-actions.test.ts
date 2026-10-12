@@ -17,8 +17,8 @@ describe('titlebarAppActionsClusterCounts', () => {
 
   it('releases the space of every tool Simple mode hides, on both sides', () => {
     // Sidebar toggle + what Simple keeps of the app actions; nothing fixed on the right.
-    expect(titlebarAppActionsClusterCounts('right', 0, 0, 'simple')).toEqual({ left: 1, right: 2 })
-    expect(titlebarAppActionsClusterCounts('left', 0, 0, 'simple')).toEqual({ left: 3, right: 0 })
+    expect(titlebarAppActionsClusterCounts('right', 0, 0, 'simple')).toEqual({ left: 1, right: 1 })
+    expect(titlebarAppActionsClusterCounts('left', 0, 0, 'simple')).toEqual({ left: 2, right: 0 })
   })
 })
 

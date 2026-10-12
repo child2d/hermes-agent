@@ -255,8 +255,18 @@ async function selectGateway(page: Page, id: string, label: string, profile: str
   })
 }
 
+/**
+ * Open Settings the way the keybind does. The titlebar has no Settings button
+ * any more (Plankton's sidebar account menu owns that entry), so ⌘, is the one
+ * route that needs no session and no chrome.
+ */
+async function openSettings(page: Page): Promise<void> {
+  await page.keyboard.press('Meta+,')
+  await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeVisible({ timeout: 60_000 })
+}
+
 async function openProviderKeys(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Open settings', exact: true }).click()
+  await openSettings(page)
   await page.getByRole('button', { name: 'Providers', exact: true }).click()
   await page.getByRole('button', { name: 'API keys', exact: true }).click()
   await expect(page.getByRole('button', { name: /^Local \/ custom endpoint/ })).toBeVisible()
@@ -346,7 +356,9 @@ test('Settings provider setup stays on its gateway/profile across A → B → A'
     page = await app.firstWindow()
     installErrorBannerGuard(page)
     watchRpc(page, receipts)
-    await expect(page.getByRole('button', { name: 'Open settings', exact: true })).toBeVisible({ timeout: 90_000 })
+    // Boot-readiness probe: the left titlebar cluster is up. (It used to be the
+    // Settings button's label, which no longer exists — see openSettings.)
+    await expect(page.locator('[data-titlebar-cluster="left"]')).toBeVisible({ timeout: 90_000 })
     await expect(page.locator('[data-slot="statusbar"]').getByText('ready', { exact: true })).toBeVisible({
       timeout: 60_000
     })
