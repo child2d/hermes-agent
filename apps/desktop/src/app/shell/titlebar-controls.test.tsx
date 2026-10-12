@@ -193,24 +193,24 @@ describe('titlebar app-action cluster', () => {
     cleanup()
   })
 
-  it('moves layout and HUD to the left when the appearance setting says left', () => {
+  it('moves HUD to the left when the appearance setting says left', () => {
     setTitlebarAppActionsSide('left')
     renderControls('/')
 
     const left = screen.getByLabelText('Window controls')
     const right = screen.getByLabelText('App controls')
 
-    expect(within(left).getByLabelText('Layout editor')).toBeTruthy()
     expect(within(left).getByLabelText('HUD mode')).toBeTruthy()
-    expect(within(right).queryByLabelText('Layout editor')).toBeNull()
+    expect(within(right).queryByLabelText('HUD mode')).toBeNull()
   })
 
-  it('carries no Settings button — the sidebar account menu owns that entry', () => {
+  it('carries no Settings or layout button — both live elsewhere now', () => {
     renderControls('/')
 
     // Non-vacuous: the cluster is up (getByLabelText throws otherwise) ...
-    expect(within(screen.getByLabelText('App controls')).getByLabelText('Layout editor')).toBeTruthy()
-    // ... and no cluster offers a second door to the same page.
+    expect(within(screen.getByLabelText('App controls')).getByLabelText('HUD mode')).toBeTruthy()
+    // ... and neither of the two entries that moved out is still here.
     expect(screen.queryByLabelText('Open settings')).toBeNull()
+    expect(screen.queryByLabelText('Layout editor')).toBeNull()
   })
 })

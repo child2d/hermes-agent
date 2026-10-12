@@ -620,13 +620,10 @@ export const zh = defineLocale({
     unreadSessions: count => (count === 1 ? '1 个未读会话' : `${count} 个未读会话`),
     muteHaptics: '关闭触感反馈',
     unmuteHaptics: '开启触感反馈',
-    openSettings: '打开设置',
     openStarmap: '打开记忆图谱',
     enterHud: 'HUD 模式',
     exitHud: '退出 HUD 模式',
-    resetHudLayout: '重置 HUD 大小和位置',
-    layoutEditor: '布局编辑器',
-    layoutEditorTitle: mod => `布局编辑器 — ${mod} 点击重置布局`
+    resetHudLayout: '重置 HUD 大小和位置'
   },
 
   keybinds: {
@@ -1072,7 +1069,9 @@ export const zh = defineLocale({
       tabStripAlways: '始终',
       tabStripNever: '从不',
       appActionsTitle: '应用操作',
-      appActionsDesc: '设置、布局和 HUD 放在标题栏左侧还是右侧。选右侧可给标签留出左边空间。',
+      appActionsDesc: '标题栏上的应用操作按钮放在哪一侧。选右侧可把左侧留给标签。',
+      layoutEditorTitle: '布局编辑器',
+      layoutEditorDesc: '拖动即可重新排列、拆分、合并面板；Esc 退出。',
       appActionsLeft: '左侧',
       appActionsRight: '右侧',
       terminalFontTitle: '终端字体',

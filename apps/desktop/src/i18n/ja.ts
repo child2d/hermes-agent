@@ -340,7 +340,6 @@ export const ja = defineLocale({
     unreadSessions: count => (count === 1 ? '未読セッション 1 件' : `未読セッション ${count} 件`),
     muteHaptics: '触覚フィードバックをオフ',
     unmuteHaptics: '触覚フィードバックをオン',
-    openSettings: '設定を開く',
     openStarmap: 'メモリグラフを開く',
     resetHudLayout: 'HUD のサイズと位置をリセット'
   },
@@ -659,7 +658,9 @@ export const ja = defineLocale({
       tabStripNever: '表示しない',
       appActionsTitle: 'アプリ操作',
       appActionsDesc:
-        '設定・レイアウト・HUD をタイトルバーの左右どちらに置くか。右にするとタブ用のスペースが左に残ります。',
+        'タイトルバーのアプリ操作を左右どちらに置くか。右にするとタブ用のスペースが左に残ります。',
+      layoutEditorTitle: 'レイアウトエディター',
+      layoutEditorDesc: 'ドラッグでペインの並べ替え・分割・結合ができます。Esc で終了。',
       appActionsLeft: '左',
       appActionsRight: '右',
       terminalFontTitle: 'ターミナルフォント',

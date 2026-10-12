@@ -318,12 +318,9 @@ export const ru = defineLocale({
         : `${count} ${count % 10 === 1 && count % 100 !== 11 ? 'непрочитанный сеанс' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'непрочитанных сеанса' : 'непрочитанных сеансов'}`,
     muteHaptics: 'Выключить вибрацию',
     unmuteHaptics: 'Включить вибрацию',
-    openSettings: 'Открыть настройки',
     openStarmap: 'Открыть граф памяти',
     enterHud: 'Режим HUD',
-    exitHud: 'Выйти из режима HUD',
-    layoutEditor: 'Редактор раскладки',
-    layoutEditorTitle: mod => `Редактор раскладки — ${mod}-клик сбрасывает раскладку`
+    exitHud: 'Выйти из режима HUD'
   },
   keybinds: {
     title: 'Горячие клавиши',
@@ -692,7 +689,9 @@ export const ru = defineLocale({
       tabStripAlways: 'Всегда',
       tabStripNever: 'Никогда',
       appActionsTitle: 'Действия приложения',
-      appActionsDesc: 'Где в заголовке окна сидят Настройки, Макет и HUD. Справа оставляют место для вкладок слева.',
+      appActionsDesc: 'С какой стороны в заголовке окна находятся действия приложения. Справа оставляют место для вкладок слева.',
+      layoutEditorTitle: 'Редактор раскладки',
+      layoutEditorDesc: 'Переставляйте, разделяйте и объединяйте панели перетаскиванием. Esc — выход.',
       appActionsLeft: 'Слева',
       appActionsRight: 'Справа',
       terminalFontTitle: 'Шрифт терминала',

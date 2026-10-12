@@ -664,13 +664,10 @@ export const esOverrides = {
     unreadSessions: count => (count === 1 ? '1 sesión sin leer' : `${count} sesiones sin leer`),
     muteHaptics: 'Silenciar háptica',
     unmuteHaptics: 'Activar háptica',
-    openSettings: 'Abrir configuración',
     openStarmap: 'Abrir grafo de memoria',
     enterHud: 'Modo HUD',
     exitHud: 'Salir del modo HUD',
-    resetHudLayout: 'Restablecer el tamaño y la posición del HUD',
-    layoutEditor: 'Editor de diseño',
-    layoutEditorTitle: mod => `Editor de diseño — clic ${mod} restablece el diseño`
+    resetHudLayout: 'Restablecer el tamaño y la posición del HUD'
   },
   keybinds: {
     title: 'Atajos de teclado',
@@ -1166,7 +1163,9 @@ export const esOverrides = {
       tabStripNever: 'Nunca',
       appActionsTitle: 'Acciones de la app',
       appActionsDesc:
-        'Dónde se colocan Configuración, Diseño y HUD en la barra de título. A la derecha deja espacio para pestañas a la izquierda.',
+        'Dónde se sitúan los botones de la app en la barra de título. A la derecha deja espacio para pestañas a la izquierda.',
+      layoutEditorTitle: 'Editor de diseño',
+      layoutEditorDesc: 'Reorganiza, divide y une paneles arrastrando. Esc sale del modo.',
       appActionsLeft: 'Izquierda',
       appActionsRight: 'Derecha',
       terminalFontTitle: 'Fuente de terminal',

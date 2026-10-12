@@ -676,13 +676,10 @@ export interface Translations {
     unreadSessions: (count: number) => string
     muteHaptics: string
     unmuteHaptics: string
-    openSettings: string
     openStarmap: string
     enterHud: string
     exitHud: string
     resetHudLayout: string
-    layoutEditor: string
-    layoutEditorTitle: (modifier: string) => string
   }
 
   keybinds: {
@@ -931,6 +928,8 @@ export interface Translations {
       tabStripNever: string
       appActionsTitle: string
       appActionsDesc: string
+      layoutEditorTitle: string
+      layoutEditorDesc: string
       appActionsLeft: string
       appActionsRight: string
       terminalFontTitle: string

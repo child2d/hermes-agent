@@ -81,6 +81,7 @@ import type { AppearanceSubpageId } from './appearance-subpages'
 import { ChatFontSetting } from './chat-font-setting'
 import { MODE_OPTIONS } from './constants'
 import { setNested } from './helpers'
+import { LayoutEditorSetting } from './layout-editor-setting'
 import { MinimizeToTraySetting } from './minimize-to-tray-setting'
 import { PetSettings } from './pet-settings'
 import { ListRow, RowFootnoteAction, SectionHeading, SettingsContent, ToggleRow } from './primitives'
@@ -782,6 +783,12 @@ export function AppearanceSettings({ subpage }: AppearanceSettingsProps = {}) {
               id={settingElementId(ids.appActions)}
               title={a.appActionsTitle}
             />
+          )}
+
+          {show('window-layout') && (
+            <div id={settingElementId(ids.layoutEditor)}>
+              <LayoutEditorSetting />
+            </div>
           )}
 
           {show('window-layout') && (

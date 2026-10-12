@@ -663,13 +663,10 @@ export const deOverrides = {
     unreadSessions: count => (count === 1 ? '1 ungelesene Session' : `${count} ungelesene Sessions`),
     muteHaptics: 'Haptik stummschalten',
     unmuteHaptics: 'Haptik einschalten',
-    openSettings: 'Einstellungen öffnen',
     openStarmap: 'Speicher-Graph öffnen',
     enterHud: 'HUD-Modus',
     exitHud: 'HUD-Modus beenden',
-    resetHudLayout: 'HUD-Größe und -Position zurücksetzen',
-    layoutEditor: 'Layout-Editor',
-    layoutEditorTitle: mod => `Layout-Editor — ${mod}-Klick setzt das Layout zurück`
+    resetHudLayout: 'HUD-Größe und -Position zurücksetzen'
   },
   keybinds: {
     title: 'Tastaturkürzel',
@@ -1165,7 +1162,9 @@ export const deOverrides = {
       tabStripNever: 'Nie',
       appActionsTitle: 'App-Aktionen',
       appActionsDesc:
-        'Wo Einstellungen, Layout und HUD in der Titelleiste sitzen. Rechts lässt Platz für Tabs auf der linken Seite.',
+        'Auf welcher Seite die App-Aktionen in der Titelleiste sitzen. Rechts lässt Platz für Tabs auf der linken Seite.',
+      layoutEditorTitle: 'Layout-Editor',
+      layoutEditorDesc: 'Bereiche per Ziehen neu anordnen, teilen und zusammenführen. Esc beendet den Modus.',
       appActionsLeft: 'Links',
       appActionsRight: 'Rechts',
       terminalFontTitle: 'Terminalschrift',

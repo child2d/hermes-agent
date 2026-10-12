@@ -37,13 +37,10 @@ export const arChrome = {
     unreadSessions: count => (count === 1 ? 'جلسة واحدة غير مقروءة' : `${count} جلسات غير مقروءة`),
     muteHaptics: 'كتم الاهتزازات',
     unmuteHaptics: 'تفعيل الاهتزازات',
-    openSettings: 'فتح الإعدادات',
     openStarmap: 'فتح خريطة الذاكرة',
     enterHud: 'وضع HUD',
     exitHud: 'إنهاء وضع HUD',
-    resetHudLayout: 'إعادة تعيين حجم HUD وموضعه',
-    layoutEditor: 'محرر التخطيط',
-    layoutEditorTitle: modifier => `محرر التخطيط — انقر مع ${modifier} لإعادة ضبط التخطيط`
+    resetHudLayout: 'إعادة تعيين حجم HUD وموضعه'
   },
   keybinds: {
     title: 'اختصارات لوحة المفاتيح',

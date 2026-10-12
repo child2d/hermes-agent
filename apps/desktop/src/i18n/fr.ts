@@ -663,13 +663,10 @@ export const frOverrides = {
     unreadSessions: count => (count === 1 ? '1 session non lue' : `${count} sessions non lues`),
     muteHaptics: 'Couper les vibrations',
     unmuteHaptics: 'Réactiver les vibrations',
-    openSettings: 'Ouvrir les paramètres',
     openStarmap: 'Ouvrir le graphe de mémoire',
     enterHud: 'Mode HUD',
     exitHud: 'Quitter le mode HUD',
-    resetHudLayout: 'Réinitialiser la taille et la position du HUD',
-    layoutEditor: 'Éditeur de disposition',
-    layoutEditorTitle: mod => `Éditeur de disposition — ${mod}-clic réinitialise la disposition`
+    resetHudLayout: 'Réinitialiser la taille et la position du HUD'
   },
   keybinds: {
     title: 'Raccourcis clavier',
@@ -1170,7 +1167,9 @@ export const frOverrides = {
       tabStripNever: 'Jamais',
       appActionsTitle: "Actions de l'application",
       appActionsDesc:
-        'Choisissez le côté de la barre de titre où placer Paramètres, Disposition et HUD. Le côté droit laisse de la place aux onglets à gauche.',
+        "De quel côté de la barre de titre placer les actions de l'application. À droite laisse la place aux onglets à gauche.",
+      layoutEditorTitle: 'Éditeur de disposition',
+      layoutEditorDesc: 'Réorganisez, divisez et fusionnez les panneaux par glisser-déposer. Échap quitte.',
       appActionsLeft: 'À gauche',
       appActionsRight: 'À droite',
       terminalFontTitle: 'Police du terminal',

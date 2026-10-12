@@ -87,10 +87,11 @@ export const SETTINGS_MANIFEST = {
       'sessionDensity'
     ),
     tabStrip: appearanceSetting('window-layout', ['tabs', 'tab bar', 'strip'], 'tabStrip'),
-    appActions: appearanceSetting(
+    appActions: appearanceSetting('window-layout', ['titlebar', 'HUD', 'left', 'right', 'tabs'], 'appActions'),
+    layoutEditor: appearanceSetting(
       'window-layout',
-      ['titlebar', 'settings gear', 'layout', 'HUD', 'left', 'right', 'tabs'],
-      'appActions'
+      ['layout', 'editor', 'panes', 'arrange', 'rearrange', 'zones', 'grid', 'split'],
+      'layoutEditor'
     ),
     minimizeToTray: {
       subpage: 'window-layout',
