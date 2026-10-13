@@ -1175,7 +1175,8 @@ export const en: Translations = {
       backdropTitle: 'Chat Backdrop',
       backdropDesc: 'The faint statue image behind the conversation.',
       userBubbleTitle: 'Message Bubble',
-      userBubbleDesc: 'How see-through your own messages are. Solid at 0; only the outline remains at 100.',
+      userBubbleDesc:
+        'How solid your own message bubbles are. Filled at 0; at 100 the bubble is gone and your text reads as ordinary text.',
       textDirectionTitle: 'Text direction',
       textDirectionDesc:
         'How chat messages and the composer choose their direction. Auto follows the first letter of each paragraph; pick a direction when mixed text lines up the wrong way. Code always stays left-to-right.',

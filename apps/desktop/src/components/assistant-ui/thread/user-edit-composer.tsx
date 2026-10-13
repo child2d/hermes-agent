@@ -838,7 +838,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
     <ComposerPrimitive.Root className="contents" data-slot="aui_edit-composer-root">
       <StickyHumanMessageContainer>
         <div
-          className="composer-human-message-container human-execution-message-top relative flex w-full items-start rounded-md bg-(--ui-chat-surface-background)"
+          className="composer-human-message-container human-execution-message-top relative flex w-full items-end rounded-md bg-(--ui-chat-surface-background)"
           // A raised box over the transcript field: under window glass it keeps
           // a near-opaque fill instead of thinning with the field behind it.
           data-glass-raised=""
@@ -863,7 +863,10 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
           <div
             className={cn(
               USER_BUBBLE_BASE_CLASS,
-              'ui-prompt-input__container relative border-(--ui-stroke-secondary) data-[expanded=true]:min-h-20',
+              // Editing is the one state that gets an outline: the read-only
+              // bubble has none, so the ring IS the affordance — pitched at the
+              // bubble's ink, since a stroke-* token would vanish into the fill.
+              'ui-prompt-input__container relative ring-1 ring-[color-mix(in_srgb,var(--dt-user-bubble-foreground)_28%,transparent)] data-[expanded=true]:min-h-20',
               COMPOSER_DROP_FADE_CLASS,
               dragActive && COMPOSER_DROP_ACTIVE_CLASS
             )}
@@ -875,7 +878,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
               // Match the main composer: allow macOS replacements, not spellcheck.
               autoCorrect={isMacPlatform() ? 'on' : 'off'}
               className={cn(
-                'ui-prompt-input-editor__input max-h-48 w-full resize-none overflow-y-auto bg-transparent p-0 pr-7 text-[length:var(--conversation-text-font-size)] text-foreground/95 outline-none',
+                'ui-prompt-input-editor__input max-h-48 w-full resize-none overflow-y-auto bg-transparent p-0 pr-7 text-[length:var(--conversation-text-font-size)] outline-none',
                 '**:data-ref-text:cursor-default',
                 expanded ? 'min-h-16' : 'min-h-[1.25rem]'
               )}

@@ -474,11 +474,19 @@
     --dt-sidebar-bg: var(--ui-bg-sidebar);
     --dt-sidebar-border: var(--ui-stroke-secondary);
     /* `--user-bubble-keep` is the Settings → Appearance → Message Bubble lever
-       (store/user-bubble-transparency.ts): the share of the theme's bubble
-       fill to keep. Unset at the default, so the mix is a no-op and the bubble
-       is the theme's fill exactly as before. The border stays put either way —
-       at full transparency the outline is what still marks your turn. */
-    --dt-user-bubble: color-mix(in srgb, var(--ui-chat-bubble-background) var(--user-bubble-keep, 100%), transparent);
+       (store/user-bubble-transparency.ts): the share of the bubble fill to
+       keep. Unset at the default, so the mix is a no-op. Your turn renders
+       INVERTED — the theme's foreground as the fill and the chat surface as
+       the ink — so in light mode it is a near-black bubble with white text and
+       dark mode flips it, with no border either way. The lever still thins the
+       fill, and the ink closes the gap behind it: at 100 the bubble is gone
+       and your turn reads as ordinary foreground text. */
+    --dt-user-bubble: color-mix(in srgb, var(--dt-foreground) var(--user-bubble-keep, 100%), transparent);
+    --dt-user-bubble-foreground: color-mix(
+      in srgb,
+      var(--dt-background) var(--user-bubble-keep, 100%),
+      var(--dt-foreground)
+    );
     --dt-user-bubble-border: var(--ui-stroke-tertiary);
 
     --dt-font-sans:
@@ -925,34 +933,34 @@
 [data-ref='image'],
 [data-ref='session'],
 [data-ref='theme'] {
-  --ref-color: color-mix(in srgb, var(--ui-accent-secondary) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-accent-secondary) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='command'],
 [data-ref='tool'] {
-  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='skill'],
 [data-ref='git'],
 [data-ref='diff'],
 [data-ref='staged'] {
-  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 /* Bot Mode group-room mentions (#91359): a routed @bot reads as an agent
    reference, @user as a human handoff the room is waiting on, and
    @everyone/@all as a quieter broadcast. Text, not pills — same contract. */
 [data-ref='agent'] {
-  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='human'] {
-  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='broadcast'] {
-  --ref-color: color-mix(in srgb, var(--foreground) 70%, var(--ui-accent));
+  --ref-color: color-mix(in srgb, var(--ref-mix-partner, var(--foreground)) 70%, var(--ui-accent));
 }
 
 .ref {
@@ -1829,6 +1837,33 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 [data-slot='aui_edit-composer-root'] [data-slot='composer-rich-input'] {
   line-height: var(--human-msg-line-height);
+}
+
+/* ── Inside the inverted user bubble (see --dt-user-bubble) ──────────────────
+   The bubble is foreground-on-background, so every colour inside it that was
+   pitched against a LIGHT surface sinks into the fill. Three casualties, one
+   rule each:
+
+   · reference chips — each kind's --ref-color is its hue mixed 82% toward
+     --foreground, which here IS the fill. Re-point that mix at the ink.
+   · the kind-less fallback (a bare URL, --dt-primary) — same problem, and a
+     raw accent is too dark to read on a near-black card: lift it toward the
+     ink instead.
+   · the edit composer's placeholder — --muted-foreground at 60% over the fill
+     is a smudge. Same ink, lower alpha.
+
+   The bubble text itself, inline code and fences need nothing: the bubble
+   paints the ink and those all read `currentColor`. */
+.composer-human-message :is(.ref, [data-ref]) {
+  --ref-mix-partner: var(--dt-user-bubble-foreground);
+}
+
+.composer-human-message .ref:not([data-ref]) {
+  --ref-color: color-mix(in srgb, var(--dt-primary) 72%, var(--dt-user-bubble-foreground));
+}
+
+[data-slot='aui_edit-composer-root'] .composer-human-message [data-slot='composer-rich-input']:is(:empty, [data-empty])::before {
+  color: color-mix(in srgb, var(--dt-user-bubble-foreground) 55%, transparent);
 }
 
 /* Sticky human bubbles clamp to ~2 lines with a soft bottom fade so a long

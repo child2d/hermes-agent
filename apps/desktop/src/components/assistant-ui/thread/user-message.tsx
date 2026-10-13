@@ -55,7 +55,7 @@ export function StickyHumanMessageContainer({
     // while attachments below it scroll away.
     <>
       <div
-        className="group/user-message sticky z-40 -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-stretch gap-0 self-end overflow-visible px-4 pb-(--conversation-turn-gap) pt-1"
+        className="group/user-message sticky z-40 -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-end gap-0 self-end overflow-visible px-4 pb-(--conversation-turn-gap) pt-1"
         data-message-id={messageId}
         data-role="user"
         data-slot="aui_user-message-root"
@@ -68,9 +68,15 @@ export function StickyHumanMessageContainer({
 }
 
 // Shared "user bubble" base. Both the read-only message and the inline
-// edit composer render the same bubble surface (rounded glass card);
-// they only differ in border weight, cursor, and padding-right (the
-// read-only view reserves room for the restore icon).
+// edit composer render the same bubble surface (an inverted solid card);
+// they only differ in the edit ring and padding-right (the read-only view
+// reserves room for the restore icon).
+//
+// Inverted on purpose (--dt-user-bubble = the theme foreground): your turn is
+// a filled bubble with the chat surface as its ink, against an agent reply
+// that paints no surface at all — the one distinction in the transcript that
+// cannot be missed. `w-fit` lets it hug a two-word prompt and still take the
+// full column for a paragraph.
 //
 // no-drag: sticky bubbles park at --sticky-human-top (~4px), sliding under the
 // titlebar's [-webkit-app-region:drag] strips (app-shell.tsx). Electron resolves
@@ -78,10 +84,12 @@ export function StickyHumanMessageContainer({
 // so without the carve-out, clicking a stuck bubble drags the window instead of
 // opening the edit composer.
 export const USER_BUBBLE_BASE_CLASS =
-  'composer-human-message standalone-glass relative flex w-full min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl border bg-(--dt-user-bubble) px-3.5 py-2.5 text-left [-webkit-app-region:no-drag]'
+  'composer-human-message relative flex w-fit min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-(--dt-user-bubble) px-3.5 py-2.5 text-left text-(--dt-user-bubble-foreground) [-webkit-app-region:no-drag]'
 
+// Chrome sitting ON the bubble follows its ink, not the app's surface palette:
+// the cluster's own buttons and the hover stamp were pitched at a light card.
 export const USER_ACTION_ICON_BUTTON_CLASS =
-  'grid place-items-center rounded-md bg-transparent text-(--ui-text-secondary) transition-colors hover:bg-(--ui-control-active-background) hover:text-foreground disabled:cursor-default disabled:text-(--ui-text-quaternary) disabled:opacity-70'
+  'grid place-items-center rounded-md bg-transparent text-(--dt-user-bubble-foreground) transition-colors hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)] disabled:cursor-default disabled:opacity-40'
 
 export const USER_ACTION_ICON_SIZE = '0.6875rem'
 export const StopGlyph = <StopFilled aria-hidden className="size-3.5 -translate-y-px" />
@@ -377,8 +385,7 @@ export const UserMessage: FC<{
 
   const bubbleClassName = cn(
     USER_BUBBLE_BASE_CLASS,
-    'cursor-pointer pr-9 text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) text-foreground/95 transition-colors',
-    'border-(--ui-stroke-tertiary) hover:border-(--ui-stroke-secondary)'
+    'cursor-pointer pr-9 text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) transition-opacity hover:opacity-90'
   )
 
   const bubbleContent = hasBody ? (
@@ -417,7 +424,7 @@ export const UserMessage: FC<{
           // where the sticky-prompt clip hides its top even at rest. Image refs
           // render as thumbnails, file refs as chips; no border.
           attachmentRefs.length > 0 && !chipOnlyTurn ? (
-            <div className="mb-2 flex flex-wrap gap-1">
+            <div className="mb-2 ml-auto flex max-w-full flex-wrap justify-end gap-1">
               <DirectiveContent text={attachmentRefs.join(' ')} />
             </div>
           ) : null
@@ -425,7 +432,7 @@ export const UserMessage: FC<{
         messageId={messageId}
       >
         <ActionBarPrimitive.Root className="relative w-full max-w-full" data-slot="aui_user-bubble-actions">
-          <div className="human-message-with-todos-wrapper flex w-full flex-col gap-0">
+          <div className="human-message-with-todos-wrapper flex w-full flex-col items-end gap-0">
             <ReactionPicker
               onOpenChange={setPickerOpen}
               onSelect={pickEmoji}
@@ -433,7 +440,7 @@ export const UserMessage: FC<{
               selected={shownReactions.find(reaction => reaction.author === 'user')?.emoji}
             >
               <div
-                className="relative w-full"
+                className="relative w-fit max-w-full"
                 // The app context menu skips PLAIN right-clicks here (the
                 // attr below) so this handler keeps the picker gesture; a
                 // link/image/selection inside the bubble still gets the app
@@ -508,9 +515,12 @@ export const UserMessage: FC<{
                   </ActionBarPrimitive.Edit>
                 )}
                 {/* Hover cluster, bottom-right: when it was sent, then Stop or
-                    Restore. Its fill masks the last line's tail while shown. */}
+                    Restore. Its fill masks the last line's tail while shown —
+                    same fill as the bubble, since it sits ON the bubble. */}
                 <div className="pointer-events-none absolute right-2 bottom-2 z-10 flex items-center gap-1 rounded-md bg-(--dt-user-bubble) pl-1 opacity-0 transition-opacity group-hover/user-message:opacity-100 group-hover/user-message:transition-none group-focus-within/user-message:opacity-100">
-                  <MessageHoverTime className={cn(!showStop && !showRestore && 'pr-0.5')} />
+                  <MessageHoverTime
+                    className={cn('text-(--dt-user-bubble-foreground)', !showStop && !showRestore && 'pr-0.5')}
+                  />
                   {showStop ? (
                     <button
                       aria-label={copy.stop}
@@ -562,7 +572,7 @@ export const UserMessage: FC<{
             <MessageTimelineTimestamp className="self-end pr-1.5" />
             <BranchPickerPrimitive.Root
               className={cn(
-                'checkpoint-container flex items-center gap-1 pb-0 pt-1 pl-1.5 text-xs leading-none text-(--ui-text-tertiary)',
+                'checkpoint-container flex w-fit items-center gap-1 pb-0 pt-1 pl-1.5 text-xs leading-none text-(--ui-text-tertiary)',
                 readOnly && 'hidden'
               )}
               hideWhenSingleBranch
