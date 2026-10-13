@@ -2399,10 +2399,16 @@ body.guest-pointer-lock :is(webview, iframe) {
   margin-top: calc(var(--scaffold-block-gap) - var(--conversation-turn-gap));
 }
 
-/* Message action bars — flat icon hits with default dim; only the hovered/focused control is full-strength.
-   The reaction slot lives OUTSIDE the bar (a landed emoji must not ride the
-   bar's hover fade) but is still one of these controls visually. */
+/* Message action bars — ONE spec, bare glyphs, for every message action in the
+   transcript: the assistant bar (aui_msg-actions), the user turn's row under the
+   bubble (aui_user-actions) and the reaction slot. The controls are shadcn
+   Buttons (`variant="ghost" size="icon"`) for the component layer; this spec is
+   the presentation layer, so a row of them reads as flat icon hits with default
+   dim and only the hovered/focused control at full strength — no boxes, no
+   per-row drift. The reaction slot lives OUTSIDE the bar (a landed emoji must
+   not ride the bar's hover fade) but is still one of these controls visually. */
 [data-slot='aui_msg-actions'] button,
+[data-slot='aui_user-actions'] button,
 button[data-slot='aui_msg-reactions'] {
   border: 0;
   border-radius: 0;
@@ -2478,11 +2484,13 @@ span[data-slot='aui_msg-reactions'] {
   opacity: 1;
 }
 
-[data-slot='aui_msg-actions'] button:disabled {
+[data-slot='aui_msg-actions'] button:disabled,
+[data-slot='aui_user-actions'] button:disabled {
   cursor: default;
 }
 
 [data-slot='aui_msg-actions'] button:hover,
+[data-slot='aui_user-actions'] button:hover,
 button[data-slot='aui_msg-reactions']:hover {
   background: transparent;
   color: var(--color-foreground);
@@ -2490,16 +2498,21 @@ button[data-slot='aui_msg-reactions']:hover {
 }
 
 [data-slot='aui_msg-actions'] button:active,
+[data-slot='aui_user-actions'] button:active,
 button[data-slot='aui_msg-reactions']:active {
   background: transparent;
 }
 
 [data-slot='aui_msg-actions'] button:focus-visible,
+[data-slot='aui_user-actions'] button:focus-visible,
 button[data-slot='aui_msg-reactions']:focus-visible {
   opacity: 1;
 }
 
+/* The glyph sizes itself, not the box — declared here so a bare Button of any
+   variant lands on the same 0.875rem as every other message action. */
 [data-slot='aui_msg-actions'] button svg,
+[data-slot='aui_user-actions'] button svg,
 button[data-slot='aui_msg-reactions'] svg {
   width: 0.875rem;
   height: 0.875rem;

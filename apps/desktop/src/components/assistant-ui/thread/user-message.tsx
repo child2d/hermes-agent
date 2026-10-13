@@ -83,12 +83,12 @@ export function StickyHumanMessageContainer({
 export const USER_BUBBLE_BASE_CLASS =
   'composer-human-message relative flex w-fit min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-(--dt-user-bubble) px-3.5 py-2.5 text-left text-(--dt-user-bubble-foreground) [-webkit-app-region:no-drag]'
 
-// One spec for every control in the user turn's action row, from the shadcn
-// kit itself: `Button variant="ghost" size="icon"` with a 14px glyph. The row
-// used to mix a shadcn Button with hand-rolled <button>s and a stylesheet rule
-// that stripped all three to bare glyphs — one position, three treatments.
-// (This class now survives only for the edit composer's send arrow, which sits
-// INSIDE the bubble and needs the bubble's ink instead of the control palette.)
+// Message actions are shadcn Buttons (`variant="ghost" size="icon"`) that paint
+// as bare glyphs: the presentation is owned by the shared message-action spec in
+// styles.css ([data-slot='aui_msg-actions'] / [data-slot='aui_user-actions']), so
+// neither row carries box styling of its own. This class is what remains for the
+// edit composer's send arrow — INSIDE the bubble, 20px, on the bubble's ink
+// rather than the control palette.
 export const USER_ACTION_ICON_BUTTON_CLASS =
   'grid place-items-center rounded-md bg-transparent text-(--ui-text-secondary) transition-colors hover:bg-(--ui-control-active-background) hover:text-foreground disabled:cursor-default disabled:text-(--ui-text-quaternary) disabled:opacity-70'
 
@@ -519,11 +519,13 @@ export const UserMessage: FC<{
             </ReactionPicker>
             {/* Your turn's stamp and actions, under the bubble — the row the
                 reference points at: [when it was sent] [copy] [edit] [stop].
-                Every control here is the same shadcn Button
-                (`variant="ghost" size="icon"`, 14px glyph), and none of them
-                carries a tooltip: one row, one spec, no hidden states. */}
+                The controls are shadcn Buttons (`variant="ghost" size="icon"`),
+                but they PAINT as bare glyphs: the message-action spec in
+                styles.css covers this slot and the assistant bar alike, so one
+                row of flat icons is the whole transcript's treatment. No
+                tooltips either — one spec, no hidden states. */}
             <div
-              className="flex w-fit max-w-full items-center justify-end gap-1 py-1 pr-1.5"
+              className="flex w-fit max-w-full items-center justify-end gap-1.5 py-1.5 pr-1.5"
               data-slot="aui_user-actions"
             >
               <MessageHoverTime className="mr-1 px-0.5" plain />
