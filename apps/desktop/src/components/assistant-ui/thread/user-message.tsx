@@ -17,6 +17,7 @@ import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/type
 import { useMessageReactions } from '@/components/assistant-ui/thread/use-message-reactions'
 import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
 import { Codicon } from '@/components/ui/codicon'
+import { CopyButton } from '@/components/ui/copy-button'
 import {
   Tooltip,
   TooltipContent,
@@ -75,10 +76,10 @@ export function StickyHumanMessageContainer({
 // a filled bubble with the chat surface as its ink, against an agent reply
 // that paints no surface at all — the one distinction in the transcript that
 // cannot be missed. `w-fit` lets it hug a two-word prompt and still take the
-// full column for a paragraph. Padding stays SYMMETRIC (px-3.5 both sides): a
-// wider right gutter for the hover cluster read as a lopsided bubble once the
-// fill became visible, and the cluster's own opaque fill already masks the
-// last line's tail while it is shown.
+// full column for a paragraph. Padding stays SYMMETRIC (px-3.5 both sides):
+// the old right-hand gutter reserved room for the hover actions, and those now
+// live on their own row under the bubble — a wider right pad would only read as
+// a lopsided bubble.
 //
 // no-drag: sticky bubbles park at --sticky-human-top (~4px), sliding under the
 // titlebar's [-webkit-app-region:drag] strips (app-shell.tsx). Electron resolves
@@ -88,10 +89,12 @@ export function StickyHumanMessageContainer({
 export const USER_BUBBLE_BASE_CLASS =
   'composer-human-message relative flex w-fit min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-(--dt-user-bubble) px-3.5 py-2.5 text-left text-(--dt-user-bubble-foreground) [-webkit-app-region:no-drag]'
 
-// Chrome sitting ON the bubble follows its ink, not the app's surface palette:
-// the cluster's own buttons and the hover stamp were pitched at a light card.
+// Icon buttons in a user turn's action row: chrome on the chat surface, so
+// they use the app's control palette — NOT the bubble ink. The one action that
+// still renders INSIDE the bubble (the edit composer's send arrow) overrides
+// the colour at its own call site.
 export const USER_ACTION_ICON_BUTTON_CLASS =
-  'grid place-items-center rounded-md bg-transparent text-(--dt-user-bubble-foreground) transition-colors hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)] disabled:cursor-default disabled:opacity-40'
+  'grid place-items-center rounded-md bg-transparent text-(--ui-text-secondary) transition-colors hover:bg-(--ui-control-active-background) hover:text-foreground disabled:cursor-default disabled:text-(--ui-text-quaternary) disabled:opacity-70'
 
 export const USER_ACTION_ICON_SIZE = '0.6875rem'
 export const StopGlyph = <StopFilled aria-hidden className="size-3.5 -translate-y-px" />
@@ -516,53 +519,74 @@ export const UserMessage: FC<{
                     </button>
                   </ActionBarPrimitive.Edit>
                 )}
-                {/* Hover cluster, bottom-right: when it was sent, then Stop or
-                    Restore. Its fill masks the last line's tail while shown —
-                    same fill as the bubble, since it sits ON the bubble. */}
-                <div className="pointer-events-none absolute right-2 bottom-2 z-10 flex items-center gap-1 rounded-md bg-(--dt-user-bubble) pl-1 opacity-0 transition-opacity group-hover/user-message:opacity-100 group-hover/user-message:transition-none group-focus-within/user-message:opacity-100">
-                  <MessageHoverTime
-                    className={cn('text-(--dt-user-bubble-foreground)', !showStop && !showRestore && 'pr-0.5')}
-                  />
-                  {showStop ? (
-                    <button
-                      aria-label={copy.stop}
-                      className={cn('pointer-events-auto size-5', USER_ACTION_ICON_BUTTON_CLASS)}
-                      onClick={event => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        void onCancel?.()
-                      }}
-                      type="button"
-                    >
-                      {StopGlyph}
-                    </button>
-                  ) : showRestore ? (
-                    <Tooltip><TooltipTrigger asChild>
-                      <button
-                        aria-label={copy.restoreCheckpoint}
-                        className={cn('pointer-events-auto size-6', USER_ACTION_ICON_BUTTON_CLASS)}
-                        onClick={event => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          triggerHaptic('selection')
-                          onRequestRestoreConfirm?.(messageId, {
-                            text: messageText,
-                            userOrdinal: runtimeUserOrdinal
-                          })
-                        }}
-                        onPointerDown={event => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                        }}
-                        type="button"
-                      >
-                        <Codicon name="discard" size="0.875rem" />
-                      </button>
-                    </TooltipTrigger><TooltipContent>{copy.restoreFromHere}</TooltipContent></Tooltip>
-                  ) : null}
-                </div>
               </div>
             </ReactionPicker>
+            {/* Your turn's hover actions, on the chat surface UNDER the bubble:
+                [when it was sent] [copy] [edit] [stop | restore]. They used to
+                be an absolute cluster in the bubble's bottom-right corner,
+                where they covered the last line's tail — and, now that the
+                bubble hugs its content, could be wider than the bubble they sat
+                on. Mounted while hidden, like the assistant bar, so revealing
+                them can never shift the transcript. */}
+            <div
+              className="flex w-fit items-center justify-end gap-1.5 py-1.5 pr-1.5 opacity-0 pointer-events-none group-hover/user-message:pointer-events-auto group-hover/user-message:opacity-100 group-focus-within/user-message:pointer-events-auto group-focus-within/user-message:opacity-100"
+              data-slot="aui_user-actions"
+            >
+              <MessageHoverTime className="mr-1 px-0.5" />
+              {hasBody && <CopyButton appearance="icon" buttonSize="icon" label={copy.copy} text={messageText} />}
+              {!readOnly && hasBody && (
+                <ActionBarPrimitive.Edit asChild>
+                  <button
+                    // Distinct from the bubble's own "Edit message" name: the
+                    // bubble IS the primary trigger, and two controls sharing
+                    // one accessible name make either of them ambiguous.
+                    aria-label={t.common.edit}
+                    className={cn('size-5', USER_ACTION_ICON_BUTTON_CLASS)}
+                    onPointerDown={() => notifyThreadEditOpen()}
+                    type="button"
+                  >
+                    <Codicon name="edit" size={USER_ACTION_ICON_SIZE} />
+                  </button>
+                </ActionBarPrimitive.Edit>
+              )}
+              {showStop ? (
+                <button
+                  aria-label={copy.stop}
+                  className={cn('size-5', USER_ACTION_ICON_BUTTON_CLASS)}
+                  onClick={event => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    void onCancel?.()
+                  }}
+                  type="button"
+                >
+                  {StopGlyph}
+                </button>
+              ) : showRestore ? (
+                <Tooltip><TooltipTrigger asChild>
+                  <button
+                    aria-label={copy.restoreCheckpoint}
+                    className={cn('size-6', USER_ACTION_ICON_BUTTON_CLASS)}
+                    onClick={event => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      triggerHaptic('selection')
+                      onRequestRestoreConfirm?.(messageId, {
+                        text: messageText,
+                        userOrdinal: runtimeUserOrdinal
+                      })
+                    }}
+                    onPointerDown={event => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    type="button"
+                  >
+                    <Codicon name="discard" size="0.875rem" />
+                  </button>
+                </TooltipTrigger><TooltipContent>{copy.restoreFromHere}</TooltipContent></Tooltip>
+              ) : null}
+            </div>
             {/* Below the bubble, same register as the assistant action row:
                 same emoji size, same vertical padding, right-aligned to the
                 sent bubble. Overlaying the corner read badly in practice. */}

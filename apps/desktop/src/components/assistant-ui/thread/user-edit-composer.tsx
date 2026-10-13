@@ -939,7 +939,13 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
             )}
             <button
               aria-label={copy.sendEdited}
-              className={cn('absolute right-2 bottom-2 size-5', USER_ACTION_ICON_BUTTON_CLASS)}
+              className={cn(
+                'absolute right-2 bottom-2 size-5',
+                USER_ACTION_ICON_BUTTON_CLASS,
+                // This one sits ON the inverted bubble, where the control
+                // palette would be a dark glyph on a near-black fill.
+                'text-(--dt-user-bubble-foreground) hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)] disabled:text-[color-mix(in_srgb,var(--dt-user-bubble-foreground)_45%,transparent)]'
+              )}
               disabled={!canSubmit || submitting || staging}
               onClick={() => {
                 const editor = editorRef.current

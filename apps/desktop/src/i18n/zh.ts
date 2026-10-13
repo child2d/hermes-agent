@@ -384,6 +384,7 @@ export const zh = defineLocale({
     delete: '删除',
     docs: '文档',
     done: '完成',
+    edit: '编辑',
     error: '错误',
     expand: '展开',
     failed: '失败',

@@ -418,6 +418,7 @@ export interface Translations {
     delete: string
     docs: string
     done: string
+    edit: string
     error: string
     expand: string
     failed: string

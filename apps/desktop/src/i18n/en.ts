@@ -382,6 +382,7 @@ export const en: Translations = {
     delete: 'Delete',
     docs: 'Docs',
     done: 'Done',
+    edit: 'Edit',
     error: 'Error',
     expand: 'Expand',
     failed: 'Failed',
