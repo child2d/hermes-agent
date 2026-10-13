@@ -12,11 +12,6 @@ import { createPortal } from 'react-dom'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export type FanDirection = 'horizontal' | 'vertical' | 'arc'
@@ -256,22 +251,20 @@ export function FanMenu({ direction = 'vertical', gap = 4, hint = true, hub, ite
         onPointerLeave={hideSoon}
         ref={anchorRef}
       >
-        <Tooltip><TooltipTrigger asChild>
-          <Button
-            aria-expanded={open}
-            aria-haspopup="true"
-            aria-label={hub.label}
-            aria-pressed={hub.active}
-            className={hub.className}
-            disabled={hub.disabled}
-            onClick={hub.onSelect}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            {hub.icon}
-          </Button>
-        </TooltipTrigger><TooltipContent side={tipAnchor ?? (open ? OPEN_HUB_TIP_SIDE[direction] : 'top')}>{hub.label}</TooltipContent></Tooltip>
+        <Button
+          aria-expanded={open}
+          aria-haspopup="true"
+          aria-label={hub.label}
+          aria-pressed={hub.active}
+          className={hub.className}
+          disabled={hub.disabled}
+          onClick={hub.onSelect}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          {hub.icon}
+        </Button>
         {hint ? (
           <Codicon
             className={cn(
@@ -380,25 +373,23 @@ const FanCluster = memo(function FanCluster({
       style={{ height: rect.height, left: rect.left, top: rect.top, width: rect.width }}
     >
       {items.map((item, index) => (
-        <Tooltip><TooltipTrigger asChild>
-          <Button
-            aria-label={item.label}
-            aria-pressed={item.active}
-            className={cn(
-              'absolute inset-0 rounded-full bg-popover shadow-md',
-              entered ? 'pointer-events-auto' : 'pointer-events-none'
-            )}
-            disabled={item.disabled}
-            onClick={item.onSelect}
-            onPointerEnter={onPointerEnter}
-            onPointerLeave={onPointerLeave}
-            style={discStyle(offsets[index], index, entered)}
-            type="button"
-            variant={item.active ? 'default' : 'secondary'}
-          >
-            {item.icon}
-          </Button>
-        </TooltipTrigger><TooltipContent side={tipAnchor ?? fanTipSide(direction, offsets[index])}>{item.label}</TooltipContent></Tooltip>
+        <Button
+          aria-label={item.label}
+          aria-pressed={item.active}
+          className={cn(
+            'absolute inset-0 rounded-full bg-popover shadow-md',
+            entered ? 'pointer-events-auto' : 'pointer-events-none'
+          )}
+          disabled={item.disabled}
+          onClick={item.onSelect}
+          onPointerEnter={onPointerEnter}
+          onPointerLeave={onPointerLeave}
+          style={discStyle(offsets[index], index, entered)}
+          type="button"
+          variant={item.active ? 'default' : 'secondary'}
+        >
+          {item.icon}
+        </Button>
       ))}
     </div>
   )
