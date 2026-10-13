@@ -11,17 +11,15 @@ import {
 import { MessageHoverTime } from '@/components/assistant-ui/thread/message-hover-time'
 import { ReactionBadge, ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
 import { BackgroundResult } from '@/components/assistant-ui/thread/system-message'
-import { threadUserOrdinal } from '@/components/assistant-ui/thread/thread-message-index'
 import { MessageTimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
 import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/types'
 import { useMessageReactions } from '@/components/assistant-ui/thread/use-message-reactions'
 import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
-import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { StopFilled } from '@/lib/icons'
+import { Pencil, StopFilled } from '@/lib/icons'
 import { LruCache } from '@/lib/lru-cache'
 import { cn } from '@/lib/utils'
 import { $gateway } from '@/store/gateway'
@@ -84,10 +82,11 @@ export function StickyHumanMessageContainer({
 export const USER_BUBBLE_BASE_CLASS =
   'composer-human-message relative flex w-fit min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-(--dt-user-bubble) px-3.5 py-2.5 text-left text-(--dt-user-bubble-foreground) [-webkit-app-region:no-drag]'
 
-// Icon buttons in a user turn's action row: chrome on the chat surface, so
-// they use the app's control palette — NOT the bubble ink. The one action that
-// still renders INSIDE the bubble (the edit composer's send arrow) overrides
-// the colour at its own call site.
+// The user turn's row under the bubble is styled by the shared message-action
+// rules in styles.css ([data-slot='aui_user-actions'] button): bare 14px glyphs,
+// no boxes, 0.5 dim → full strength under the pointer — the same spec the
+// assistant bar uses. This class is what remains for the ONE icon that still
+// renders inside the bubble: the edit composer's send arrow.
 export const USER_ACTION_ICON_BUTTON_CLASS =
   'grid place-items-center rounded-md bg-transparent text-(--ui-text-secondary) transition-colors hover:bg-(--ui-control-active-background) hover:text-foreground disabled:cursor-default disabled:text-(--ui-text-quaternary) disabled:opacity-70'
 
@@ -256,8 +255,14 @@ const ProcessNotificationNote: FC<{ text: string }> = ({ text }) => {
 
 export const UserMessage: FC<{
   onCancel?: () => Promise<void> | void
+  /**
+   * Currently unused: the row's own undo button was removed, so nothing in this
+   * component requests a restore any more. Kept in the signature so the caller's
+   * wiring (the restore-confirm dialog in thread/index.tsx) stays intact until
+   * we decide whether the dialog goes with it.
+   */
   onRequestRestoreConfirm?: (messageId: string, target: RestoreMessageTarget) => void
-}> = ({ onCancel, onRequestRestoreConfirm }) => {
+}> = ({ onCancel }) => {
   const { t } = useI18n()
   const copy = t.assistant.thread
   const messageId = useAuiState(s => s.message.id)
@@ -276,8 +281,6 @@ export const UserMessage: FC<{
 
     return null
   })
-
-  const runtimeUserOrdinal = useAuiState(s => threadUserOrdinal(s.thread.messages, s.message.id))
 
   const attachmentRefs = useAuiState(s => {
     const custom = (s.message.metadata?.custom ?? {}) as { attachmentRefs?: unknown }
@@ -378,10 +381,6 @@ export const UserMessage: FC<{
   const chipOnlyTurn = !hasBody && attachmentRefs.length > 0 && attachmentRefs.every(isAttachmentRef)
   const isLatestUser = messageId === latestUserId
   const showStop = !readOnly && isLatestUser && threadRunning && Boolean(onCancel)
-  // Restore (re-run this exact prompt) is available everywhere the Stop button
-  // isn't — including mid-stream on older prompts, since the action interrupts
-  // the live turn before rewinding.
-  const showRestore = !readOnly && !showStop && Boolean(onRequestRestoreConfirm) && hasBody
 
   const bubbleClassName = cn(
     USER_BUBBLE_BASE_CLASS,
@@ -543,18 +542,16 @@ export const UserMessage: FC<{
                     // bubble IS the primary trigger, and two controls sharing
                     // one accessible name make either of them ambiguous.
                     aria-label={t.common.edit}
-                    className={cn('size-5', USER_ACTION_ICON_BUTTON_CLASS)}
                     onPointerDown={() => notifyThreadEditOpen()}
                     type="button"
                   >
-                    <Codicon name="edit" size={USER_ACTION_ICON_SIZE} />
+                    <Pencil className="size-3.5" />
                   </button>
                 </ActionBarPrimitive.Edit>
               )}
-              {showStop ? (
+              {showStop && (
                 <button
                   aria-label={copy.stop}
-                  className={cn('size-5', USER_ACTION_ICON_BUTTON_CLASS)}
                   onClick={event => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -564,30 +561,7 @@ export const UserMessage: FC<{
                 >
                   {StopGlyph}
                 </button>
-              ) : showRestore ? (
-                // Plain undo, no tip: the confirmation dialog carries what the
-                // tip used to explain, at the moment it matters.
-                <button
-                  aria-label={t.common.undo}
-                  className={cn('size-6', USER_ACTION_ICON_BUTTON_CLASS)}
-                  onClick={event => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    triggerHaptic('selection')
-                    onRequestRestoreConfirm?.(messageId, {
-                      text: messageText,
-                      userOrdinal: runtimeUserOrdinal
-                    })
-                  }}
-                  onPointerDown={event => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                  }}
-                  type="button"
-                >
-                  <Codicon name="discard" size="0.875rem" />
-                </button>
-              ) : null}
+              )}
             </div>
             {/* Below the bubble, same register as the assistant action row:
                 same emoji size, same vertical padding, right-aligned to the

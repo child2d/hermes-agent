@@ -2401,8 +2401,13 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 /* Message action bars — flat icon hits with default dim; only the hovered/focused control is full-strength.
    The reaction slot lives OUTSIDE the bar (a landed emoji must not ride the
-   bar's hover fade) but is still one of these controls visually. */
+   bar's hover fade) but is still one of these controls visually.
+   The USER turn's own row (aui_user-actions, under the bubble) rides the same
+   spec: its controls are different components (a shadcn Button for copy, bare
+   buttons for edit/stop) and without this they rendered as mismatched chunky
+   boxes next to the assistant's bare glyphs. */
 [data-slot='aui_msg-actions'] button,
+[data-slot='aui_user-actions'] button,
 button[data-slot='aui_msg-reactions'] {
   border: 0;
   border-radius: 0;
@@ -2478,11 +2483,13 @@ span[data-slot='aui_msg-reactions'] {
   opacity: 1;
 }
 
-[data-slot='aui_msg-actions'] button:disabled {
+[data-slot='aui_msg-actions'] button:disabled,
+[data-slot='aui_user-actions'] button:disabled {
   cursor: default;
 }
 
 [data-slot='aui_msg-actions'] button:hover,
+[data-slot='aui_user-actions'] button:hover,
 button[data-slot='aui_msg-reactions']:hover {
   background: transparent;
   color: var(--color-foreground);
@@ -2490,6 +2497,7 @@ button[data-slot='aui_msg-reactions']:hover {
 }
 
 [data-slot='aui_msg-actions'] button:active,
+[data-slot='aui_user-actions'] button:active,
 button[data-slot='aui_msg-reactions']:active {
   background: transparent;
 }
