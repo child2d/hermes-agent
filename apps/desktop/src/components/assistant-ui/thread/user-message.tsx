@@ -15,6 +15,7 @@ import { MessageTimelineTimestamp } from '@/components/assistant-ui/thread/timel
 import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/types'
 import { useMessageReactions } from '@/components/assistant-ui/thread/use-message-reactions'
 import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
+import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
@@ -82,11 +83,12 @@ export function StickyHumanMessageContainer({
 export const USER_BUBBLE_BASE_CLASS =
   'composer-human-message relative flex w-fit min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-(--dt-user-bubble) px-3.5 py-2.5 text-left text-(--dt-user-bubble-foreground) [-webkit-app-region:no-drag]'
 
-// The user turn's row under the bubble is styled by the shared message-action
-// rules in styles.css ([data-slot='aui_user-actions'] button): bare 14px glyphs,
-// no boxes, 0.5 dim → full strength under the pointer — the same spec the
-// assistant bar uses. This class is what remains for the ONE icon that still
-// renders inside the bubble: the edit composer's send arrow.
+// One spec for every control in the user turn's action row, from the shadcn
+// kit itself: `Button variant="ghost" size="icon"` with a 14px glyph. The row
+// used to mix a shadcn Button with hand-rolled <button>s and a stylesheet rule
+// that stripped all three to bare glyphs — one position, three treatments.
+// (This class now survives only for the edit composer's send arrow, which sits
+// INSIDE the bubble and needs the bubble's ink instead of the control palette.)
 export const USER_ACTION_ICON_BUTTON_CLASS =
   'grid place-items-center rounded-md bg-transparent text-(--ui-text-secondary) transition-colors hover:bg-(--ui-control-active-background) hover:text-foreground disabled:cursor-default disabled:text-(--ui-text-quaternary) disabled:opacity-70'
 
@@ -516,13 +518,12 @@ export const UserMessage: FC<{
               </div>
             </ReactionPicker>
             {/* Your turn's stamp and actions, under the bubble — the row the
-                reference points at: [when it was sent] [copy] [edit] [stop |
-                undo]. Two deliberate simplifications: the stamp is standing
-                text (`plain` prints the age and full date the hover tip used
-                to hide) and NOTHING here carries a tooltip, so the row has no
-                hidden state to discover. */}
+                reference points at: [when it was sent] [copy] [edit] [stop].
+                Every control here is the same shadcn Button
+                (`variant="ghost" size="icon"`, 14px glyph), and none of them
+                carries a tooltip: one row, one spec, no hidden states. */}
             <div
-              className="flex w-fit max-w-full items-center justify-end gap-1.5 py-1.5 pr-1.5"
+              className="flex w-fit max-w-full items-center justify-end gap-1 py-1 pr-1.5"
               data-slot="aui_user-actions"
             >
               <MessageHoverTime className="mr-1 px-0.5" plain />
@@ -530,6 +531,7 @@ export const UserMessage: FC<{
                 <CopyButton
                   appearance="icon"
                   buttonSize="icon"
+                  buttonVariant="ghost"
                   label={copy.copy}
                   text={messageText}
                   tooltip={false}
@@ -537,30 +539,34 @@ export const UserMessage: FC<{
               )}
               {!readOnly && hasBody && (
                 <ActionBarPrimitive.Edit asChild>
-                  <button
+                  <Button
                     // Distinct from the bubble's own "Edit message" name: the
                     // bubble IS the primary trigger, and two controls sharing
                     // one accessible name make either of them ambiguous.
                     aria-label={t.common.edit}
                     onPointerDown={() => notifyThreadEditOpen()}
+                    size="icon"
                     type="button"
+                    variant="ghost"
                   >
                     <Pencil className="size-3.5" />
-                  </button>
+                  </Button>
                 </ActionBarPrimitive.Edit>
               )}
               {showStop && (
-                <button
+                <Button
                   aria-label={copy.stop}
                   onClick={event => {
                     event.preventDefault()
                     event.stopPropagation()
                     void onCancel?.()
                   }}
+                  size="icon"
                   type="button"
+                  variant="ghost"
                 >
                   {StopGlyph}
-                </button>
+                </Button>
               )}
             </div>
             {/* Below the bubble, same register as the assistant action row:
