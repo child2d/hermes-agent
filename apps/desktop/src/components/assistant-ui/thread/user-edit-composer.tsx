@@ -62,10 +62,9 @@ import { hermesDirectiveFormatter } from '@/components/assistant-ui/directive-te
 import {
   StickyHumanMessageContainer,
   StopGlyph,
-  USER_ACTION_ICON_BUTTON_CLASS,
-  USER_ACTION_ICON_SIZE,
   USER_BUBBLE_BASE_CLASS
 } from '@/components/assistant-ui/thread/user-message'
+import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
@@ -940,9 +939,12 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
                 {copy.attachingFile}
               </span>
             )}
-            <button
+            <Button
               aria-label={copy.sendEdited}
-              className={cn('absolute right-2 bottom-2 size-5', USER_ACTION_ICON_BUTTON_CLASS)}
+              // Same spec as every other message action (shadcn Button, ghost +
+              // icon): styles.css renders it as a bare glyph in the bubble's
+              // corner, so no size/colour class belongs here.
+              className="absolute right-2 bottom-2"
               disabled={!canSubmit || submitting || staging}
               onClick={() => {
                 const editor = editorRef.current
@@ -958,10 +960,12 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
               // the edit silently never sends. The restore button guards the
               // same way.
               onPointerDown={event => event.preventDefault()}
+              size="icon"
               type="button"
+              variant="ghost"
             >
-              {submitting ? StopGlyph : <Codicon name="arrow-up" size={USER_ACTION_ICON_SIZE} />}
-            </button>
+              {submitting ? StopGlyph : <Codicon name="arrow-up" size="0.875rem" />}
+            </Button>
           </div>
         </div>
       </StickyHumanMessageContainer>

@@ -79,20 +79,14 @@ export function StickyHumanMessageContainer({
 // titlebar's [-webkit-app-region:drag] strips (app-shell.tsx). Electron resolves
 // drag regions at the compositor level — z-index and pointer-events don't help —
 // so without the carve-out, clicking a stuck bubble drags the window instead of
-// opening the edit composer.
+// landing on the bubble (and its text can't be selected).
 export const USER_BUBBLE_BASE_CLASS =
   'composer-human-message relative flex w-fit min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-(--dt-user-bubble) px-3.5 py-2.5 text-left text-(--dt-user-bubble-foreground) [-webkit-app-region:no-drag]'
 
 // Message actions are shadcn Buttons (`variant="ghost" size="icon"`) that paint
 // as bare glyphs: the presentation is owned by the shared message-action spec in
-// styles.css ([data-slot='aui_msg-actions'] / [data-slot='aui_user-actions']), so
-// neither row carries box styling of its own. This class is what remains for the
-// edit composer's send arrow — INSIDE the bubble, 20px, on the bubble's ink
-// rather than the control palette.
-export const USER_ACTION_ICON_BUTTON_CLASS =
-  'grid place-items-center rounded-md bg-transparent text-(--ui-text-secondary) transition-colors hover:bg-(--ui-control-active-background) hover:text-foreground disabled:cursor-default disabled:text-(--ui-text-quaternary) disabled:opacity-70'
-
-export const USER_ACTION_ICON_SIZE = '0.6875rem'
+// styles.css ([data-slot='aui_msg-actions'] / [data-slot='aui_user-actions'], and
+// the edit drawer's own bubble), so no call site carries box styling of its own.
 export const StopGlyph = <StopFilled aria-hidden className="size-3.5 -translate-y-px" />
 
 // Agent-to-agent deliveries ("Message from 🤖 <sender>: …", the Bot Mode /
@@ -256,33 +250,22 @@ const ProcessNotificationNote: FC<{ text: string }> = ({ text }) => {
 }
 
 export const UserMessage: FC<{
-  onCancel?: () => Promise<void> | void
   /**
-   * Currently unused: the row's own undo button was removed, so nothing in this
-   * component requests a restore any more. Kept in the signature so the caller's
-   * wiring (the restore-confirm dialog in thread/index.tsx) stays intact until
-   * we decide whether the dialog goes with it.
+   * Both of this component's callbacks are inert now, and deliberately left
+   * wired: the row under the bubble lost its stop and undo buttons, so stopping
+   * is the composer's job (its primary control already flips to Stop) and the
+   * only way to rewind is the checkpoint row. The signatures stay so the
+   * caller's wiring in thread/index.tsx (onCancel, the restore-confirm dialog)
+   * keeps compiling until we decide whether that machinery goes too.
    */
+  onCancel?: () => Promise<void> | void
   onRequestRestoreConfirm?: (messageId: string, target: RestoreMessageTarget) => void
-}> = ({ onCancel }) => {
+}> = () => {
   const { t } = useI18n()
   const copy = t.assistant.thread
   const messageId = useAuiState(s => s.message.id)
   const content = useAuiState(s => s.message.content)
   const messageText = messageContentText(content)
-  const threadRunning = useAuiState(s => s.thread.isRunning)
-
-  const latestUserId = useAuiState(s => {
-    for (let i = s.thread.messages.length - 1; i >= 0; i--) {
-      const message = s.thread.messages[i] as { id?: string; role?: string }
-
-      if (message.role === 'user') {
-        return message.id ?? null
-      }
-    }
-
-    return null
-  })
 
   const attachmentRefs = useAuiState(s => {
     const custom = (s.message.metadata?.custom ?? {}) as { attachmentRefs?: unknown }
@@ -381,8 +364,6 @@ export const UserMessage: FC<{
 
   const hasBody = messageText.trim().length > 0
   const chipOnlyTurn = !hasBody && attachmentRefs.length > 0 && attachmentRefs.every(isAttachmentRef)
-  const isLatestUser = messageId === latestUserId
-  const showStop = !readOnly && isLatestUser && threadRunning && Boolean(onCancel)
 
   // The bubble surface. Not interactive any more (the edit button lives in the
   // row below), so it carries no cursor/hover affordance of its own.
@@ -497,12 +478,13 @@ export const UserMessage: FC<{
               </div>
             </ReactionPicker>
             {/* Your turn's stamp and actions, under the bubble — the row the
-                reference points at: [when it was sent] [copy] [edit] [stop].
-                The controls are shadcn Buttons (`variant="ghost" size="icon"`),
-                but they PAINT as bare glyphs: the message-action spec in
-                styles.css covers this slot and the assistant bar alike, so one
-                row of flat icons is the whole transcript's treatment. No
-                tooltips either — one spec, no hidden states. */}
+                reference points at: [when it was sent] [copy] [edit]. The
+                controls are shadcn Buttons (`variant="ghost" size="icon"`), but
+                they PAINT as bare glyphs: the message-action spec in styles.css
+                covers this slot and the assistant bar alike, so one row of flat
+                icons is the whole transcript's treatment. No tooltips either —
+                one spec, no hidden states. Stop is NOT here: the composer's
+                primary control already flips to Stop during a turn. */}
             <div
               className="flex w-fit max-w-full items-center justify-end gap-1.5 py-1.5 pr-1.5"
               data-slot="aui_user-actions"
@@ -533,21 +515,6 @@ export const UserMessage: FC<{
                     <Pencil className="size-3.5" />
                   </Button>
                 </ActionBarPrimitive.Edit>
-              )}
-              {showStop && (
-                <Button
-                  aria-label={copy.stop}
-                  onClick={event => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    void onCancel?.()
-                  }}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  {StopGlyph}
-                </Button>
               )}
             </div>
             {/* Below the bubble, same register as the assistant action row:
