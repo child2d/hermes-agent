@@ -69,7 +69,7 @@ describe('edit send arrow — macOS click gesture (blur races cancel)', () => {
       const onEdit = vi.fn(async () => {})
       render(<Harness onEdit={onEdit} />)
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
       const editor = await screen.findByRole('textbox', { name: 'Edit message' })
 
       await act(async () => {

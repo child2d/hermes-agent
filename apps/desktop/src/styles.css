@@ -1433,9 +1433,11 @@ button,
   user-select: none;
 }
 
-/* User bubbles are <button>s (click → edit), so the rule above would kill
-   drag-to-select and leave ⌘C with nothing to grab. Message text stays
-   selectable; chrome controls outside the bubble keep user-select: none. */
+/* User bubbles used to be <button>s (click → edit), which the rule above would
+   strip of drag-to-select. The bubble is plain content now and the edit button
+   lives in the row below it, but the carve-out stays: the row's controls and a
+   watch window's expand toggle still sit inside the turn, and message text must
+   never lose ⌘C. */
 [data-slot='aui_user-message-root'] button,
 [data-slot='aui_user-message-root'] [role='button'] {
   -webkit-user-select: text;
@@ -1841,29 +1843,25 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 /* ── Inside the inverted user bubble (see --dt-user-bubble) ──────────────────
    The bubble is foreground-on-background, so every colour inside it that was
-   pitched against a LIGHT surface sinks into the fill. Three casualties, one
-   rule each:
+   pitched against a LIGHT surface sinks into the fill. Two casualties, one rule
+   each:
 
    · reference chips — each kind's --ref-color is its hue mixed 82% toward
      --foreground, which here IS the fill. Re-point that mix at the ink.
    · the kind-less fallback (a bare URL, --dt-primary) — same problem, and a
      raw accent is too dark to read on a near-black card: lift it toward the
      ink instead.
-   · the edit composer's placeholder — --muted-foreground at 60% over the fill
-     is a smudge. Same ink, lower alpha.
 
-   The bubble text itself, inline code and fences need nothing: the bubble
-   paints the ink and those all read `currentColor`. */
-.composer-human-message :is(.ref, [data-ref]) {
+   Scoped to the read-only bubble: the edit composer reuses USER_BUBBLE_BASE_CLASS
+   but paints the LIGHT composer fill (`ui-prompt-input__container`), so it keeps
+   the app's own mix partner. The bubble text itself, inline code and fences need
+   nothing — they all read `currentColor`. */
+.composer-human-message:not(.ui-prompt-input__container) :is(.ref, [data-ref]) {
   --ref-mix-partner: var(--dt-user-bubble-foreground);
 }
 
-.composer-human-message .ref:not([data-ref]) {
+.composer-human-message:not(.ui-prompt-input__container) .ref:not([data-ref]) {
   --ref-color: color-mix(in srgb, var(--dt-primary) 72%, var(--dt-user-bubble-foreground));
-}
-
-[data-slot='aui_edit-composer-root'] .composer-human-message [data-slot='composer-rich-input']:is(:empty, [data-empty])::before {
-  color: color-mix(in srgb, var(--dt-user-bubble-foreground) 55%, transparent);
 }
 
 /* Sticky human bubbles clamp to ~2 lines with a soft bottom fade so a long

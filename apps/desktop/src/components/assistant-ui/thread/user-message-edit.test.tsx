@@ -58,11 +58,11 @@ function IncrementalHarness({ onEdit }: { onEdit: (message: AppendMessage) => Pr
   )
 }
 
-describe('click-to-edit user message', () => {
+describe('edit a user message from its action row', () => {
   it('opens the edit composer with the incremental runtime', async () => {
     const { container } = render(<IncrementalHarness onEdit={async () => {}} />)
 
-    const bubble = await screen.findByRole('button', { name: 'Edit message' })
+    const bubble = await screen.findByRole('button', { name: 'Edit' })
 
     fireEvent.click(bubble)
 
@@ -73,7 +73,7 @@ describe('click-to-edit user message', () => {
 
   it('hides the placeholder when a cleared inline edit receives text again', async () => {
     render(<IncrementalHarness onEdit={async () => {}} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     const editor = await screen.findByRole('textbox', { name: 'Edit message' })
     // jsdom does not make contenteditable focusable like Chromium does.
@@ -99,7 +99,7 @@ describe('click-to-edit user message', () => {
 
   it('hides the inline edit placeholder during IME preedit and restores it on cancellation', async () => {
     render(<IncrementalHarness onEdit={async () => {}} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     const editor = await screen.findByRole('textbox', { name: 'Edit message' })
     editor.tabIndex = 0
     editor.focus()
@@ -122,7 +122,7 @@ describe('click-to-edit user message', () => {
     const onEdit = vi.fn(async (_message: AppendMessage) => {})
 
     render(<IncrementalHarness onEdit={onEdit} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     const editor = await screen.findByRole('textbox', { name: 'Edit message' })
     const editedText = 'edit me please\u4f60'
@@ -152,7 +152,7 @@ describe('click-to-edit user message', () => {
   it('keeps a dirty inline edit open when focus leaves the composer', async () => {
     const { container } = render(<IncrementalHarness onEdit={async () => {}} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     const editor = await screen.findByRole('textbox', { name: 'Edit message' })
     const editedText = 'edited draft that must not be discarded'
@@ -168,7 +168,7 @@ describe('click-to-edit user message', () => {
   it('still cancels an untouched inline edit when focus leaves the composer', async () => {
     const { container } = render(<IncrementalHarness onEdit={async () => {}} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     const editor = await screen.findByRole('textbox', { name: 'Edit message' })
 
     await moveFocusOutside(editor)
@@ -183,7 +183,7 @@ describe('Enter submission and latch behavior', () => {
     render(<IncrementalHarness onEdit={onEdit} />)
 
     // First edit session
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     let editor = await screen.findByRole('textbox', { name: 'Edit message' })
     editor.textContent = 'first edit'
@@ -198,7 +198,7 @@ describe('Enter submission and latch behavior', () => {
     await new Promise(resolve => setTimeout(resolve, 300))
 
     // Second edit session - open the editor again
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     editor = await screen.findByRole('textbox', { name: 'Edit message' })
     editor.textContent = 'second edit'
@@ -215,7 +215,7 @@ describe('Enter submission and latch behavior', () => {
     const onEdit = vi.fn(async () => {})
     render(<IncrementalHarness onEdit={onEdit} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     const editor = await screen.findByRole('textbox', { name: 'Edit message' })
 
@@ -250,7 +250,7 @@ describe('Enter submission and latch behavior', () => {
       const onEdit = vi.fn(async () => {})
       const { container } = render(<IncrementalHarness onEdit={onEdit} />)
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
       const editor = await screen.findByRole('textbox', { name: 'Edit message' })
       const editedText = 'dirty draft that must survive blur then submit'
@@ -288,7 +288,7 @@ describe('Enter submission and latch behavior', () => {
     const onEdit = vi.fn(async () => {})
     const { container } = render(<IncrementalHarness onEdit={onEdit} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
 
     const editor = await screen.findByRole('textbox', { name: 'Edit message' })
     const editedText = 'edited after blur must still submit'

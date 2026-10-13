@@ -65,7 +65,7 @@ function Harness({ onEdit }: { onEdit: (message: AppendMessage) => Promise<void>
 async function openEditor() {
   render(<Harness onEdit={vi.fn(async () => {})} />)
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
   const editor = await screen.findByRole('textbox', { name: 'Edit message' })
 
   await act(async () => {

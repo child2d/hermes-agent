@@ -384,9 +384,11 @@ export const UserMessage: FC<{
   const isLatestUser = messageId === latestUserId
   const showStop = !readOnly && isLatestUser && threadRunning && Boolean(onCancel)
 
-  const bubbleClassName = cn(
+  // The bubble surface. Not interactive any more (the edit button lives in the
+  // row below), so it carries no cursor/hover affordance of its own.
+  const bubbleSurface = cn(
     USER_BUBBLE_BASE_CLASS,
-    'cursor-pointer text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) transition-opacity hover:opacity-90'
+    'text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height)'
   )
 
   const bubbleContent = hasBody ? (
@@ -464,11 +466,12 @@ export const UserMessage: FC<{
                 }
               >
                 {readOnly ? (
-                  // Spectator transcript: clicking only toggles the clamp so the
-                  // full prompt is readable — never opens an edit composer.
+                  // Spectator transcript: expanding a clamped prompt is the only
+                  // thing this bubble does — a watch window has no edit button,
+                  // so this one keeps its toggle and stays a button.
                   <button
                     aria-expanded={bodyClamped ? expanded : undefined}
-                    className={cn(bubbleClassName, !bodyClamped && 'cursor-default')}
+                    className={cn(bubbleSurface, bodyClamped ? 'cursor-pointer' : 'cursor-default')}
                     onClick={() => {
                       // Drag-select ends on mouseup→click; don't collapse the
                       // clamp just because the highlight finished.
@@ -484,36 +487,12 @@ export const UserMessage: FC<{
                     {bubbleContent}
                   </button>
                 ) : (
-                  // Always editable — clicking opens the edit composer even while a
-                  // turn streams; sending the edit reverts (interrupt + rewind).
-                  // A live text highlight wins: finishing a drag-select must not
-                  // open the editor and throw the selection away.
-                  <ActionBarPrimitive.Edit asChild>
-                    <button
-                      aria-label={copy.editMessage}
-                      className={bubbleClassName}
-                      onClick={event => {
-                        if (hasTextSelection()) {
-                          event.preventDefault()
-                          event.stopPropagation()
-
-                          return
-                        }
-
-                        triggerHaptic('selection')
-                      }}
-                      onPointerDown={() => {
-                        if (hasTextSelection()) {
-                          return
-                        }
-
-                        notifyThreadEditOpen()
-                      }}
-                      type="button"
-                    >
-                      {bubbleContent}
-                    </button>
-                  </ActionBarPrimitive.Edit>
+                  // No click-to-edit. The row under the bubble carries the edit
+                  // button, so a bubble that ALSO swapped the composer on a stray
+                  // click was the same door twice — and it had to fight a live
+                  // drag-selection on every attempt to copy text. The bubble is
+                  // content now: selectable, right-clickable, nothing more.
+                  <div className={bubbleSurface}>{bubbleContent}</div>
                 )}
               </div>
             </ReactionPicker>

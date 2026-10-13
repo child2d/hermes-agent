@@ -863,10 +863,13 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
           <div
             className={cn(
               USER_BUBBLE_BASE_CLASS,
-              // Editing is the one state that gets an outline: the read-only
-              // bubble has none, so the ring IS the affordance — pitched at the
-              // bubble's ink, since a stroke-* token would vanish into the fill.
-              'ui-prompt-input__container relative ring-1 ring-[color-mix(in_srgb,var(--dt-user-bubble-foreground)_28%,transparent)] data-[expanded=true]:min-h-20',
+              // Edit mode is a DRAWER, not the inverted bubble: it paints the
+              // composer's own fill (the `:root` --composer-fill fallback exists
+              // for exactly this drawer), takes normal foreground ink, spans the
+              // column instead of hugging its text, and wears an input stroke.
+              // Editing a black-on-black card was unreadable, and a fit-content
+              // box gave the caret nowhere to go.
+              'ui-prompt-input__container relative w-full bg-(--composer-fill) text-foreground ring-1 ring-(--ui-stroke-secondary) data-[expanded=true]:min-h-20',
               COMPOSER_DROP_FADE_CLASS,
               dragActive && COMPOSER_DROP_ACTIVE_CLASS
             )}
@@ -939,13 +942,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
             )}
             <button
               aria-label={copy.sendEdited}
-              className={cn(
-                'absolute right-2 bottom-2 size-5',
-                USER_ACTION_ICON_BUTTON_CLASS,
-                // This one sits ON the inverted bubble, where the control
-                // palette would be a dark glyph on a near-black fill.
-                'text-(--dt-user-bubble-foreground) hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)] disabled:text-[color-mix(in_srgb,var(--dt-user-bubble-foreground)_45%,transparent)]'
-              )}
+              className={cn('absolute right-2 bottom-2 size-5', USER_ACTION_ICON_BUTTON_CLASS)}
               disabled={!canSubmit || submitting || staging}
               onClick={() => {
                 const editor = editorRef.current
