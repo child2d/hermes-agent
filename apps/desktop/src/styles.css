@@ -2503,11 +2503,16 @@ button[data-slot='aui_msg-reactions']:active {
 }
 
 [data-slot='aui_msg-actions'] button:focus-visible,
+[data-slot='aui_user-actions'] button:focus-visible,
 button[data-slot='aui_msg-reactions']:focus-visible {
   opacity: 1;
 }
 
+/* One icon size for every message action, whatever glyph or component the slot
+   holds: the assistant bar's lucide/tabler icons, the user row's copy Button and
+   Pencil, the reaction slot's emoji-less trigger. */
 [data-slot='aui_msg-actions'] button svg,
+[data-slot='aui_user-actions'] button svg,
 button[data-slot='aui_msg-reactions'] svg {
   width: 0.875rem;
   height: 0.875rem;
