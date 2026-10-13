@@ -517,9 +517,9 @@
 
     /* Room under the composer to the window's bottom edge. Lands TWICE — the
        composer root and the dock both pad by it — so the visible gap is 2×:
-       1.25rem = 40px, against the reference's 38px (which also holds its own
-       footer caption this app doesn't have). */
-    --composer-shell-pad-block-end: 1.25rem;
+       1.75rem = 56px. (The reference keeps 38px there, but it spends part of it
+       on its own footer caption; without one this needs more to read as open.) */
+    --composer-shell-pad-block-end: 1.75rem;
     --message-text-indent: 0.75rem;
     --conversation-text-base-size: 0.875rem;
     --conversation-tool-base-size: 0.6875rem;
