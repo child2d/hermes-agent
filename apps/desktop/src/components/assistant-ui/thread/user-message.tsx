@@ -68,15 +68,17 @@ export function StickyHumanMessageContainer({
 }
 
 // Shared "user bubble" base. Both the read-only message and the inline
-// edit composer render the same bubble surface (an inverted solid card);
-// they only differ in the edit ring and padding-right (the read-only view
-// reserves room for the restore icon).
+// edit composer render the same bubble surface (an inverted solid card); they
+// differ only in the edit ring.
 //
 // Inverted on purpose (--dt-user-bubble = the theme foreground): your turn is
 // a filled bubble with the chat surface as its ink, against an agent reply
 // that paints no surface at all — the one distinction in the transcript that
 // cannot be missed. `w-fit` lets it hug a two-word prompt and still take the
-// full column for a paragraph.
+// full column for a paragraph. Padding stays SYMMETRIC (px-3.5 both sides): a
+// wider right gutter for the hover cluster read as a lopsided bubble once the
+// fill became visible, and the cluster's own opaque fill already masks the
+// last line's tail while it is shown.
 //
 // no-drag: sticky bubbles park at --sticky-human-top (~4px), sliding under the
 // titlebar's [-webkit-app-region:drag] strips (app-shell.tsx). Electron resolves
@@ -385,7 +387,7 @@ export const UserMessage: FC<{
 
   const bubbleClassName = cn(
     USER_BUBBLE_BASE_CLASS,
-    'cursor-pointer pr-9 text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) transition-opacity hover:opacity-90'
+    'cursor-pointer text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) transition-opacity hover:opacity-90'
   )
 
   const bubbleContent = hasBody ? (
