@@ -435,6 +435,7 @@ export interface Translations {
     set: string
     skip: string
     update: string
+    undo: string
     tryHint: (term: string) => string
     on: string
     off: string

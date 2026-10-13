@@ -18,11 +18,6 @@ import { useMessageReactions } from '@/components/assistant-ui/thread/use-messag
 import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
 import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
@@ -521,19 +516,26 @@ export const UserMessage: FC<{
                 )}
               </div>
             </ReactionPicker>
-            {/* Your turn's hover actions, on the chat surface UNDER the bubble:
-                [when it was sent] [copy] [edit] [stop | restore]. They used to
-                be an absolute cluster in the bubble's bottom-right corner,
-                where they covered the last line's tail — and, now that the
-                bubble hugs its content, could be wider than the bubble they sat
-                on. Mounted while hidden, like the assistant bar, so revealing
-                them can never shift the transcript. */}
+            {/* Your turn's stamp and actions, under the bubble — the row the
+                reference points at: [when it was sent] [copy] [edit] [stop |
+                undo]. Two deliberate simplifications: the stamp is standing
+                text (`plain` prints the age and full date the hover tip used
+                to hide) and NOTHING here carries a tooltip, so the row has no
+                hidden state to discover. */}
             <div
-              className="flex w-fit items-center justify-end gap-1.5 py-1.5 pr-1.5 opacity-0 pointer-events-none group-hover/user-message:pointer-events-auto group-hover/user-message:opacity-100 group-focus-within/user-message:pointer-events-auto group-focus-within/user-message:opacity-100"
+              className="flex w-fit max-w-full items-center justify-end gap-1.5 py-1.5 pr-1.5"
               data-slot="aui_user-actions"
             >
-              <MessageHoverTime className="mr-1 px-0.5" />
-              {hasBody && <CopyButton appearance="icon" buttonSize="icon" label={copy.copy} text={messageText} />}
+              <MessageHoverTime className="mr-1 px-0.5" plain />
+              {hasBody && (
+                <CopyButton
+                  appearance="icon"
+                  buttonSize="icon"
+                  label={copy.copy}
+                  text={messageText}
+                  tooltip={false}
+                />
+              )}
               {!readOnly && hasBody && (
                 <ActionBarPrimitive.Edit asChild>
                   <button
@@ -563,28 +565,28 @@ export const UserMessage: FC<{
                   {StopGlyph}
                 </button>
               ) : showRestore ? (
-                <Tooltip><TooltipTrigger asChild>
-                  <button
-                    aria-label={copy.restoreCheckpoint}
-                    className={cn('size-6', USER_ACTION_ICON_BUTTON_CLASS)}
-                    onClick={event => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      triggerHaptic('selection')
-                      onRequestRestoreConfirm?.(messageId, {
-                        text: messageText,
-                        userOrdinal: runtimeUserOrdinal
-                      })
-                    }}
-                    onPointerDown={event => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                    }}
-                    type="button"
-                  >
-                    <Codicon name="discard" size="0.875rem" />
-                  </button>
-                </TooltipTrigger><TooltipContent>{copy.restoreFromHere}</TooltipContent></Tooltip>
+                // Plain undo, no tip: the confirmation dialog carries what the
+                // tip used to explain, at the moment it matters.
+                <button
+                  aria-label={t.common.undo}
+                  className={cn('size-6', USER_ACTION_ICON_BUTTON_CLASS)}
+                  onClick={event => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    triggerHaptic('selection')
+                    onRequestRestoreConfirm?.(messageId, {
+                      text: messageText,
+                      userOrdinal: runtimeUserOrdinal
+                    })
+                  }}
+                  onPointerDown={event => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  type="button"
+                >
+                  <Codicon name="discard" size="0.875rem" />
+                </button>
               ) : null}
             </div>
             {/* Below the bubble, same register as the assistant action row:

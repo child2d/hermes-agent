@@ -45,8 +45,12 @@ const clockOnly = (time: string) => time
  * date in its tip. Visibility belongs to the host's hover group: this paints
  * the label only. Stands down while `display.timestamps` is on, because the
  * transcript already prints every stamp.
+ *
+ * `plain` drops the tip and prints the detail instead — the age and the full
+ * date/time, the text the tip used to hide — for a surface that carries the
+ * stamp as standing text under the message rather than as a hover reveal.
  */
-export const MessageHoverTime: FC<{ className?: string }> = ({ className }) => {
+export const MessageHoverTime: FC<{ className?: string; plain?: boolean }> = ({ className, plain }) => {
   const { t } = useI18n()
   const timelineStamps = useStore($displayTimestamps)
   const seconds = useMessageTime()
@@ -57,17 +61,25 @@ export const MessageHoverTime: FC<{ className?: string }> = ({ className }) => {
 
   const date = new Date(seconds * 1000)
 
-  return (
-    <Tooltip><TooltipTrigger asChild>
-      <time
-        className={cn(
-          'pointer-events-auto cursor-default select-none whitespace-nowrap text-2xs leading-5 tabular-nums text-(--ui-text-tertiary)',
-          className
-        )}
-        dateTime={date.toISOString()}
-      >
-        {formatMessageTimestamp(date, { today: clockOnly, yesterday: t.assistant.thread.yesterday })}
-      </time>
-    </TooltipTrigger><TooltipContent side="top">{<HoverTimeDetail ms={date.getTime()} />}</TooltipContent></Tooltip>
+  const stamp = (
+    <time
+      className={cn(
+        'pointer-events-auto cursor-default select-none whitespace-nowrap text-2xs leading-5 tabular-nums text-(--ui-text-tertiary)',
+        className
+      )}
+      dateTime={date.toISOString()}
+    >
+      {plain ? (
+        <HoverTimeDetail ms={date.getTime()} />
+      ) : (
+        formatMessageTimestamp(date, { today: clockOnly, yesterday: t.assistant.thread.yesterday })
+      )}
+    </time>
   )
+
+  if (plain) {
+    return stamp
+  }
+
+  return <Tooltip><TooltipTrigger asChild>{stamp}</TooltipTrigger><TooltipContent side="top">{<HoverTimeDetail ms={date.getTime()} />}</TooltipContent></Tooltip>
 }

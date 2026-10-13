@@ -57,6 +57,8 @@ export interface CopyButtonProps {
   stopPropagation?: boolean
   text: CopyPayload
   title?: string
+  /** `false` keeps the button's accessible name but drops the hover tip. */
+  tooltip?: boolean
 }
 
 export function CopyButton({
@@ -77,7 +79,8 @@ export function CopyButton({
   side,
   stopPropagation = false,
   text,
-  title
+  title,
+  tooltip = true
 }: CopyButtonProps) {
   const { t } = useI18n()
   const resolvedErrorMessage = errorMessage ?? t.common.copyFailed
@@ -236,8 +239,9 @@ export function CopyButton({
     </Button>
   )
 
-  // Only icon-only buttons need a tooltip; the text variant already shows its label.
-  return appearance === 'icon' ? (
+  // Only icon-only buttons need a tooltip; the text variant already shows its
+  // label. `tooltip={false}` keeps the aria-label and skips the tip entirely.
+  return appearance === 'icon' && tooltip ? (
     <Tooltip><TooltipTrigger asChild>
       {button}
     </TooltipTrigger><TooltipContent side={side ?? 'bottom'}>{feedbackLabel}</TooltipContent></Tooltip>

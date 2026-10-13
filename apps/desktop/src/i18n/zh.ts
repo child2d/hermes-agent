@@ -401,6 +401,7 @@ export const zh = defineLocale({
     set: '设置',
     skip: '跳过',
     update: '更新',
+    undo: '撤销',
     tryHint: term => `试试“${term}”`,
     on: '开',
     off: '关'

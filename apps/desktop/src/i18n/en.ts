@@ -399,6 +399,7 @@ export const en: Translations = {
     set: 'Set',
     skip: 'Skip',
     update: 'Update',
+    undo: 'Undo',
     tryHint: term => `Try “${term}”`,
     on: 'On',
     off: 'Off'
