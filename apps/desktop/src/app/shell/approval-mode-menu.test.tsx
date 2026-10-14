@@ -4,9 +4,18 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { StatusbarControls } from '@/app/shell/statusbar-controls'
 import { $approvalModes } from '@/store/approval-mode'
+import { requestGatewayForProfile } from '@/store/gateway'
 import { stubMenuDomApis, stubResizeObserver } from '@/test/jsdom'
 
 import { useApprovalModeStatusbarItem } from './approval-mode-menu'
+
+// The control builds its own profile-scoped dispatcher (`useApprovalModeControl`),
+// so the gateway module is the seam.
+vi.mock('@/store/gateway', () => ({
+  requestGatewayForProfile: vi.fn(async (_profile: string, method: string, params?: Record<string, unknown>) =>
+    method === 'config.get' ? { value: 'smart' } : { value: params?.value ?? 'smart' }
+  )
+}))
 
 beforeAll(() => {
   stubResizeObserver()
@@ -18,14 +27,8 @@ afterEach(() => {
   $approvalModes.set({})
 })
 
-function Harness({
-  profile = 'default',
-  requestGateway
-}: {
-  profile?: string
-  requestGateway: (method: string, params?: Record<string, unknown>) => Promise<unknown>
-}) {
-  const item = useApprovalModeStatusbarItem(profile, requestGateway)
+function Harness({ profile = 'default' }: { profile?: string }) {
+  const item = useApprovalModeStatusbarItem(profile)
 
   return (
     <MemoryRouter>
@@ -36,8 +39,7 @@ function Harness({
 
 describe('approval mode statusbar item', () => {
   it('writes the selected mode through the gateway and updates its shared trigger label', async () => {
-    const requestGateway = vi.fn(async (_method, params) => ({ value: params?.value ?? 'smart' }))
-    render(<Harness profile="work" requestGateway={requestGateway} />)
+    render(<Harness profile="work" />)
 
     fireEvent.pointerDown(screen.getByRole('button', { name: /smart/i }), { button: 0 })
     fireEvent.click(await screen.findByRole('menuitemradio', { name: /manual/i }))
@@ -45,10 +47,10 @@ describe('approval mode statusbar item', () => {
     await waitFor(() => {
       // The menu shows the "work" profile, so the write must name it (#125969); an unscoped
       // `config.set` would edit whichever profile the backend was launched with instead.
-      expect(requestGateway).toHaveBeenCalledWith('config.set', {
+      expect(requestGatewayForProfile).toHaveBeenCalledWith('work', 'config.set', {
         key: 'approvals.mode',
-        value: 'manual',
-        profile: 'work'
+        profile: 'work',
+        value: 'manual'
       })
       expect(screen.getByRole('button', { name: /manual/i })).toBeTruthy()
     })

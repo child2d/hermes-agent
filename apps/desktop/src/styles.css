@@ -317,21 +317,17 @@
        colours). The `-base` tokens stay UN-dimmed so the transcript below can
        dim from the same source without stacking the two cuts. */
     --frame-surface-keep: 95%;
-    --ui-bg-chrome-base: var(--theme-background-seed);
     --ui-bg-chrome-base: color-mix(
       in srgb,
       var(--theme-background-seed) var(--theme-mix-chrome),
       var(--theme-neutral-chrome)
     );
-    --ui-bg-chrome: var(--ui-bg-chrome-base);
     --ui-bg-chrome: color-mix(in srgb, var(--ui-bg-chrome-base) var(--frame-surface-keep), #000);
-    --ui-bg-sidebar-base: var(--theme-sidebar-seed);
     --ui-bg-sidebar-base: color-mix(
       in srgb,
       var(--theme-sidebar-seed) var(--theme-mix-sidebar),
       var(--theme-neutral-sidebar)
     );
-    --ui-bg-sidebar: var(--ui-bg-sidebar-base);
     --ui-bg-sidebar: color-mix(in srgb, var(--ui-bg-sidebar-base) var(--frame-surface-keep), #000);
     --ui-bg-editor: color-mix(in srgb, var(--theme-card-seed) var(--theme-mix-card), var(--theme-neutral-card));
     --ui-bg-elevated: color-mix(
@@ -460,7 +456,7 @@
     --ui-inline-code-foreground: color-mix(in srgb, #141414 88%, transparent);
     --ui-selection-background: color-mix(in srgb, #ffd24a 55%, transparent);
 
-    --dt-background: var(--ui-bg-chrome);
+    --dt-background: var(--ui-bg-chrome-base);
     --dt-foreground: var(--ui-text-primary);
     --dt-card: var(--ui-bg-editor);
     --dt-card-foreground: var(--ui-text-primary);
@@ -1898,17 +1894,16 @@ body.guest-pointer-lock :is(webview, iframe) {
   --ref-color: color-mix(in srgb, var(--dt-primary) 72%, var(--dt-user-bubble-foreground));
 }
 
-/* Sticky human bubbles clamp to ~2 lines with a soft bottom fade so a long
-   prompt doesn't dominate the viewport. The clamp lifts only in the edit
-   composer; expanding on read-only :focus-within ran on mousedown (before the
-   swap) and fought stick-to-bottom when parked at the bottom. */
-.sticky-human-clamp {
-  cursor: pointer;
+/* A long prompt clamps to four lines with a soft bottom fade instead of pushing
+   the answer off screen. Nothing lifts it back open: the bubble itself is inert
+   (no click, no hover state) — the edit drawer is where the whole text is
+   visible, and `data-clamped` is what the fade hangs off. */
+.human-msg-clamp {
   max-height: calc(4 * var(--human-msg-line-height) * var(--conversation-text-font-size) + 0.15rem);
   overflow: hidden;
 }
 
-.sticky-human-clamp[data-clamped='true'] {
+.human-msg-clamp[data-clamped='true'] {
   -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
   mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
@@ -2100,8 +2095,8 @@ body.guest-pointer-lock :is(webview, iframe) {
   /* Borderless by design. The card is defined by its opaque fill, the dimmed
      transcript behind it, and --shadow-composer — the hairline that used to sit
      here repeated the editor-frame language in the one place meant to read as a
-     sheet of paper on the page. A theme that wants an edge back should raise
-     --chat-surface-dim instead. (HUD overrides both, with !important.) */
+     sheet of paper on the page. Lower --chat-surface-keep if a firmer edge is
+     wanted. (HUD overrides both, with !important.) */
   border: 0;
   box-shadow: var(--shadow-composer);
   min-height: var(--composer-surface-min-height);
@@ -2127,9 +2122,6 @@ body.guest-pointer-lock :is(webview, iframe) {
    surface while scrolling, which is exactly what an opaque card must not do —
    content passing under it now simply disappears behind it. */
 :root {
-  /* Also the fallback for drawers outside the main composer (e.g. edit-message),
-     and for browsers that take lightningcss's pre-color-mix branch. */
-  --composer-fill: var(--dt-card);
   /* The card is the LIGHTEST thing on the page: the transcript is dimmed by
      --chat-surface-keep and the composer is lifted toward white by this much, so
      the two can never collapse into one field. One knob — its meaning is "how
@@ -3396,12 +3388,10 @@ button[data-slot='aui_msg-reactions'] svg {
   background: var(--dt-card) !important;
 }
 
-/* User messages ride the band like every other line. In the app each sticky
-   user row paints an OPAQUE chat-surface slab behind it (so a stuck bubble can
-   slide over scrolled text) and the bubble is solid --dt-user-bubble — inside
-   the smoked band both read as fully opaque cards that ignore every fade. The
-   slab goes unconditionally; the bubble is gone entirely at rest and returns
-   when engaged. ONE variable carries the fill so there is no specificity fight
+/* User messages ride the band like every other line. The bubble is solid
+   --dt-user-bubble, so inside the smoked band it reads as a fully opaque card
+   that ignores every fade. It is gone entirely at rest and returns when
+   engaged; ONE variable carries the fill so there is no specificity fight
    between rest/engaged rules — the states just move the var. */
 [data-hud-shell] {
   /* At rest there is no bubble: unfocused, the band is bare text over someone
@@ -3426,11 +3416,6 @@ button[data-slot='aui_msg-reactions'] svg {
 
 [data-hud-shell] [data-slot='aui_user-message-root'] {
   background: transparent !important;
-  /* Not sticky in HUD mode: the band is a short log, and a pinned bubble
-     spends a third of it on a line you already read. Static rows scroll away
-     like everything else (the app keeps its sticky behavior — this is the
-     HUD's call, not a global one). */
-  position: static !important;
 }
 
 /* User bubbles: the ONE thing in the band that paints its own opaque fill

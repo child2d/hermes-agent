@@ -4725,6 +4725,7 @@ export const en: Translations = {
       openStarmap: 'Open memory graph',
       turnRunning: 'Running',
       contextUsage: 'Context usage',
+      contextUsageAria: label => `Context usage: ${label}`,
       compressions: count => `Compressions: ${count}`,
       systemResources: {
         title: 'System Resources',
@@ -5254,11 +5255,6 @@ export const en: Translations = {
       stop: 'Stop',
       restorePrevious: 'Restore previous checkpoint',
       restoreCheckpoint: 'Restore checkpoint',
-      restoreFromHere: 'Restore checkpoint — rerun from this prompt',
-      restoreTitle: 'Restore to this checkpoint?',
-      restoreBody:
-        'Everything after this prompt is removed from the conversation, and the prompt runs again from here.',
-      restoreConfirm: 'Restore & rerun',
       restoreNext: 'Restore next checkpoint',
       goForward: 'Go forward',
       sendEdited: 'Send edited message',

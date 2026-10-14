@@ -5677,11 +5677,6 @@ export const esOverrides = {
       stop: 'Detener',
       restorePrevious: 'Restaurar checkpoint anterior',
       restoreCheckpoint: 'Restaurar checkpoint',
-      restoreFromHere: 'Restaurar punto de control y ejecutar de nuevo desde este mensaje',
-      restoreTitle: '¿Restaurar a este punto de control?',
-      restoreBody:
-        'Todo lo que sigue a este mensaje se elimina de la conversación y el mensaje se ejecuta nuevamente desde aquí.',
-      restoreConfirm: 'Restaurar y volver a ejecutar',
       restoreNext: 'Restaurar checkpoint siguiente',
       goForward: 'Avanzar',
       sendEdited: 'Enviar edición',

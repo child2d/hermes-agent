@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
 import type { StatusbarItem } from '@/app/shell/statusbar-controls'
 import {
@@ -17,11 +17,16 @@ import {
   setApprovalModeForProfile,
   syncApprovalModeForProfile
 } from '@/store/approval-mode'
+import { requestGatewayForProfile } from '@/store/gateway'
 
-/** The three mode labels — ONE map for all three consumers (the statusbar item's
- *  trigger, the menu items, and the composer's chip), so the copy cannot drift
- *  between the surfaces that show the same setting. */
-export function useApprovalModeLabels(): Record<ApprovalMode, string> {
+/** The menu's box, shared by its two openings (the statusbar item's popover and
+ *  the composer chip's dropdown) so the three-option list cannot be laid out two
+ *  different ways. */
+export const APPROVAL_MENU_CLASS = 'w-72 p-1'
+
+/** The three mode labels — ONE map for the surfaces that show the setting (the
+ *  statusbar item's trigger, the menu items, the composer's chip). */
+function useApprovalModeLabels(): Record<ApprovalMode, string> {
   const copy = useI18n().t.shell.approvalMode
 
   return useMemo(
@@ -30,8 +35,44 @@ export function useApprovalModeLabels(): Record<ApprovalMode, string> {
   )
 }
 
-/** The three modes, as menu items. One source of truth for both places this
- *  menu is opened from: the statusbar item below and the composer's chip. */
+/**
+ * The approval mode of one gateway profile: its current value, its labels, and
+ * the scoped read/write. ONE hook for every surface that shows or changes it, so
+ * the scoping rule lives in one place — a gateway `config.get`/`config.set` with
+ * no `profile` resolves to whichever profile the backend was *launched* with, so
+ * an unscoped call shows one profile's mode for all of them and writes to the
+ * wrong one (#125969).
+ *
+ * The profile is dialled directly (not through the ambient, session-routed
+ * dispatcher, which re-scopes `params.profile` to the focused session's).
+ */
+export function useApprovalModeControl(profile: string) {
+  const labels = useApprovalModeLabels()
+  const modes = useStore($approvalModes)
+  const mode = modes[profile.trim() || 'default'] ?? 'smart'
+
+  const requestGateway = useCallback<ApprovalModeRequester>(
+    (method, params) => requestGatewayForProfile(profile, method, params),
+    [profile]
+  )
+
+  // Adopt whatever the gateway reports on profile change, pushing local drift
+  // back. Same call from every surface, so a mode set in one lands in all.
+  useEffect(() => {
+    void syncApprovalModeForProfile(requestGateway, profile).catch(() => undefined)
+  }, [profile, requestGateway])
+
+  const setMode = useCallback(
+    (next: ApprovalMode) => {
+      void setApprovalModeForProfile(requestGateway, profile, next).catch(() => undefined)
+    },
+    [profile, requestGateway]
+  )
+
+  return { labels, mode, setMode }
+}
+
+/** The three modes, as menu items. */
 export function ApprovalModeMenuItems({
   mode,
   onValueChange
@@ -69,18 +110,13 @@ export function ApprovalModeMenuItems({
   )
 }
 
-/** The statusbar's approval-mode item. The composer's chip (`approval-mode-chip`)
- *  opens the same menu from the input row — the statusbar is hidden in Simple
- *  mode, so that chip is the only place the mode is reachable there. */
-export function useApprovalModeStatusbarItem(profile: string, requestGateway: ApprovalModeRequester): StatusbarItem {
+/** The statusbar's approval-mode item. The composer's chip
+ *  (`approval-mode-chip`) opens the same menu from the input row — the statusbar
+ *  is hidden in Simple mode, so that chip is the only place the mode is reachable
+ *  there. */
+export function useApprovalModeStatusbarItem(profile: string): StatusbarItem {
   const copy = useI18n().t.shell.approvalMode
-  const labels = useApprovalModeLabels()
-  const modes = useStore($approvalModes)
-  const mode = modes[profile.trim() || 'default'] ?? 'smart'
-
-  useEffect(() => {
-    void syncApprovalModeForProfile(requestGateway, profile).catch(() => undefined)
-  }, [profile, requestGateway])
+  const { labels, mode, setMode } = useApprovalModeControl(profile)
 
   return {
     className: mode === 'off' ? 'bg-(--chrome-action-hover) text-foreground' : undefined,
@@ -88,15 +124,8 @@ export function useApprovalModeStatusbarItem(profile: string, requestGateway: Ap
     id: 'approval-mode',
     label: labels[mode],
     menuAlign: 'end',
-    menuClassName: 'w-72 p-1',
-    menuContent: (
-      <ApprovalModeMenuItems
-        mode={mode}
-        onValueChange={value => {
-          void setApprovalModeForProfile(requestGateway, profile, value).catch(() => undefined)
-        }}
-      />
-    ),
+    menuClassName: APPROVAL_MENU_CLASS,
+    menuContent: <ApprovalModeMenuItems mode={mode} onValueChange={setMode} />,
     title: copy.ariaLabel(labels[mode]),
     variant: 'menu'
   }

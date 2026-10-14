@@ -12,7 +12,6 @@ import { MessageHoverTime } from '@/components/assistant-ui/thread/message-hover
 import { ReactionBadge, ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
 import { BackgroundResult } from '@/components/assistant-ui/thread/system-message'
 import { MessageTimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
-import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/types'
 import { useMessageReactions } from '@/components/assistant-ui/thread/use-message-reactions'
 import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
 import { Button } from '@/components/ui/button'
@@ -62,9 +61,12 @@ export function HumanMessageContainer({
   )
 }
 
-// Shared "user bubble" base. Both the read-only message and the inline
-// edit composer render the same bubble surface (an inverted solid card); they
-// differ only in the edit ring.
+// Shared "user bubble" base. The read-only message and the inline edit
+// composer draw the same bubble geometry, but not the same surface: the message
+// is the inverted card (w-fit, --dt-user-bubble fill, --dt-user-bubble-foreground
+// ink), while the drawer overrides all three with w-full / --composer-fill /
+// foreground ink (see its call site). Everything else — radius, padding, the
+// text metrics — comes from here.
 //
 // Inverted on purpose (--dt-user-bubble = the theme foreground): your turn is
 // a filled bubble with the chat surface as its ink, against an agent reply
@@ -249,18 +251,11 @@ const ProcessNotificationNote: FC<{ text: string }> = ({ text }) => {
   return <BackgroundResult process report={detail} text={headline} />
 }
 
-export const UserMessage: FC<{
-  /**
-   * Both of this component's callbacks are inert now, and deliberately left
-   * wired: the row under the bubble lost its stop and undo buttons, so stopping
-   * is the composer's job (its primary control already flips to Stop) and the
-   * only way to rewind is the checkpoint row. The signatures stay so the
-   * caller's wiring in thread/index.tsx (onCancel, the restore-confirm dialog)
-   * keeps compiling until we decide whether that machinery goes too.
-   */
-  onCancel?: () => Promise<void> | void
-  onRequestRestoreConfirm?: (messageId: string, target: RestoreMessageTarget) => void
-}> = () => {
+/** Your turn. Takes no props: everything it needs comes from the message
+ *  context, and the two callbacks it once carried (stop, restore-confirm) lost
+ *  their buttons — stopping is the composer's primary control, and rewinding is
+ *  the checkpoint row's job. */
+export const UserMessage = () => {
   const { t } = useI18n()
   const copy = t.assistant.thread
   const messageId = useAuiState(s => s.message.id)
@@ -284,11 +279,12 @@ export const UserMessage: FC<{
     [react]
   )
 
-  // Sticky human bubbles clamp to ~2 lines with a soft fade so a long prompt
-  // doesn't dominate the viewport while the response streams underneath; the
-  // clamp lifts on hover / focus (see styles.css). We measure the *unclamped*
-  // inner wrapper so the ResizeObserver only fires on real content / width
-  // changes, not on every frame while the outer max-height animates open.
+  // A long prompt clamps to four lines with a soft fade so it doesn't dominate
+  // the viewport while the response streams underneath; nothing lifts it back
+  // open (the bubble is inert — see styles.css `.human-msg-clamp`). We measure
+  // the *unclamped* inner wrapper so the ResizeObserver only fires on real
+  // content / width changes, not on every frame while the outer max-height
+  // settles.
   const clampInnerRef = useRef<HTMLDivElement | null>(null)
   const [bodyClamped, setBodyClamped] = useState(false)
   const lastClampHeightRef = useRef(-1)
@@ -377,7 +373,7 @@ export const UserMessage: FC<{
     // backtick `code` and ``` fenced ``` blocks, with directive chips
     // (`@file:` etc.) still resolved inside the plain-text spans.
     <div
-      className={cn(clampActive && 'sticky-human-clamp')}
+      className={cn(clampActive && 'human-msg-clamp')}
       data-clamped={clampActive && bodyClamped ? 'true' : undefined}
     >
       {/* Match the edit composer's collapsed line box (min-h-[1.25rem]) so

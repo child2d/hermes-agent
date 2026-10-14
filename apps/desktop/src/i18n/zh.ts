@@ -4672,6 +4672,7 @@ export const zh = defineLocale({
       openStarmap: '打开记忆图谱',
       turnRunning: '运行中',
       contextUsage: '上下文用量',
+      contextUsageAria: label => `上下文用量：${label}`,
       compressions: count => `压缩次数：${count}`,
       systemResources: {
         title: '系统资源',
@@ -5076,10 +5077,6 @@ export const zh = defineLocale({
       stop: '停止',
       restorePrevious: '恢复上一个检查点',
       restoreCheckpoint: '恢复检查点',
-      restoreFromHere: '恢复检查点 — 从此提示重新运行',
-      restoreTitle: '恢复到此检查点？',
-      restoreBody: '此提示之后的所有消息将从对话中移除，并从此处重新运行该提示。',
-      restoreConfirm: '恢复并重新运行',
       restoreNext: '恢复下一个检查点',
       goForward: '前进',
       sendEdited: '发送编辑后的消息',

@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 
 import { ConnectionSwitcher } from '@/app/chat/sidebar/connection-switcher'
@@ -44,11 +44,9 @@ import {
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { resolveVersionStatus } from '@/lib/version-status'
-import type { ApprovalModeRequester } from '@/store/approval-mode'
 import { copyFilePath, revealFile, shouldOfferLocalReveal } from '@/store/file-actions'
 import { $freeTierStatus, FREE_TIER_MODEL } from '@/store/free-tier'
 import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
-import { requestGatewayForProfile } from '@/store/gateway'
 import { revealFileInTree } from '@/store/layout'
 import { $onboardingGate, guidedOnboardingActive } from '@/store/onboarding-gate'
 import { $activeGatewayProfile } from '@/store/profile'
@@ -326,15 +324,9 @@ export function useStatusbarItems({
   const cacheHit = cacheHitLabel(currentUsage)
   const tokensPerSecond = tokensPerSecondLabel(currentUsage)
 
-  // Dial the viewed profile directly: the ambient `requestGateway` is the
-  // session-routed dispatcher, which re-scopes `params.profile` to the FOCUSED
-  // session's owner — a profile other than the one this menu shows.
-  const requestApprovalModeGateway = useCallback<ApprovalModeRequester>(
-    (method, params) => requestGatewayForProfile(activeGatewayProfile, method, params),
-    [activeGatewayProfile]
-  )
-
-  const approvalModeItem = useApprovalModeStatusbarItem(activeGatewayProfile, requestApprovalModeGateway)
+  // Approval mode dials the viewed profile itself — see
+  // `useApprovalModeControl`, which owns that scoping for every surface.
+  const approvalModeItem = useApprovalModeStatusbarItem(activeGatewayProfile)
   const systemResourcesItem = useSystemResourcesStatusbarItem()
 
   const gatewayMenuContent = useMemo(

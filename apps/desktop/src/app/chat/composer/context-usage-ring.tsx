@@ -9,6 +9,7 @@ import { useI18n } from '@/i18n'
 import { EMPTY_USAGE, mergeGaugeUsage, usageContextLabel } from '@/lib/statusbar'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
+import type { GatewayRequester } from '@/lib/yolo-session'
 import { requestGatewayForProfile } from '@/store/gateway'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $sessionStates } from '@/store/session-states'
@@ -19,8 +20,6 @@ import { GHOST_ICON_BTN } from './control-classes'
 // composer-control box without touching it.
 const RADIUS = 6.5
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
-
-type GatewayRequest = <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
 
 /**
  * How full the context window is, in the composer — a ring instead of the
@@ -37,7 +36,7 @@ export function ContextUsageRing({ busy, sessionId }: { busy: boolean; sessionId
   const copy = t.shell.statusbar
   const profile = useStore($activeGatewayProfile)
 
-  const requestGateway = useMemo<GatewayRequest>(
+  const requestGateway = useMemo<GatewayRequester>(
     () => (method, params) => requestGatewayForProfile(profile, method, params),
     [profile]
   )
@@ -59,18 +58,19 @@ export function ContextUsageRing({ busy, sessionId }: { busy: boolean; sessionId
 
   const usage = useMemo(() => mergeGaugeUsage(breakdown, { ...EMPTY_USAGE, ...liveUsage }), [breakdown, liveUsage])
 
-  const label = usageContextLabel(usage)
-  const percent = Math.max(0, Math.min(100, usage.context_percent ?? 0))
-
+  // A fresh draft has no session, so there is nothing measured to show.
   if (!sessionId) {
     return null
   }
+
+  const label = usageContextLabel(usage)
+  const percent = Math.max(0, Math.min(100, usage.context_percent ?? 0))
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          aria-label={label ? `${copy.contextUsage}: ${label}` : copy.contextUsage}
+          aria-label={label ? copy.contextUsageAria(label) : copy.contextUsage}
           className={cn(GHOST_ICON_BTN, 'p-0')}
           data-slot="composer-context-ring"
           type="button"

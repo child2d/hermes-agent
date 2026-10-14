@@ -1616,7 +1616,7 @@ export function ChatBarFallback() {
       )}
       data-slot="composer-root"
     >
-      <div className="composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit] [box-shadow:var(--shadow-composer)]">
+      <div className="composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit] shadow-composer">
         <div aria-hidden className={composerInputBacking} />
       </div>
     </div>

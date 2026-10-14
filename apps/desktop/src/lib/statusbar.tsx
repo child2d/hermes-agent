@@ -41,10 +41,9 @@ export function contextBar(percent: number | undefined, width = 10): string {
   return `${'█'.repeat(filled)}${'░'.repeat(width - filled)}`
 }
 
-/** A referentially stable empty usage payload, for the two places that need a
- *  fallback while a session has not reported any usage yet (the statusbar meter
- *  and the composer's ring). Stable matters: the gauge memos key off the payload
- *  it hands them. */
+/** A referentially stable empty usage payload. The statusbar meter hands it
+ *  straight to its memos, so it must not be rebuilt per render; the composer's
+ *  ring spreads it as a base instead and does not depend on that identity. */
 export const EMPTY_USAGE: UsageStats = { calls: 0, input: 0, output: 0, total: 0 }
 
 export function usageContextLabel(usage: UsageStats): string {

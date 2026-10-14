@@ -35,11 +35,7 @@ vi.mock('@/i18n', () => ({
   useI18n: () => ({
     t: {
       assistant: {
-        thread: {
-          restoreBody: 'restore body',
-          restoreConfirm: 'Restore',
-          restoreTitle: 'Restore this turn?'
-        }
+        thread: {}
       },
       common: {
         cancel: 'Cancel',
