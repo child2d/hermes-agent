@@ -204,7 +204,13 @@
     inset 0 0.0625rem 0 color-mix(in srgb, #fff 28%, transparent),
     0 0 0 0.0625rem color-mix(in srgb, var(--dt-foreground) 8%, transparent),
     0 0.75rem 2rem color-mix(in srgb, #000 12%, transparent);
-  --shadow-composer: 0 0.0625rem 0.125rem color-mix(in srgb, #000 5%, transparent);
+  /* The composer card's elevation: one contact shadow plus a soft ambient
+     layer. Deliberately thin — the card separates itself by being OPAQUE on the
+     dimmed transcript, so the shadow only has to keep its edge from dissolving
+     into the page rather than to lift it off the screen. */
+  --shadow-composer:
+    0 0.0625rem 0.125rem color-mix(in srgb, #000 6%, transparent),
+    0 0.25rem 0.75rem -0.25rem color-mix(in srgb, #000 7%, transparent);
 }
 
 @layer base {
@@ -404,7 +410,19 @@
     --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
     --ui-surface-background: var(--ui-bg-editor);
     --ui-sidebar-surface-background: var(--ui-bg-sidebar);
-    --ui-chat-surface-background: var(--ui-bg-chrome);
+    /* The transcript sits one step BELOW everything that reads as a card —
+       message widgets, code blocks, and above all the composer — by dimming the
+       chrome. White-on-white left the composer separated only by a hairline
+       border; with an opaque card the page needs a floor to rest on. One knob:
+       `--chat-surface-dim` (0% = the old white-on-white). Mixing toward #000 is
+       also right in dark mode, where it drops the transcript UNDER the (lighter)
+       card instead of lifting it. */
+    --chat-surface-dim: 6%;
+    --ui-chat-surface-background: color-mix(
+      in srgb,
+      var(--ui-bg-chrome) calc(100% - var(--chat-surface-dim)),
+      #000
+    );
     --ui-editor-surface-background: var(--ui-bg-chrome);
     /* The integrated terminal wears the transcript's background, not the
        editor's — it reads as part of the conversation surface. Its own token so
@@ -659,6 +677,11 @@
     --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 12%, transparent);
     --composer-ring-strength: 1.3;
     --backdrop-invert-mul: 0;
+    /* A dark page swallows a black shadow, so the composer card needs more of
+       it to read as lifted at all. */
+    --shadow-composer:
+      0 0.0625rem 0.125rem color-mix(in srgb, #000 32%, transparent),
+      0 0.25rem 0.875rem -0.25rem color-mix(in srgb, #000 34%, transparent);
     /* Dark mode: a dark card needs a stronger black inset to show the recess. */
     --dt-input-inset: inset 0 1px 1px color-mix(in srgb, #000 38%, transparent);
     --ui-tab-hover-darken: 6%;
@@ -2063,7 +2086,13 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 [data-slot='composer-surface'] {
-  border-color: var(--ui-stroke-secondary) !important;
+  /* Borderless by design. The card is defined by its opaque fill, the dimmed
+     transcript behind it, and --shadow-composer — the hairline that used to sit
+     here repeated the editor-frame language in the one place meant to read as a
+     sheet of paper on the page. A theme that wants an edge back should raise
+     --chat-surface-dim instead. (HUD overrides both, with !important.) */
+  border: 0;
+  box-shadow: var(--shadow-composer);
   min-height: var(--composer-surface-min-height);
 }
 
@@ -2081,19 +2110,14 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 /* ── Composer fill — ONE var painted by the surface AND anything docked to it
-   (slash·@ popover, `?` help). State ladder sets the var; consumers just paint
-   `background: var(--composer-fill)`, so every state matches by construction. */
+   (slash·@ popover, `?` help). It is OPAQUE and the same in every state: the
+   card is a white sheet on the dimmed transcript, so there is no alpha ladder
+   left to walk. The old rest/scrolled mixes let the transcript ghost through the
+   surface while scrolling, which is exactly what an opaque card must not do —
+   content passing under it now simply disappears behind it. */
 :root {
-  /* Fallback for drawers outside the main composer (e.g. edit-message). */
-  --composer-fill: color-mix(in srgb, var(--dt-card) 90%, var(--dt-background));
-}
-
-[data-slot='composer-root'] {
-  --composer-fill: color-mix(in srgb, var(--dt-card) 88%, transparent);
-}
-
-[data-slot='composer-root'][data-thread-scrolled-up] {
-  --composer-fill: color-mix(in srgb, var(--dt-card) 80%, transparent);
+  /* Also the fallback for drawers outside the main composer (e.g. edit-message). */
+  --composer-fill: var(--dt-card);
 }
 
 /* Tool/thinking blocks now live at message-text alignment (no leading
