@@ -34,7 +34,7 @@ export function hasTextSelection(): boolean {
   return Boolean(selection && !selection.isCollapsed && selection.toString().length > 0)
 }
 
-export function StickyHumanMessageContainer({
+export function HumanMessageContainer({
   attachments,
   children,
   messageId
@@ -44,13 +44,13 @@ export function StickyHumanMessageContainer({
   messageId?: string
 }) {
   return (
-    // Fragment, not a wrapper: a wrapping element becomes the sticky's
-    // containing block (it'd stick within its own height = never). The bubble
-    // and attachments are flow siblings so the bubble pins against the scroller
-    // while attachments below it scroll away.
+    // Two flow siblings, no wrapper element: a wrapping div would become the
+    // bubble's containing block for anything positioned inside it. The bubble
+    // and its attachments simply follow each other down the page — nothing in
+    // the transcript is pinned, so there is no sticky box to clip behind.
     <>
       <div
-        className="group/user-message sticky z-40 -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-end gap-0 self-end overflow-visible px-4 pb-(--conversation-turn-gap) pt-1"
+        className="group/user-message -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-end gap-0 self-end overflow-visible px-4 pb-(--conversation-turn-gap) pt-1"
         data-message-id={messageId}
         data-role="user"
         data-slot="aui_user-message-root"
@@ -75,11 +75,11 @@ export function StickyHumanMessageContainer({
 // live on their own row under the bubble — a wider right pad would only read as
 // a lopsided bubble.
 //
-// no-drag: sticky bubbles park at --sticky-human-top (~4px), sliding under the
-// titlebar's [-webkit-app-region:drag] strips (app-shell.tsx). Electron resolves
-// drag regions at the compositor level — z-index and pointer-events don't help —
-// so without the carve-out, clicking a stuck bubble drags the window instead of
-// landing on the bubble (and its text can't be selected).
+// no-drag: scrolled up, the bubble passes under the titlebar's
+// [-webkit-app-region:drag] strips (app-shell.tsx). Electron resolves drag
+// regions at the compositor level — z-index and pointer-events don't help — so
+// without the carve-out, clicking or selecting text in a bubble parked up there
+// drags the window instead.
 export const USER_BUBBLE_BASE_CLASS =
   'composer-human-message relative flex w-fit min-w-0 max-w-full flex-col gap-1.5 overflow-y-auto rounded-xl bg-(--dt-user-bubble) px-3.5 py-2.5 text-left text-(--dt-user-bubble-foreground) [-webkit-app-region:no-drag]'
 
@@ -400,13 +400,12 @@ export const UserMessage: FC<{
 
   return (
     <MessagePrimitive.Root asChild>
-      <StickyHumanMessageContainer
+      <HumanMessageContainer
         attachments={
-          // Attachments live BELOW the sticky bubble in normal flow, so they
-          // scroll away behind the pinned bubble instead of riding along with
-          // it. No negative margin: -mt-* pulls the row up into the sticky box,
-          // where the sticky-prompt clip hides its top even at rest. Image refs
-          // render as thumbnails, file refs as chips; no border.
+          // Attachments live BELOW the bubble, in normal flow, so the bubble's
+          // own box stays the message and the refs follow it down the page. No
+          // negative margin: -mt-* would pull the row up into the bubble's box.
+          // Image refs render as thumbnails, file refs as chips; no border.
           attachmentRefs.length > 0 && !chipOnlyTurn ? (
             <div className="mb-2 ml-auto flex max-w-full flex-wrap justify-end gap-1">
               <DirectiveContent text={attachmentRefs.join(' ')} />
@@ -552,7 +551,7 @@ export const UserMessage: FC<{
             </BranchPickerPrimitive.Root>
           </div>
         </ActionBarPrimitive.Root>
-      </StickyHumanMessageContainer>
+      </HumanMessageContainer>
     </MessagePrimitive.Root>
   )
 }

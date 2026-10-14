@@ -50,7 +50,6 @@ import { responseMessageRole, ResponseMessages } from './response-group'
 import { holdSessionSwitching } from './session-switching'
 import { resolveShowEarlierAction, shouldAutoShowEarlier, useTranscriptWindow } from './transcript-window'
 import { useMessagesBelow } from './use-messages-below'
-import { useStickyPromptClip } from './use-sticky-prompt-clip'
 import { useTimelineReveal } from './use-timeline-reveal'
 
 type ThreadMessageComponents = ComponentProps<typeof ThreadPrimitive.MessageByIndex>['components']
@@ -273,9 +272,8 @@ interface ThreadMessageListProps {
   scrollProfile?: string
 }
 
-// Group each user message with the assistant turn(s) that follow it so the
-// human bubble can `position: sticky` against the scroller across its whole
-// turn (see StickyHumanMessageContainer in thread.tsx).
+// Group each user message with the assistant turn(s) that follow it, so a turn
+// is one unit for the transcript's row windowing (see MessageGroup).
 export function buildGroups(signature: string): MessageGroup[] {
   if (!signature) {
     return []
@@ -499,7 +497,7 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
   // escape on user scroll-up, re-lock at bottom. Snap instantly, not spring — a
   // spring can't tell live-token growth from a session-switch bulk relayout, and
   // chasing the latter reads as the view scrolling to random spots before
-  // settling. Its refs hang off our own DOM so the sticky human bubbles survive.
+  // settling. Its refs hang off our own DOM.
   const { scrollRef, contentRef, isAtBottom, scrollToBottom, stopScroll } = useStickToBottom({
     initial: 'instant',
     resize: 'instant',
@@ -722,13 +720,6 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
   // hide the titlebar tool cluster + session header, but the OS traffic lights
   // still sit in the top-left, so reserve the titlebar gap above the transcript.
   const secondaryWindow = isSecondaryWindow()
-  // NB: CSS calc() requires whitespace around the +/- operator. This string is
-  // assigned verbatim to the --sticky-human-top inline style below (it does not
-  // go through Tailwind, which would auto-space it), so the spaces are load-
-  // bearing — without them the declaration is invalid, gets dropped, and the
-  // sticky user bubble falls back to its ~4px default and slides under the OS
-  // traffic lights.
-  const secondaryTitlebarGap = 'calc(var(--titlebar-height) + 0.75rem)'
 
   const threadContentTopPad = secondaryWindow
     ? 'pt-[calc(var(--titlebar-height)+0.75rem)]'
@@ -784,8 +775,9 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
     scrollRef.current?.removeAttribute('data-editing')
   }, [scrollRef])
 
-  // Inline edit grows a sticky bubble. Escape before focus/layout so the
-  // resize-follow can't snap scrollTop; native anchoring holds the viewport.
+  // Opening the inline edit grows the bubble in place. Escape before
+  // focus/layout so the resize-follow can't snap scrollTop; native anchoring
+  // holds the viewport.
   const beginEditHold = useCallback(() => {
     const el = scrollRef.current
 
@@ -1534,15 +1526,13 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
   )
 
   useMessagesBelow({ contentRef, scrollRef, isAtBottom, paneVisible, rows, sessionKey, sessionId: scrollSessionId })
-  useStickyPromptClip({ contentRef, scrollRef, paneVisible, rows })
 
   return (
     <div
       className="relative min-h-0 max-w-full overflow-hidden contain-[layout_paint]"
       style={
         {
-          height: clampToComposer ? 'var(--thread-viewport-height)' : '100%',
-          ...(secondaryWindow ? { '--sticky-human-top': secondaryTitlebarGap } : {})
+          height: clampToComposer ? 'var(--thread-viewport-height)' : '100%'
         } as CSSProperties
       }
     >
