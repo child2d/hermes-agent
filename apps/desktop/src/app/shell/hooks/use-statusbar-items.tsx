@@ -35,6 +35,7 @@ import { resolveSessionTimerSince } from '@/lib/session-timer-since'
 import {
   cacheHitLabel,
   contextBarLabel,
+  EMPTY_USAGE,
   LiveDuration,
   mergeGaugeUsage,
   tokensPerSecondLabel,
@@ -80,12 +81,10 @@ import {
   $updateStatus,
   openUpdateOverlayFor
 } from '@/store/updates'
-import type { StatusResponse, UsageStats } from '@/types/hermes'
+import type { StatusResponse } from '@/types/hermes'
 
 import { CRON_ROUTE, SETTINGS_ROUTE, WEBHOOKS_ROUTE } from '../../routes'
 import type { StatusbarItem } from '../statusbar-controls'
-
-const EMPTY_USAGE: UsageStats = { calls: 0, input: 0, output: 0, total: 0 }
 
 interface StatusbarItemsOptions {
   agentsOpen: boolean

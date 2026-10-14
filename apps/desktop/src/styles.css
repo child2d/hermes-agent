@@ -420,7 +420,7 @@
        `--chat-surface-base` is the single definition; the glass block below
        re-uses it rather than thinning the transcript away, because a reading
        surface has to stay readable in every mode. */
-    --chat-surface-keep: 94%;
+    --chat-surface-keep: 97%;
     --chat-surface-base: color-mix(in srgb, var(--ui-bg-chrome) var(--chat-surface-keep), #000);
     --ui-chat-surface-background: var(--chat-surface-base);
     --ui-editor-surface-background: var(--ui-bg-chrome);
@@ -2117,14 +2117,15 @@ body.guest-pointer-lock :is(webview, iframe) {
   /* The card is the LIGHTEST thing on the page: the transcript is dimmed by
      --chat-surface-keep and the composer is lifted toward white by this much, so
      the two can never collapse into one field. One knob — 100% = the raw card. */
-  --composer-card-keep: 60%;
+  --composer-card-keep: 45%;
   --composer-fill: color-mix(in srgb, var(--dt-card) var(--composer-card-keep), #ffffff);
 }
 
 /* Dark mode needs no lift: a dark card is already the raised surface, and mixing
-   a dark fill toward white would turn the composer into a lit panel. */
+   a dark fill toward white would turn the composer into a lit panel. Same
+   formula, knob at the end of its travel — one declaration, one number. */
 :root.dark {
-  --composer-fill: var(--dt-card);
+  --composer-card-keep: 100%;
 }
 
 /* Tool/thinking blocks now live at message-text alignment (no leading

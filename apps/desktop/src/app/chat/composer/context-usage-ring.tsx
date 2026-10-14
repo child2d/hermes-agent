@@ -6,17 +6,15 @@ import { useContextBreakdown } from '@/app/shell/hooks/use-context-breakdown'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
-import { mergeGaugeUsage, usageContextLabel } from '@/lib/statusbar'
+import { EMPTY_USAGE, mergeGaugeUsage, usageContextLabel } from '@/lib/statusbar'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { requestGatewayForProfile } from '@/store/gateway'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $sessionStates } from '@/store/session-states'
-import type { UsageStats } from '@/types/hermes'
 
 import { GHOST_ICON_BTN } from './control-classes'
 
-const EMPTY_USAGE: UsageStats = { calls: 0, input: 0, output: 0, total: 0 }
 // r=6.5 in a 16px box: ring diameter 13px + a 1.5px stroke lands inside the
 // composer-control box without touching it.
 const RADIUS = 6.5
@@ -46,7 +44,8 @@ export function ContextUsageRing({ busy, sessionId }: { busy: boolean; sessionId
 
   // The session's own live usage (not the focused session's): a tile composer
   // shows a different session than the one in focus, and the ring must belong to
-  // the session being typed into.
+  // the session being typed into. The store holds a Partial until the gateway
+  // reports a full payload, so the empty usage fills the gaps.
   const liveUsage = useStoreSelector($sessionStates, states =>
     sessionId ? (states[sessionId]?.usage ?? null) : null
   )
@@ -58,10 +57,7 @@ export function ContextUsageRing({ busy, sessionId }: { busy: boolean; sessionId
     sessionId
   })
 
-  const usage = useMemo(
-    () => mergeGaugeUsage(breakdown, (liveUsage as UsageStats | null) ?? EMPTY_USAGE),
-    [breakdown, liveUsage]
-  )
+  const usage = useMemo(() => mergeGaugeUsage(breakdown, { ...EMPTY_USAGE, ...liveUsage }), [breakdown, liveUsage])
 
   const label = usageContextLabel(usage)
   const percent = Math.max(0, Math.min(100, usage.context_percent ?? 0))

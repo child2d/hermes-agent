@@ -41,6 +41,12 @@ export function contextBar(percent: number | undefined, width = 10): string {
   return `${'█'.repeat(filled)}${'░'.repeat(width - filled)}`
 }
 
+/** A referentially stable empty usage payload, for the two places that need a
+ *  fallback while a session has not reported any usage yet (the statusbar meter
+ *  and the composer's ring). Stable matters: the gauge memos key off the payload
+ *  it hands them. */
+export const EMPTY_USAGE: UsageStats = { calls: 0, input: 0, output: 0, total: 0 }
+
 export function usageContextLabel(usage: UsageStats): string {
   if (usage.context_max) {
     return `${usage.context_estimated ? '~' : ''}${compactNumber(usage.context_used ?? 0)}/${compactNumber(usage.context_max)}`

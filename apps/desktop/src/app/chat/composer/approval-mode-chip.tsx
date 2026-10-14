@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect } from 'react'
 
-import { ApprovalModeMenuItems } from '@/app/shell/approval-mode-menu'
+import { ApprovalModeMenuItems, useApprovalModeLabels } from '@/app/shell/approval-mode-menu'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
@@ -9,7 +9,6 @@ import { ChevronDown, Zap, ZapFilled } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import {
   $approvalModes,
-  type ApprovalMode,
   type ApprovalModeRequester,
   setApprovalModeForProfile,
   syncApprovalModeForProfile
@@ -34,15 +33,10 @@ import { CONTROL_PILL } from './control-classes'
 export function ApprovalModeChip({ disabled = false }: { disabled?: boolean }) {
   const { t } = useI18n()
   const copy = t.shell.approvalMode
+  const labels = useApprovalModeLabels()
   const profile = useStore($activeGatewayProfile)
   const modes = useStore($approvalModes)
   const mode = modes[profile.trim() || 'default'] ?? 'smart'
-
-  const labels: Record<ApprovalMode, string> = {
-    manual: copy.manual,
-    smart: copy.smart,
-    off: copy.off
-  }
 
   const requestGateway = useCallback<ApprovalModeRequester>(
     (method, params) => requestGatewayForProfile(profile, method, params),

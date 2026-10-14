@@ -18,9 +18,20 @@ import {
   syncApprovalModeForProfile
 } from '@/store/approval-mode'
 
+/** The three mode labels — ONE map for all three consumers (the statusbar item's
+ *  trigger, the menu items, and the composer's chip), so the copy cannot drift
+ *  between the surfaces that show the same setting. */
+export function useApprovalModeLabels(): Record<ApprovalMode, string> {
+  const copy = useI18n().t.shell.approvalMode
+
+  return useMemo(
+    () => ({ manual: copy.manual, smart: copy.smart, off: copy.off }),
+    [copy.manual, copy.off, copy.smart]
+  )
+}
+
 /** The three modes, as menu items. One source of truth for both places this
- *  menu is opened from: the statusbar item below and the composer's chip — the
- *  labels and their descriptions must not drift between them. */
+ *  menu is opened from: the statusbar item below and the composer's chip. */
 export function ApprovalModeMenuItems({
   mode,
   onValueChange
@@ -28,13 +39,8 @@ export function ApprovalModeMenuItems({
   mode: ApprovalMode
   onValueChange: (mode: ApprovalMode) => void
 }) {
-  const { t } = useI18n()
-  const copy = t.shell.approvalMode
-
-  const labels = useMemo<Record<ApprovalMode, string>>(
-    () => ({ manual: copy.manual, smart: copy.smart, off: copy.off }),
-    [copy.manual, copy.off, copy.smart]
-  )
+  const copy = useI18n().t.shell.approvalMode
+  const labels = useApprovalModeLabels()
 
   const descriptions = useMemo<Record<ApprovalMode, string>>(
     () => ({
@@ -67,15 +73,10 @@ export function ApprovalModeMenuItems({
  *  opens the same menu from the input row — the statusbar is hidden in Simple
  *  mode, so that chip is the only place the mode is reachable there. */
 export function useApprovalModeStatusbarItem(profile: string, requestGateway: ApprovalModeRequester): StatusbarItem {
-  const { t } = useI18n()
-  const copy = t.shell.approvalMode
+  const copy = useI18n().t.shell.approvalMode
+  const labels = useApprovalModeLabels()
   const modes = useStore($approvalModes)
   const mode = modes[profile.trim() || 'default'] ?? 'smart'
-
-  const labels = useMemo<Record<ApprovalMode, string>>(
-    () => ({ manual: copy.manual, smart: copy.smart, off: copy.off }),
-    [copy.manual, copy.off, copy.smart]
-  )
 
   useEffect(() => {
     void syncApprovalModeForProfile(requestGateway, profile).catch(() => undefined)
