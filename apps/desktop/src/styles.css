@@ -410,19 +410,19 @@
     --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
     --ui-surface-background: var(--ui-bg-editor);
     --ui-sidebar-surface-background: var(--ui-bg-sidebar);
-    /* The transcript sits one step BELOW everything that reads as a card —
-       message widgets, code blocks, and above all the composer — by dimming the
-       chrome. White-on-white left the composer separated only by a hairline
-       border; with an opaque card the page needs a floor to rest on. One knob:
-       `--chat-surface-dim` (0% = the old white-on-white). Mixing toward #000 is
-       also right in dark mode, where it drops the transcript UNDER the (lighter)
-       card instead of lifting it. */
-    --chat-surface-dim: 6%;
-    --ui-chat-surface-background: color-mix(
-      in srgb,
-      var(--ui-bg-chrome) calc(100% - var(--chat-surface-dim)),
-      #000
-    );
+    /* The transcript's own fill: the chrome, dimmed one step. Everything that
+       reads as a card on it — message widgets, code blocks, and above all the
+       composer — is then lighter than the page it sits on. White-on-white left
+       the composer separated only by a hairline border; an opaque card needs a
+       floor to rest on. One knob: `--chat-surface-keep` (100% = the old
+       white-on-white). Mixing toward #000 is right in dark mode too, where it
+       drops the transcript UNDER the (lighter) card instead of lifting it.
+       `--chat-surface-base` is the single definition; the glass block below
+       re-uses it rather than thinning the transcript away, because a reading
+       surface has to stay readable in every mode. */
+    --chat-surface-keep: 94%;
+    --chat-surface-base: color-mix(in srgb, var(--ui-bg-chrome) var(--chat-surface-keep), #000);
+    --ui-chat-surface-background: var(--chat-surface-base);
     --ui-editor-surface-background: var(--ui-bg-chrome);
     /* The integrated terminal wears the transcript's background, not the
        editor's — it reads as part of the conversation surface. Its own token so
@@ -726,7 +726,14 @@
      which does not composite page alpha. */
   :root[data-hermes-glass] {
     background-color: transparent !important;
-    --ui-chat-surface-background: transparent;
+    /* The transcript keeps `--chat-surface-base` (opaque, dimmed) instead of
+       going transparent with the rest of the field: under glass the window's
+       own tint shows through a transparent transcript, which reads as the SAME
+       white as the composer card — the two surfaces collapse and the card has
+       no floor. Translucency belongs to the chrome the user asked for it on
+       (the sidebar's own token below, the body tint); the transcript is a
+       reading surface, and it stays one in every mode. */
+    --ui-chat-surface-background: var(--chat-surface-base);
     --ui-sidebar-surface-background: transparent;
     --ui-editor-surface-background: transparent;
     --ui-terminal-surface-background: var(--ui-bg-chrome);
@@ -2099,12 +2106,24 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 /* ── Composer fill — ONE var painted by the surface AND anything docked to it
    (slash·@ popover, `?` help). It is OPAQUE and the same in every state: the
-   card is a white sheet on the dimmed transcript, so there is no alpha ladder
+   card is a sheet of paper on the dimmed transcript, so there is no alpha ladder
    left to walk. The old rest/scrolled mixes let the transcript ghost through the
    surface while scrolling, which is exactly what an opaque card must not do —
    content passing under it now simply disappears behind it. */
 :root {
-  /* Also the fallback for drawers outside the main composer (e.g. edit-message). */
+  /* Also the fallback for drawers outside the main composer (e.g. edit-message),
+     and for browsers that take lightningcss's pre-color-mix branch. */
+  --composer-fill: var(--dt-card);
+  /* The card is the LIGHTEST thing on the page: the transcript is dimmed by
+     --chat-surface-keep and the composer is lifted toward white by this much, so
+     the two can never collapse into one field. One knob — 100% = the raw card. */
+  --composer-card-keep: 60%;
+  --composer-fill: color-mix(in srgb, var(--dt-card) var(--composer-card-keep), #ffffff);
+}
+
+/* Dark mode needs no lift: a dark card is already the raised surface, and mixing
+   a dark fill toward white would turn the composer into a lit panel. */
+:root.dark {
   --composer-fill: var(--dt-card);
 }
 
