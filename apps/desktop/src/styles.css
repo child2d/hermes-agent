@@ -308,16 +308,31 @@
     --z-onboarding-popover: 1310;
     --z-setup: 1400;
     --z-crash: 1500;
-    --ui-bg-chrome: color-mix(
+    /* ── Frame vs page ────────────────────────────────────────────────────
+       The window's chrome (app shell, titlebar, statusbar, tab rails) and the
+       sidebar sit ONE step darker than the transcript, so the content reads as
+       the brightest surface and the frame recedes — the hierarchy both
+       reference apps use (their sidebar ≈#f2f2f2 under a ≈#fafafa page). Frame
+       surfaces share one knob: `--frame-surface-keep` (100% = the raw theme
+       colours). The `-base` tokens stay UN-dimmed so the transcript below can
+       dim from the same source without stacking the two cuts. */
+    --frame-surface-keep: 95%;
+    --ui-bg-chrome-base: var(--theme-background-seed);
+    --ui-bg-chrome-base: color-mix(
       in srgb,
       var(--theme-background-seed) var(--theme-mix-chrome),
       var(--theme-neutral-chrome)
     );
-    --ui-bg-sidebar: color-mix(
+    --ui-bg-chrome: var(--ui-bg-chrome-base);
+    --ui-bg-chrome: color-mix(in srgb, var(--ui-bg-chrome-base) var(--frame-surface-keep), #000);
+    --ui-bg-sidebar-base: var(--theme-sidebar-seed);
+    --ui-bg-sidebar-base: color-mix(
       in srgb,
       var(--theme-sidebar-seed) var(--theme-mix-sidebar),
       var(--theme-neutral-sidebar)
     );
+    --ui-bg-sidebar: var(--ui-bg-sidebar-base);
+    --ui-bg-sidebar: color-mix(in srgb, var(--ui-bg-sidebar-base) var(--frame-surface-keep), #000);
     --ui-bg-editor: color-mix(in srgb, var(--theme-card-seed) var(--theme-mix-card), var(--theme-neutral-card));
     --ui-bg-elevated: color-mix(
       in srgb,
@@ -410,18 +425,19 @@
     --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
     --ui-surface-background: var(--ui-bg-editor);
     --ui-sidebar-surface-background: var(--ui-bg-sidebar);
-    /* The transcript's own fill: the chrome, dimmed one step. Everything that
-       reads as a card on it — message widgets, code blocks, and above all the
-       composer — is then lighter than the page it sits on. White-on-white left
-       the composer separated only by a hairline border; an opaque card needs a
-       floor to rest on. One knob: `--chat-surface-keep` (100% = the old
-       white-on-white). Mixing toward #000 is right in dark mode too, where it
-       drops the transcript UNDER the (lighter) card instead of lifting it.
+    /* The transcript's own fill: the un-dimmed chrome, dimmed one step. Every
+       card on it — message widgets, code blocks, and above all the composer —
+       is then lighter than the page it sits on. White-on-white left the
+       composer separated only by a hairline border; an opaque card needs a
+       floor to rest on. One knob: `--chat-surface-keep` (100% = white-on-white;
+       98% ≈ #f9f9f9 under the theme's ≈#fefefe, i.e. the reference's page).
+       Mixing toward #000 is right in dark mode too, where it drops the
+       transcript UNDER the (lighter) card instead of lifting it.
        `--chat-surface-base` is the single definition; the glass block below
        re-uses it rather than thinning the transcript away, because a reading
        surface has to stay readable in every mode. */
-    --chat-surface-keep: 97%;
-    --chat-surface-base: color-mix(in srgb, var(--ui-bg-chrome) var(--chat-surface-keep), #000);
+    --chat-surface-keep: 98%;
+    --chat-surface-base: color-mix(in srgb, var(--ui-bg-chrome-base) var(--chat-surface-keep), #000);
     --ui-chat-surface-background: var(--chat-surface-base);
     --ui-editor-surface-background: var(--ui-bg-chrome);
     /* The integrated terminal wears the transcript's background, not the
@@ -2116,8 +2132,10 @@ body.guest-pointer-lock :is(webview, iframe) {
   --composer-fill: var(--dt-card);
   /* The card is the LIGHTEST thing on the page: the transcript is dimmed by
      --chat-surface-keep and the composer is lifted toward white by this much, so
-     the two can never collapse into one field. One knob — 100% = the raw card. */
-  --composer-card-keep: 45%;
+     the two can never collapse into one field. One knob — its meaning is "how
+     much of the theme's card colour survives"; 10% already lands on #ffffff for
+     the near-white card the themes use, and 100% = the raw card. */
+  --composer-card-keep: 10%;
   --composer-fill: color-mix(in srgb, var(--dt-card) var(--composer-card-keep), #ffffff);
 }
 

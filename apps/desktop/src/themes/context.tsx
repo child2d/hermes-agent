@@ -211,8 +211,20 @@ const NEUTRAL_CHROME = { light: '#f3f3f3', dark: '#0d0d0e' } as const
 // styles.css --dt-primary-solid-foreground fallback — keep in sync.
 const PRIMARY_SOLID_FOREGROUND = '#fcfcfc'
 
+// The frame (titlebar tint, window background, chrome, sidebar) sits one step
+// darker than the transcript so the content reads as the brightest surface —
+// styles.css `--frame-surface-keep` is the CSS half of the same cut. This
+// background IS the window's own, so it has to carry the cut too, or the frame
+// stays bright wherever the window (rather than a painted surface) shows.
+// Keep the two in sync.
+const FRAME_SURFACE_KEEP = 0.95
+
 const chromeBackground = (background: string, isDark: boolean) =>
-  mix(background, NEUTRAL_CHROME[isDark ? 'dark' : 'light'], isDark ? 0.26 : 0.08)
+  mix(
+    mix(background, NEUTRAL_CHROME[isDark ? 'dark' : 'light'], isDark ? 0.26 : 0.08),
+    '#000000',
+    1 - FRAME_SURFACE_KEEP
+  )
 
 const mixesFor = (isDark: boolean): Record<string, string> => ({
   '--theme-mix-chrome': isDark ? '74%' : '92%',
