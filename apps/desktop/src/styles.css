@@ -147,6 +147,13 @@
 
   --color-midground: var(--dt-midground);
   --color-midground-foreground: var(--dt-midground-foreground);
+  /* The surface ramp (see `surfaceRamp()` in themes/context.tsx): `bg-surface-*`
+     with the full utility treatment — placeholders, variants, and the `/NN`
+     opacity modifier that `bg-(--var)` cannot offer. */
+  --color-surface-frame: var(--dt-surface-frame);
+  --color-surface-page: var(--dt-surface-page);
+  --color-surface-raised: var(--dt-surface-raised);
+  --color-surface-transcript: var(--dt-surface-transcript);
 
   --font-sans: var(--dt-font-sans);
   --font-mono: var(--dt-font-mono);
@@ -308,27 +315,16 @@
     --z-onboarding-popover: 1310;
     --z-setup: 1400;
     --z-crash: 1500;
-    /* ── Frame vs page ────────────────────────────────────────────────────
-       The window's chrome (app shell, titlebar, statusbar, tab rails) and the
-       sidebar sit ONE step darker than the transcript, so the content reads as
-       the brightest surface and the frame recedes — the hierarchy both
-       reference apps use (their sidebar ≈#f2f2f2 under a ≈#fafafa page). Frame
-       surfaces share one knob: `--frame-surface-keep` (100% = the raw theme
-       colours). The `-base` tokens stay UN-dimmed so the transcript below can
-       dim from the same source without stacking the two cuts. */
-    --frame-surface-keep: 95%;
-    --ui-bg-chrome-base: color-mix(
+    --ui-bg-chrome: color-mix(
       in srgb,
       var(--theme-background-seed) var(--theme-mix-chrome),
       var(--theme-neutral-chrome)
     );
-    --ui-bg-chrome: color-mix(in srgb, var(--ui-bg-chrome-base) var(--frame-surface-keep), #000);
-    --ui-bg-sidebar-base: color-mix(
+    --ui-bg-sidebar: color-mix(
       in srgb,
       var(--theme-sidebar-seed) var(--theme-mix-sidebar),
       var(--theme-neutral-sidebar)
     );
-    --ui-bg-sidebar: color-mix(in srgb, var(--ui-bg-sidebar-base) var(--frame-surface-keep), #000);
     --ui-bg-editor: color-mix(in srgb, var(--theme-card-seed) var(--theme-mix-card), var(--theme-neutral-card));
     --ui-bg-elevated: color-mix(
       in srgb,
@@ -420,21 +416,16 @@
     --ui-sash-hover-border: color-mix(in srgb, var(--ui-accent) 18%, var(--ui-stroke-tertiary));
     --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
     --ui-surface-background: var(--ui-bg-editor);
-    --ui-sidebar-surface-background: var(--ui-bg-sidebar);
-    /* The transcript's own fill: the un-dimmed chrome, dimmed one step. Every
-       card on it — message widgets, code blocks, and above all the composer —
-       is then lighter than the page it sits on. White-on-white left the
-       composer separated only by a hairline border; an opaque card needs a
-       floor to rest on. One knob: `--chat-surface-keep` (100% = white-on-white;
-       98% ≈ #f9f9f9 under the theme's ≈#fefefe, i.e. the reference's page).
-       Mixing toward #000 is right in dark mode too, where it drops the
-       transcript UNDER the (lighter) card instead of lifting it.
-       `--chat-surface-base` is the single definition; the glass block below
-       re-uses it rather than thinning the transcript away, because a reading
-       surface has to stay readable in every mode. */
-    --chat-surface-keep: 98%;
-    --chat-surface-base: color-mix(in srgb, var(--ui-bg-chrome-base) var(--chat-surface-keep), #000);
-    --ui-chat-surface-background: var(--chat-surface-base);
+    --ui-sidebar-surface-background: var(--dt-surface-frame);
+    /* The four surfaces the app paints are derived in ONE place —
+       `surfaceRamp()` in themes/context.tsx writes `--dt-surface-*` from the
+       theme seeds, per mode, as concrete values: `raised` (the composer card,
+       the theme's own popover surface) > `page` (raw chrome) > `transcript`
+       (the reading surface) > `frame` (window chrome, sidebar, rails). Roles map
+       to them here; components can also wear them as utilities
+       (`bg-surface-transcript`) thanks to the `@theme inline` bridge. This block
+       is only the pre-paint fallback, which is why it is flat. */
+    --ui-chat-surface-background: var(--dt-surface-transcript);
     --ui-editor-surface-background: var(--ui-bg-chrome);
     /* The integrated terminal wears the transcript's background, not the
        editor's — it reads as part of the conversation surface. Its own token so
@@ -456,7 +447,15 @@
     --ui-inline-code-foreground: color-mix(in srgb, #141414 88%, transparent);
     --ui-selection-background: color-mix(in srgb, #ffd24a 55%, transparent);
 
-    --dt-background: var(--ui-bg-chrome-base);
+    /* Pre-paint fallbacks for the surface ramp (themes/context.tsx overwrites
+       these with concrete per-mode values the moment the theme applies). Flat on
+       purpose: before the theme loads there is no hierarchy to know about. */
+    --dt-surface-frame: var(--ui-bg-chrome);
+    --dt-surface-page: var(--ui-bg-chrome);
+    --dt-surface-raised: var(--ui-bg-elevated);
+    --dt-surface-transcript: var(--ui-bg-chrome);
+
+    --dt-background: var(--dt-surface-page);
     --dt-foreground: var(--ui-text-primary);
     --dt-card: var(--ui-bg-editor);
     --dt-card-foreground: var(--ui-text-primary);
@@ -738,14 +737,14 @@
      which does not composite page alpha. */
   :root[data-hermes-glass] {
     background-color: transparent !important;
-    /* The transcript keeps `--chat-surface-base` (opaque, dimmed) instead of
+    /* The transcript keeps the ramp's opaque surface instead of
        going transparent with the rest of the field: under glass the window's
        own tint shows through a transparent transcript, which reads as the SAME
        white as the composer card — the two surfaces collapse and the card has
        no floor. Translucency belongs to the chrome the user asked for it on
        (the sidebar's own token below, the body tint); the transcript is a
        reading surface, and it stays one in every mode. */
-    --ui-chat-surface-background: var(--chat-surface-base);
+    --ui-chat-surface-background: var(--dt-surface-transcript);
     --ui-sidebar-surface-background: transparent;
     --ui-editor-surface-background: transparent;
     --ui-terminal-surface-background: var(--ui-bg-chrome);
@@ -2092,11 +2091,11 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 [data-slot='composer-surface'] {
-  /* Borderless by design. The card is defined by its opaque fill, the dimmed
-     transcript behind it, and --shadow-composer — the hairline that used to sit
-     here repeated the editor-frame language in the one place meant to read as a
-     sheet of paper on the page. Lower --chat-surface-keep if a firmer edge is
-     wanted. (HUD overrides both, with !important.) */
+  /* Borderless by design. The card is defined by its opaque fill (the ramp's
+     `raised` surface), the dimmed transcript behind it, and --shadow-composer —
+     the hairline that used to sit here repeated the editor-frame language in the
+     one place meant to read as a sheet of paper on the page. (HUD overrides
+     both, with !important.) */
   border: 0;
   box-shadow: var(--shadow-composer);
   min-height: var(--composer-surface-min-height);
@@ -2116,27 +2115,19 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 /* ── Composer fill — ONE var painted by the surface AND anything docked to it
-   (slash·@ popover, `?` help). It is OPAQUE and the same in every state: the
-   card is a sheet of paper on the dimmed transcript, so there is no alpha ladder
-   left to walk. The old rest/scrolled mixes let the transcript ghost through the
-   surface while scrolling, which is exactly what an opaque card must not do —
-   content passing under it now simply disappears behind it. */
+   (slash·@ popover, `?` help). It is OPAQUE and the same in every state, and it
+   IS the ramp's `raised` surface: the composer card is the app's floating
+   surface, so it wears the theme's popover colour rather than a hand-tuned lift.
+   The old rest/scrolled mixes let the transcript ghost through the surface while
+   scrolling, which is exactly what an opaque card must not do — content passing
+   under it just disappears behind it. */
 :root {
-  /* The card is the LIGHTEST thing on the page: the transcript is dimmed by
-     --chat-surface-keep and the composer is lifted toward white by this much, so
-     the two can never collapse into one field. One knob — its meaning is "how
-     much of the theme's card colour survives"; 10% already lands on #ffffff for
-     the near-white card the themes use, and 100% = the raw card. */
-  --composer-card-keep: 10%;
-  --composer-fill: color-mix(in srgb, var(--dt-card) var(--composer-card-keep), #ffffff);
+  --composer-fill: var(--dt-surface-raised);
 }
 
 /* Dark mode needs no lift: a dark card is already the raised surface, and mixing
-   a dark fill toward white would turn the composer into a lit panel. Same
-   formula, knob at the end of its travel — one declaration, one number. */
-:root.dark {
-  --composer-card-keep: 100%;
-}
+   a dark fill toward white would turn the composer into a lit panel. No rule
+   needed here any more — the ramp derives `raised` per mode. */
 
 /* Tool/thinking blocks now live at message-text alignment (no leading
    chevron column to escape into), so their headers and bodies share a

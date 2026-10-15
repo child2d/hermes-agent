@@ -23,11 +23,11 @@ export function BrowserPopoutShell() {
 
   return (
     <div
-      className="flex h-screen min-h-0 w-screen flex-col bg-(--ui-bg-chrome) text-(--ui-text-primary)"
+      className="flex h-screen min-h-0 w-screen flex-col bg-surface-frame text-(--ui-text-primary)"
       data-contrib-shell=""
       style={{ '--titlebar-height': `${TITLEBAR_HEIGHT}px` } as CSSProperties}
     >
-      <div aria-hidden="true" className="relative shrink-0 bg-(--ui-bg-chrome)" style={{ height: TITLEBAR_HEIGHT }}>
+      <div aria-hidden="true" className="relative shrink-0 bg-surface-frame" style={{ height: TITLEBAR_HEIGHT }}>
         {/* Same traffic-light / native-overlay carve-out as the main titlebar:
             a full-bar drag region would eat the window buttons. */}
         <div className="pointer-events-none absolute inset-y-0 left-0 w-(--titlebar-controls-left,14px) [-webkit-app-region:drag]" />

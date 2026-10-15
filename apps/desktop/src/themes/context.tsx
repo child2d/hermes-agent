@@ -211,20 +211,19 @@ const NEUTRAL_CHROME = { light: '#f3f3f3', dark: '#0d0d0e' } as const
 // styles.css --dt-primary-solid-foreground fallback — keep in sync.
 const PRIMARY_SOLID_FOREGROUND = '#fcfcfc'
 
-// The frame (titlebar tint, window background, chrome, sidebar) sits one step
-// darker than the transcript so the content reads as the brightest surface —
-// styles.css `--frame-surface-keep` is the CSS half of the same cut. This
-// background IS the window's own, so it has to carry the cut too, or the frame
-// stays bright wherever the window (rather than a painted surface) shows.
-// Keep the two in sync.
-const FRAME_SURFACE_KEEP = 0.95
+// styles.css --theme-neutral-card — keep in sync.
+const NEUTRAL_CARD = { light: '#fcfcfc', dark: '#161618' } as const
+
+// The frame (window chrome, sidebar, rails) and the transcript each sit one step
+// below the page, so the content is the brightest thing on screen and the frame
+// recedes — the hierarchy both reference apps use (sidebar ≈#f2f2f2 under a
+// ≈#fafafa page under a white card). Steps, toward black, in the one place that
+// derives the surfaces; the page itself stays the raw chrome, which is what
+// floats (dialogs, overlays) paint.
+const SURFACE_DIM = { frame: 0.05, transcript: 0.02 } as const
 
 const chromeBackground = (background: string, isDark: boolean) =>
-  mix(
-    mix(background, NEUTRAL_CHROME[isDark ? 'dark' : 'light'], isDark ? 0.26 : 0.08),
-    '#000000',
-    1 - FRAME_SURFACE_KEEP
-  )
+  mix(background, NEUTRAL_CHROME[isDark ? 'dark' : 'light'], isDark ? 0.26 : 0.08)
 
 const mixesFor = (isDark: boolean): Record<string, string> => ({
   '--theme-mix-chrome': isDark ? '74%' : '92%',
@@ -233,6 +232,25 @@ const mixesFor = (isDark: boolean): Record<string, string> => ({
   '--theme-mix-elevated': isDark ? '46%' : '28%',
   '--theme-mix-bubble': isDark ? '46%' : '0%'
 })
+
+/** The four surfaces the app paints, derived in ONE place so their order cannot
+ *  drift: `raised` (the composer card, taken from the theme's own popover
+ *  surface) > `page` (raw chrome — the field everything floats over) >
+ *  `transcript` (the reading surface) > `frame` (window chrome, sidebar, rails).
+ *  Concrete per-mode values, so the CSS needs no `color-mix()` and no light/dark
+ *  special cases for them. */
+const surfaceRamp = (c: DesktopTheme['colors'], isDark: boolean): Record<string, string> => {
+  const chrome = chromeBackground(c.background, isDark)
+  const dim = (amount: number) => mix(chrome, '#000000', amount)
+  const elevatedSeedShare = Number.parseFloat(mixesFor(isDark)['--theme-mix-elevated']) / 100
+
+  return {
+    '--dt-surface-frame': dim(SURFACE_DIM.frame),
+    '--dt-surface-page': chrome,
+    '--dt-surface-raised': mix(c.popover, NEUTRAL_CARD[isDark ? 'dark' : 'light'], 1 - elevatedSeedShare),
+    '--dt-surface-transcript': dim(SURFACE_DIM.transcript)
+  }
+}
 
 function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark', chatFontFamily = $chatFontFamily.get()) {
   if (typeof document === 'undefined') {
@@ -308,11 +326,17 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark', chatFontFamily 
     '--noise-opacity-mul': isDark ? 'calc(0.04 / 0.21)' : 'calc(0.34 / 0.21)'
   }
 
-  for (const [k, v] of Object.entries({ ...seeds, ...mixesFor(isDark), ...palette })) {
+  const surfaces = surfaceRamp(c, isDark)
+
+  for (const [k, v] of Object.entries({ ...seeds, ...mixesFor(isDark), ...palette, ...surfaces })) {
     root.style.setProperty(k, v)
   }
 
-  const chromeBg = chromeBackground(c.background, isDark)
+  // The window's own body (titlebar tint + the first-paint background the boot
+  // script reads) is the FRAME surface: it is what shows wherever the window,
+  // rather than a painted panel, is visible — under glass that includes the
+  // sidebar.
+  const chromeBg = surfaces['--dt-surface-frame']
 
   window.hermesDesktop?.setTitleBarTheme?.({
     background: chromeBg,
