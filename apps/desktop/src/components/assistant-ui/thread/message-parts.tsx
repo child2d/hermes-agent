@@ -1,5 +1,7 @@
 import {
-  type ReasoningMessagePartComponent,
+  MessagePartPrimitive,
+  MessagePrimitive,
+  type PartState,
   type TextMessagePartProps,
   type ToolCallMessagePartProps,
   useAuiState,
@@ -7,7 +9,19 @@ import {
   useMessagePartText
 } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
-import { type ComponentProps, type FC, type ReactNode, useEffect, useRef, useState } from 'react'
+import {
+  Children,
+  type ComponentProps,
+  type FC,
+  Fragment,
+  isValidElement,
+  type PropsWithChildren,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 
 import { CatalogInstallTool } from '@/components/assistant-ui/catalog-install-tool'
 import { ClarifyTool } from '@/components/assistant-ui/clarify'
@@ -35,6 +49,7 @@ import { cn } from '@/lib/utils'
 import { $reasoningCollapsedByDefault, $showReasoning } from '@/store/reasoning-disclosure'
 import { useForcedTextDirection } from '@/store/text-direction'
 import { $showToolActivity } from '@/store/tool-activity'
+import { $toolDisclosureOpen, setToolDisclosureOpen } from '@/store/tool-view'
 
 type TimelineToolCallProps = ToolCallMessagePartProps & { completedAt?: number; timestamp?: number }
 
@@ -403,7 +418,7 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
 // Read the part from context, same contract as MarkdownText's
 // useMessagePartText — the reasoning-only smoothing wrapper (removed) stalled
 // the char-reveal at empty, blanking the widget.
-const ReasoningTextPart: ReasoningMessagePartComponent = () => {
+const ReasoningTextPart: FC = () => {
   const { status, text } = useMessagePartReasoning()
   const messageRunning = useAuiState(s => s.message.status?.type === 'running')
 
@@ -443,3 +458,200 @@ export const MESSAGE_PARTS_COMPONENTS = {
   ToolGroup: ToolGroupSlot,
   tools: { Fallback: ChainToolFallback }
 } as const
+
+/**
+ * Index of the turning point between a turn's work and its answer: the reply's
+ * LAST part that carries actual prose. `-1` means the turn never wrote a closing
+ * text part at all (it ended on a tool call) — there is then no answer to make
+ * room for, and the turn keeps the run summaries it has always had.
+ *
+ * Whitespace-only text is not an answer — assistant-ui appends an empty
+ * continuation text part once a tool call starts, and reading that as the
+ * conclusion would park the fold in front of nothing.
+ */
+export const finalTextIndex = (parts: readonly { text?: unknown; type?: string }[]): number => {
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index]
+
+    if (part?.type === 'text' && typeof part.text === 'string' && part.text.trim().length > 0) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+/** A single line of work is not worth a header over it — the same threshold
+ *  the tool runs use (below two entries they render expanded, with no header). */
+const MIN_FOLDED_PARTS = 2
+
+const PROCESS_GROUP = 'group-process'
+const THOUGHT_GROUP = 'group-thought'
+const TOOLS_GROUP = 'group-tools'
+
+type TurnGroup = typeof PROCESS_GROUP | typeof THOUGHT_GROUP | typeof TOOLS_GROUP
+
+/**
+ * Everything the turn DID, behind one line: the thinking blocks, the tool runs,
+ * the paragraphs written between them, the diffs — failures included, since a
+ * settled turn that reports its own failures in prose does not need the raw row
+ * shouting over the answer. What stays outside is the closing reply, so a
+ * finished turn reads as one row plus the answer instead of forty rows around
+ * it (Codex's shape, with the header as the one click back to the work).
+ *
+ * Open while the turn runs, collapsed the moment it settles: the work is what
+ * the user is watching live, and what stops being interesting once there is an
+ * answer. A user toggle outranks both and is persisted per message, so a fold
+ * they opened stays open across a rehydrate.
+ */
+const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = ({ children, indices }) => {
+  const { t } = useI18n()
+  const messageId = useAuiState(s => s.message.id)
+  const running = useAuiState(s => s.message.status?.type === 'running')
+  const disclosureId = `turn-process:${messageId}`
+  const persistedOpen = useStore(useMemo(() => $toolDisclosureOpen(disclosureId), [disclosureId]))
+  const [userOpen, setUserOpen] = useState<boolean | null>(null)
+  const open = userOpen ?? persistedOpen ?? running
+  // Measured on the turn, not on the disclosure: the number under the label is
+  // how long the WORK took, whether or not the user was watching it.
+  const elapsed = useElapsedSeconds(running, disclosureId)
+  const measured = useMeasuredDuration(running, disclosureId)
+
+  const label = running
+    ? t.assistant.thread.turnProcessRunning
+    : measured === null
+      ? t.assistant.thread.turnProcessSteps(indices.length)
+      : t.assistant.thread.turnProcessStepsWithDuration(indices.length, formatElapsed(measured))
+
+  return (
+    <div data-conversation-scaffold="" data-slot="aui_turn-process">
+      <ScaffoldRow
+        onToggle={() => {
+          const next = !open
+          setUserOpen(next)
+          setToolDisclosureOpen(disclosureId, next)
+        }}
+        open={open}
+        trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
+      >
+        <span className={cn(SCAFFOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
+      </ScaffoldRow>
+      {open && (
+        <div className="min-w-0 max-w-full" data-slot="aui_turn-process-body">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const EMPTY_PART_LIST: readonly PartState[] = []
+
+/**
+ * A group's subtree comes back from `GroupedParts` as ONE fragment, and
+ * `ToolGroupSlot` reads its children by position to decide which calls are a run
+ * and which are a card that splits it. Hand it the flat array the parts door
+ * used to pass, or every index past the first lands on `undefined` and the diff
+ * a turn exists to show renders as nothing.
+ */
+const flattenPartNodes = (node: ReactNode): ReactNode[] =>
+  Children.toArray(node).flatMap(child =>
+    isValidElement(child) && child.type === Fragment
+      ? flattenPartNodes((child.props as { children?: ReactNode }).children)
+      : [child]
+  )
+
+/**
+ * One assistant turn's parts: the work folded behind a single line, the closing
+ * reply in place underneath it.
+ *
+ * `GroupedParts` is assistant-ui's grouping door, and the paths built below are
+ * the whole layout decision. Everything before the closing text part takes the
+ * `group-process` prefix, so adjacent parts coalesce into ONE fold; under it sit
+ * the same two runs this transcript has always had — consecutive tool calls
+ * (`group-tools`) and consecutive reasoning (`group-thought`). What the fold
+ * reveals when opened is therefore the layout that existed before the fold, one
+ * level deeper.
+ */
+export const TurnMessageParts: FC = () => {
+  const partsRef = useRef<readonly PartState[]>(EMPTY_PART_LIST)
+
+  // The ONE number the grouping depends on. The parts themselves are mirrored
+  // into a ref because `groupBy` is handed a part and nothing else, so it has to
+  // ask "where is this part, and is the reply already talking?" — and a selector
+  // runs on every store update, so the mirror is never stale. Returning the
+  // length rather than the parts keeps this component re-rendering when the
+  // work/answer boundary moves, not on every streamed token.
+  const folded = useAuiState(s => {
+    const parts = s.message.parts
+    partsRef.current = parts
+    const boundary = finalTextIndex(parts)
+
+    return boundary >= MIN_FOLDED_PARTS ? boundary : -1
+  })
+
+  const groupBy = useMemo(
+    () => (part: PartState) => {
+      const path: TurnGroup[] = []
+      const index = partsRef.current.indexOf(part)
+
+      if (folded >= 0 && index >= 0 && index < folded) {
+        path.push(PROCESS_GROUP)
+      }
+
+      if (part.type === 'reasoning') {
+        path.push(THOUGHT_GROUP)
+      } else if (part.type === 'tool-call') {
+        path.push(TOOLS_GROUP)
+      }
+
+      return path
+    },
+    [folded]
+  )
+
+  return (
+    <MessagePrimitive.GroupedParts groupBy={groupBy} indicator="never">
+      {({ part, children }) => {
+        switch (part.type) {
+          case PROCESS_GROUP:
+            return <TurnProcessFold indices={part.indices}>{children}</TurnProcessFold>
+
+          case THOUGHT_GROUP:
+            return (
+              <ReasoningAccordionGroup endIndex={part.indices.at(-1) ?? 0} startIndex={part.indices[0] ?? 0}>
+                {children}
+              </ReasoningAccordionGroup>
+            )
+
+          case TOOLS_GROUP:
+            return (
+              <ToolGroupSlot endIndex={part.indices.at(-1) ?? 0} startIndex={part.indices[0] ?? 0}>
+                {flattenPartNodes(children)}
+              </ToolGroupSlot>
+            )
+
+          case 'reasoning':
+            return <ReasoningTextPart />
+
+          case 'text':
+            return <TimelineMarkdownText {...(part as TimelineTextPartProps)} />
+
+          case 'tool-call':
+            return part.toolUI ?? <ChainToolFallback {...(part as TimelineToolCallProps)} />
+
+          case 'image':
+            return <MessagePartPrimitive.Image />
+
+          case 'data':
+            return part.dataRendererUI
+
+          // source / file / audio / generative-ui: no default component in this
+          // app's registry, so they render nothing — same as the parts door did.
+          default:
+            return null
+        }
+      }}
+    </MessagePrimitive.GroupedParts>
+  )
+}

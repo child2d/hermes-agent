@@ -1,6 +1,6 @@
 import { type ThreadMessage } from '@assistant-ui/react'
 import type { GatewayEvent } from '@hermes/shared'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { renderMessageStream } from '@/app/session/hooks/use-message-stream/test-harness'
@@ -79,6 +79,29 @@ function Harness() {
   )
 }
 
+/**
+ * A settled turn folds its work behind one row. The feed's policy is a
+ * statement about what is INSIDE that fold — reasoning blocks, run summaries,
+ * the rows themselves — so open it before asserting on any of them.
+ */
+async function openTurnProcess(container: HTMLElement) {
+  const row = await waitFor(() => {
+    const button = container.querySelector('[data-slot="aui_turn-process"] button')
+
+    if (!button) {
+      throw new Error('the turn folded no work: no aui_turn-process row')
+    }
+
+    return button as HTMLElement
+  })
+
+  // The disclosure is persisted per message, and this suite's fixture keeps one
+  // id across its cases: a blind click on an already-open fold would close it.
+  if (row.getAttribute('aria-expanded') === 'false') {
+    fireEvent.click(row)
+  }
+}
+
 // Drive the gateway's own tool.complete event through the message stream (the
 // store Desktop renders from), then render what it produced. With
 // display.tool_progress off the gateway suppresses tool.start, so the completion arrives on its own, and its failure
@@ -124,6 +147,8 @@ describe('tool feed visibility policy', () => {
     const { container } = render(<Harness />)
 
     expect(await screen.findByText('final answer only')).toBeTruthy()
+    await openTurnProcess(container)
+
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).toBeNull()
     expect(container.querySelector('[data-tool-summary]')).toBeNull()
     expect(screen.getByRole('button', { name: /Run/ })).toBeTruthy()
@@ -138,6 +163,8 @@ describe('tool feed visibility policy', () => {
     const { container } = render(<Harness />)
 
     expect(await screen.findByText('final answer only')).toBeTruthy()
+    await openTurnProcess(container)
+
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).toBeNull()
     expect(await screen.findByText(/Explored 2 files/)).toBeTruthy()
     // The run scaffold is the visible flow here; the suppressed case above pins
@@ -147,6 +174,8 @@ describe('tool feed visibility policy', () => {
 
   it('still shows tool chrome when reasoning blocks are on', async () => {
     const { container } = render(<Harness />)
+
+    await openTurnProcess(container)
 
     expect(await screen.findByText(/Explored 2 files/)).toBeTruthy()
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).not.toBeNull()
@@ -158,6 +187,8 @@ describe('tool feed visibility policy', () => {
     const { container } = render(<Harness />)
 
     expect(await screen.findByText('final answer only')).toBeTruthy()
+    await openTurnProcess(container)
+
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).not.toBeNull()
     expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(1)
   })

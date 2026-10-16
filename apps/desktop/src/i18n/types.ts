@@ -4269,6 +4269,9 @@ export interface Translations {
       thoughtBriefly: string
       thoughtFor: (duration: string) => string
       turnDuration: (duration: string) => string
+      turnProcessRunning: string
+      turnProcessSteps: (steps: number) => string
+      turnProcessStepsWithDuration: (steps: number, duration: string) => string
       today: (time: string) => string
       yesterday: (time: string) => string
       copy: string
