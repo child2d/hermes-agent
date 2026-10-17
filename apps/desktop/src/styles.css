@@ -568,6 +568,17 @@
     --conversation-caption-font-size: var(--conversation-caption-base-size);
     --conversation-line-height: var(--conversation-base-line-height);
     --conversation-caption-line-height: var(--conversation-caption-base-line-height);
+    /* The collapsed turn — ONE row standing in for a whole turn's work. It is the
+       only scaffold line that REPLACES prose rather than annotating it, so it
+       reads one rung above a tool row: caption size (12px, between the 11px tool
+       rows and the 14px reply) on the conversation line box (18px), at secondary
+       ink rather than the scaffold grey, because what it hides is one click away
+       rather than gone. Codex's equivalent line sits at ~0.93 of body size, a
+       mid grey, one line box tall, and ~8px above the reply it introduces. */
+    --conversation-fold-font-size: var(--conversation-caption-font-size);
+    --conversation-fold-line-height: var(--conversation-line-height);
+    --conversation-fold-text: color-mix(in srgb, var(--ui-base) 74%, transparent);
+    --conversation-fold-gap: 0.5rem;
     /* Reading line-height for assistant prose only. Unitless on purpose: it
        rides the chat-text scale through the font-size, not through a px value,
        and prose is the one place a looser measure is worth the extra height.

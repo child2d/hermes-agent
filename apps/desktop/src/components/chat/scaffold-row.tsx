@@ -19,6 +19,15 @@ import { DisclosureRow } from '@/components/chat/disclosure-row'
 export const SCAFFOLD_LABEL_CLASS =
   'text-[length:var(--conversation-tool-font-size)] leading-(--conversation-line-height) text-(--conversation-scaffold-text)'
 
+/**
+ * The collapsed turn's own line (see `--conversation-fold-*`). Everything below
+ * it — thinking headers, run summaries, tool rows — annotates the reply; this row
+ * stands in for a turn's worth of them, so it is a rung larger, brighter and
+ * taller, and its caret sits right after the text the way Codex's does.
+ */
+export const FOLD_LABEL_CLASS =
+  'text-[length:var(--conversation-fold-font-size)] leading-(--conversation-fold-line-height) text-(--conversation-fold-text)'
+
 /** Durations, counts and diff stats trailing a scaffold label. */
 export const SCAFFOLD_META_CLASS = 'shrink-0 text-2xs tabular-nums text-(--conversation-scaffold-meta)'
 

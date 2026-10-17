@@ -42,7 +42,7 @@ import { parseMaybeObject, toolCallFailed } from '@/components/assistant-ui/tool
 import { formatElapsed, useElapsedSeconds, useMeasuredDuration } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
 import { GeneratedImage } from '@/components/chat/generated-image-result'
-import { SCAFFOLD_LABEL_CLASS, SCAFFOLD_META_CLASS, ScaffoldRow } from '@/components/chat/scaffold-row'
+import { FOLD_LABEL_CLASS, SCAFFOLD_LABEL_CLASS, SCAFFOLD_META_CLASS, ScaffoldRow } from '@/components/chat/scaffold-row'
 import { useOnboardingChatActive } from '@/components/onboarding-chat/assembly'
 import { useI18n } from '@/i18n'
 import { mcpTargets, toolLabels } from '@/lib/connector-tools'
@@ -509,7 +509,7 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
       : t.assistant.thread.turnProcessStepsWithDuration(indices.length, formatElapsed(measured))
 
   return (
-    <div data-conversation-scaffold="" data-slot="aui_turn-process">
+    <div className="pb-(--conversation-fold-gap)" data-slot="aui_turn-process">
       <ScaffoldRow
         onToggle={() => {
           const next = !open
@@ -519,7 +519,7 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
         open={open}
         trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
       >
-        <span className={cn(SCAFFOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
+        <span className={cn(FOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
       </ScaffoldRow>
       {open && (
         <div className="min-w-0 max-w-full" data-slot="aui_turn-process-body">
@@ -593,7 +593,7 @@ export const TurnSectionProcess: FC<{
 
   return (
     <>
-      <div data-conversation-scaffold="" data-slot="aui_turn-process">
+      <div className="pb-(--conversation-fold-gap)" data-slot="aui_turn-process">
         <ScaffoldRow
           onToggle={() => {
             const next = !open
@@ -603,7 +603,7 @@ export const TurnSectionProcess: FC<{
           open={open}
           trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
         >
-          <span className={cn(SCAFFOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
+          <span className={cn(FOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
         </ScaffoldRow>
       </div>
       <SectionTurnFoldContext.Provider value={{ answerId, open }}>{children}</SectionTurnFoldContext.Provider>
