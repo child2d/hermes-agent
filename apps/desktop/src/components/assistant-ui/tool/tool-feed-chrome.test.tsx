@@ -1,10 +1,15 @@
 import { type ThreadMessage } from '@assistant-ui/react'
 import type { GatewayEvent } from '@hermes/shared'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { renderMessageStream } from '@/app/session/hooks/use-message-stream/test-harness'
-import { stubThreadEnvironment, stubThreadViewportSize, ThreadRuntime } from '@/components/assistant-ui/test-utils'
+import {
+  openTurnProcess,
+  stubThreadEnvironment,
+  stubThreadViewportSize,
+  ThreadRuntime
+} from '@/components/assistant-ui/test-utils'
 import { Thread } from '@/components/assistant-ui/thread'
 import { toRuntimeMessage } from '@/lib/chat-runtime'
 import { clearAllPrompts, setApprovalRequest } from '@/store/prompts'
@@ -77,29 +82,6 @@ function Harness() {
       <Thread />
     </ThreadRuntime>
   )
-}
-
-/**
- * A settled turn folds its work behind one row. The feed's policy is a
- * statement about what is INSIDE that fold — reasoning blocks, run summaries,
- * the rows themselves — so open it before asserting on any of them.
- */
-async function openTurnProcess(container: HTMLElement) {
-  const row = await waitFor(() => {
-    const button = container.querySelector('[data-slot="aui_turn-process"] button')
-
-    if (!button) {
-      throw new Error('the turn folded no work: no aui_turn-process row')
-    }
-
-    return button as HTMLElement
-  })
-
-  // The disclosure is persisted per message, and this suite's fixture keeps one
-  // id across its cases: a blind click on an already-open fold would close it.
-  if (row.getAttribute('aria-expanded') === 'false') {
-    fireEvent.click(row)
-  }
 }
 
 // Drive the gateway's own tool.complete event through the message stream (the

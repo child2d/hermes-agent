@@ -8,7 +8,7 @@ import { $activeSessionId } from '@/store/session'
 import { clearDismissedToolRows } from '@/store/tool-dismiss'
 import { $toolDisclosureStates } from '@/store/tool-view'
 
-import { stubThreadEnvironment, stubThreadViewportSize, ThreadRuntime } from '../test-utils'
+import { openTurnProcess, stubThreadEnvironment, stubThreadViewportSize, ThreadRuntime } from '../test-utils'
 import { Thread } from '../thread'
 import { formatTimelineRange } from '../thread/timestamp'
 
@@ -372,6 +372,7 @@ afterEach(() => {
 describe('settled tool run', () => {
   it('collapses to a summary line naming the work', async () => {
     const { container } = render(<GroupHarness message={settledRunMessage()} />)
+    await openTurnProcess(container)
 
     expect(await screen.findByText('Explored wiring.tsx, ran 1 command')).toBeTruthy()
     expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(0)
@@ -379,6 +380,7 @@ describe('settled tool run', () => {
 
   it('expands to the underlying rows when the summary is clicked', async () => {
     const { container } = render(<GroupHarness message={settledRunMessage()} />)
+    await openTurnProcess(container)
 
     fireEvent.click(await screen.findByText('Explored wiring.tsx, ran 1 command'))
 
@@ -403,6 +405,7 @@ describe('settled tool run', () => {
 describe('a file edit among ordinary activity', () => {
   it('stays visible between the two runs it interrupted', async () => {
     const { container } = render(<GroupHarness message={editBetweenRunsMessage()} />)
+    await openTurnProcess(container)
 
     await screen.findByText('Explored 2 files')
 
@@ -447,6 +450,9 @@ describe('live tool run', () => {
     rerender(<GroupHarness message={next} />)
     await waitFor(() => expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(3))
     rerender(<GroupHarness message={{ ...next, status: { type: 'complete', reason: 'stop' } }} />)
+    // Settling folds the work, so the run's own disclosure is only visible again
+    // once the turn's fold is open — the point here is that it kept its state.
+    await openTurnProcess(container)
     await waitFor(() => expect(toggle().getAttribute('aria-expanded')).toBe('true'))
     fireEvent.click(toggle())
     expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(0)
@@ -508,6 +514,7 @@ describe('live tool run', () => {
 describe('tool run left unresolved', () => {
   it('settles with the turn rather than narrating work that stopped', async () => {
     const { container } = render(<GroupHarness message={abandonedRunMessage()} />)
+    await openTurnProcess(container)
 
     expect(await screen.findByText('Explored 2 files')).toBeTruthy()
     expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(0)
@@ -614,6 +621,7 @@ describe('tool lifecycle timestamps', () => {
 
   it('shows the full lifecycle range when settled calls are collapsed', async () => {
     const { container } = render(<GroupHarness message={settledRunMessage()} />)
+    await openTurnProcess(container)
 
     await waitFor(() => expect(container.querySelector('[data-tool-summary]')).toBeTruthy())
 

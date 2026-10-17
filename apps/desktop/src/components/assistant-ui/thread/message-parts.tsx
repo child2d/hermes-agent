@@ -461,9 +461,8 @@ export const MESSAGE_PARTS_COMPONENTS = {
 
 /**
  * Index of the turning point between a turn's work and its answer: the reply's
- * LAST part that carries actual prose. `-1` means the turn never wrote a closing
- * text part at all (it ended on a tool call) — there is then no answer to make
- * room for, and the turn keeps the run summaries it has always had.
+ * LAST part that carries actual prose. `-1` means this message never wrote a
+ * closing text part — it is pure work, and it folds whole (see below).
  *
  * Whitespace-only text is not an answer — assistant-ui appends an empty
  * continuation text part once a tool call starts, and reading that as the
@@ -498,6 +497,11 @@ type TurnGroup = typeof PROCESS_GROUP | typeof THOUGHT_GROUP | typeof TOOLS_GROU
  * shouting over the answer. What stays outside is the closing reply, so a
  * finished turn reads as one row plus the answer instead of forty rows around
  * it (Codex's shape, with the header as the one click back to the work).
+ *
+ * A message with no closing reply at all — one desktop turn is often several
+ * assistant messages, and the ones in the middle are work from end to end —
+ * folds WHOLE rather than standing there as rows: mid-turn work left unfolded is
+ * what made a single prompt read as three screens of activity.
  *
  * Open while the turn runs, collapsed the moment it settles: the work is what
  * the user is watching live, and what stops being interesting once there is an
@@ -586,8 +590,9 @@ export const TurnMessageParts: FC = () => {
     const parts = s.message.parts
     partsRef.current = parts
     const boundary = finalTextIndex(parts)
+    const length = boundary < 0 ? parts.length : boundary
 
-    return boundary >= MIN_FOLDED_PARTS ? boundary : -1
+    return length >= MIN_FOLDED_PARTS ? length : -1
   })
 
   const groupBy = useMemo(

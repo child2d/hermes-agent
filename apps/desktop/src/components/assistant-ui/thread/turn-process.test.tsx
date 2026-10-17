@@ -122,11 +122,23 @@ describe('a settled turn', () => {
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).not.toBeNull()
   })
 
-  it('keeps a turn that ended on work exactly as it was: no answer, no fold', async () => {
+  it('folds work that never got a closing reply: one turn is several messages', async () => {
     const { container } = render(<Harness content={work()} status={settled} />)
 
+    const row = foldRow(container)
+    expect(row).not.toBeNull()
+    expect(row?.querySelector('button')?.getAttribute('aria-expanded')).toBe('false')
+    // Folded whole, so not even the run's own summary line survives outside it.
+    expect(container.querySelector('[data-tool-summary]')).toBeNull()
+  })
+
+  it('leaves a lone step alone: one row is not worth a header over it', async () => {
+    const { container } = render(
+      <Harness content={[work()[1] as ThreadAssistantMessagePart]} status={settled} />
+    )
+
     await waitFor(() => {
-      expect(container.querySelector('[data-tool-summary]')).not.toBeNull()
+      expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(1)
     })
     expect(foldRow(container)).toBeNull()
   })
@@ -136,9 +148,10 @@ describe('a running turn', () => {
   it('shows the work while it works', async () => {
     const { container } = render(<Harness content={work()} status={{ type: 'running' } as ThreadMessage['status']} />)
 
+    expect(foldRow(container)?.querySelector('button')?.getAttribute('aria-expanded')).toBe('true')
+
     await waitFor(() => {
       expect(container.querySelector('[data-tool-summary]')).not.toBeNull()
     })
-    expect(foldRow(container)).toBeNull()
   })
 })
