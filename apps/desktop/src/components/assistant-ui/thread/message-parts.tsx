@@ -17,6 +17,7 @@ import {
   isValidElement,
   type PropsWithChildren,
   type ReactNode,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -30,6 +31,11 @@ import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/mar
 import { McpSetupTool } from '@/components/assistant-ui/mcp-setup-tool'
 import { AgentDeliveryNotice, deliveryTargetFromCommand } from '@/components/assistant-ui/thread/agent-delivery'
 import { TimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
+import {
+  finalTextIndex,
+  MIN_FOLDED_PARTS,
+  SectionTurnFoldContext
+} from '@/components/assistant-ui/thread/turn-process'
 import { DelegateTool } from '@/components/assistant-ui/tool/delegate'
 import { ToolFallback, ToolGroupSlot } from '@/components/assistant-ui/tool/fallback'
 import { parseMaybeObject, toolCallFailed } from '@/components/assistant-ui/tool/fallback-model'
@@ -459,31 +465,6 @@ export const MESSAGE_PARTS_COMPONENTS = {
   tools: { Fallback: ChainToolFallback }
 } as const
 
-/**
- * Index of the turning point between a turn's work and its answer: the reply's
- * LAST part that carries actual prose. `-1` means this message never wrote a
- * closing text part — it is pure work, and it folds whole (see below).
- *
- * Whitespace-only text is not an answer — assistant-ui appends an empty
- * continuation text part once a tool call starts, and reading that as the
- * conclusion would park the fold in front of nothing.
- */
-export const finalTextIndex = (parts: readonly { text?: unknown; type?: string }[]): number => {
-  for (let index = parts.length - 1; index >= 0; index--) {
-    const part = parts[index]
-
-    if (part?.type === 'text' && typeof part.text === 'string' && part.text.trim().length > 0) {
-      return index
-    }
-  }
-
-  return -1
-}
-
-/** A single line of work is not worth a header over it — the same threshold
- *  the tool runs use (below two entries they render expanded, with no header). */
-const MIN_FOLDED_PARTS = 2
-
 const PROCESS_GROUP = 'group-process'
 const THOUGHT_GROUP = 'group-thought'
 const TOOLS_GROUP = 'group-tools'
@@ -549,6 +530,87 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
   )
 }
 
+/**
+ * One QUESTION's whole answer, folded across the messages it took to produce it.
+ *
+ * The desktop splits a prompt into several assistant messages — an interim per
+ * tool round, then the reply — so folding each message on its own leaves the
+ * prompt reading as several rows with rows left between them. What the reader
+ * thinks in is the question: everything the turn did goes behind ONE row (the
+ * interim messages whole, plus the reply's own work), and only the closing reply
+ * stays on screen. The messages below paint nothing but body, so the row is the
+ * only header.
+ *
+ * Collapsed once the turn settles, open while it runs, user toggle wins — the
+ * same contract as the single-message fold.
+ */
+export const TurnSectionProcess: FC<{
+  answerId?: string
+  children: ReactNode
+  indices: readonly number[]
+}> = ({ answerId, children, indices }) => {
+  const { t } = useI18n()
+
+  // Only what the fold would hide counts: every part of the messages before the
+  // reply, plus the reply's own work. A number, so this re-renders when the count
+  // moves rather than on every streamed token.
+  const steps = useAuiState(s =>
+    indices.reduce((total, index) => {
+      const message = s.thread.messages[index]
+
+      if (!message) {
+        return total
+      }
+
+      const boundary = message.id === answerId ? finalTextIndex(message.parts) : -1
+
+      return total + (boundary < 0 ? message.parts.length : boundary)
+    }, 0)
+  )
+
+  const running = useAuiState(s => indices.some(index => s.thread.messages[index]?.status?.type === 'running'))
+  const firstId = useAuiState(s => s.thread.messages[indices[0] ?? -1]?.id)
+  const disclosureId = `turn-process:section:${firstId ?? ''}`
+  const persistedOpen = useStore(useMemo(() => $toolDisclosureOpen(disclosureId), [disclosureId]))
+  const [userOpen, setUserOpen] = useState<boolean | null>(null)
+  const open = userOpen ?? persistedOpen ?? running
+  const elapsed = useElapsedSeconds(running, disclosureId)
+  const measured = useMeasuredDuration(running, disclosureId)
+
+  // A single message is not a question with interims — that turn folds inside
+  // `TurnMessageParts` instead, where the threshold is about step count. Here the
+  // question itself is the reason to fold: two messages means an interim reply
+  // the reader did not ask to keep.
+  if (indices.length < 2) {
+    return <>{children}</>
+  }
+
+  const label = running
+    ? t.assistant.thread.turnProcessRunning
+    : measured === null
+      ? t.assistant.thread.turnProcessSteps(steps)
+      : t.assistant.thread.turnProcessStepsWithDuration(steps, formatElapsed(measured))
+
+  return (
+    <>
+      <div data-conversation-scaffold="" data-slot="aui_turn-process">
+        <ScaffoldRow
+          onToggle={() => {
+            const next = !open
+            setUserOpen(next)
+            setToolDisclosureOpen(disclosureId, next)
+          }}
+          open={open}
+          trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
+        >
+          <span className={cn(SCAFFOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
+        </ScaffoldRow>
+      </div>
+      <SectionTurnFoldContext.Provider value={{ answerId, open }}>{children}</SectionTurnFoldContext.Provider>
+    </>
+  )
+}
+
 const EMPTY_PART_LIST: readonly PartState[] = []
 
 /**
@@ -576,8 +638,16 @@ const flattenPartNodes = (node: ReactNode): ReactNode[] =>
  * (`group-tools`) and consecutive reasoning (`group-thought`). What the fold
  * reveals when opened is therefore the layout that existed before the fold, one
  * level deeper.
+ *
+ * Inside a `TurnSectionProcess` (one question, folded across its messages) this
+ * message contributes no header of its own: a message before the reply is pure
+ * body, and the reply's own work joins the section's body so the reader sees one
+ * row, not one per message.
  */
 export const TurnMessageParts: FC = () => {
+  const section = useContext(SectionTurnFoldContext)
+  const messageId = useAuiState(s => s.message.id)
+  const isSectionAnswer = section !== null && section.answerId === messageId
   const partsRef = useRef<readonly PartState[]>(EMPTY_PART_LIST)
 
   // The ONE number the grouping depends on. The parts themselves are mirrored
@@ -589,10 +659,18 @@ export const TurnMessageParts: FC = () => {
   const folded = useAuiState(s => {
     const parts = s.message.parts
     partsRef.current = parts
+
+    // Body of a question's fold: the whole message is process, headerless.
+    if (section !== null && !isSectionAnswer) {
+      return parts.length
+    }
+
     const boundary = finalTextIndex(parts)
     const length = boundary < 0 ? parts.length : boundary
 
-    return length >= MIN_FOLDED_PARTS ? length : -1
+    // The reply's own work goes into the section's body, so it does not need to
+    // earn a header of its own (and must not stand outside one either).
+    return section !== null ? length : length >= MIN_FOLDED_PARTS ? length : -1
   })
 
   const groupBy = useMemo(
@@ -620,7 +698,17 @@ export const TurnMessageParts: FC = () => {
       {({ part, children }) => {
         switch (part.type) {
           case PROCESS_GROUP:
-            return <TurnProcessFold indices={part.indices}>{children}</TurnProcessFold>
+            // A question's fold paints the one row (and owns the open state);
+            // inside it, each message only supplies its body.
+            return section ? (
+              section.open && (
+                <div className="min-w-0 max-w-full" data-slot="aui_turn-process-body">
+                  {children}
+                </div>
+              )
+            ) : (
+              <TurnProcessFold indices={part.indices}>{children}</TurnProcessFold>
+            )
 
           case THOUGHT_GROUP:
             return (

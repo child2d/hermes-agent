@@ -504,7 +504,7 @@ describe('assistant-ui streaming renderer', () => {
     })
   })
 
-  it('suppresses the action footer on sealed interim messages, keeping it on the final reply', () => {
+  it('suppresses the action footer on sealed interim messages, keeping it on the final reply', async () => {
     const { container } = render(
       <TranscriptHarness
         messages={[
@@ -515,6 +515,10 @@ describe('assistant-ui streaming renderer', () => {
         ]}
       />
     )
+
+    // Interim commentary is the turn's work, so it sits behind the turn's fold;
+    // opening it puts every message of the response back on screen.
+    await openTurnProcess(container)
 
     // Interim commentary stays visible…
     expect(container.textContent).toContain('Let me check the files.')

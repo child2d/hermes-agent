@@ -8,16 +8,20 @@ import { clearAllPrompts } from '@/store/prompts'
 import { $activeSessionId } from '@/store/session'
 import { $toolDisclosureStates } from '@/store/tool-view'
 
-import { finalTextIndex } from './message-parts'
+import { finalTextIndex } from './turn-process'
 
 stubThreadEnvironment()
 stubThreadViewportSize()
 
 const createdAt = new Date('2026-06-03T00:00:00.000Z')
 
-const message = (content: ThreadAssistantMessagePart[], status: ThreadMessage['status']): ThreadMessage =>
+const message = (
+  content: ThreadAssistantMessagePart[],
+  status: ThreadMessage['status'],
+  id = 'assistant-turn-process'
+): ThreadMessage =>
   ({
-    id: 'assistant-turn-process',
+    id,
     role: 'assistant',
     content,
     status,
@@ -58,6 +62,24 @@ const answer: ThreadAssistantMessagePart = { type: 'text', text: 'the closing an
 function Harness({ content, status }: { content: ThreadAssistantMessagePart[]; status: ThreadMessage['status'] }) {
   return (
     <ThreadRuntime messages={[message(content, status)]}>
+      <Thread />
+    </ThreadRuntime>
+  )
+}
+
+const userTurn = (): ThreadMessage =>
+  ({
+    id: 'u-turn',
+    role: 'user',
+    content: [{ type: 'text', text: 'do it' }],
+    attachments: [],
+    createdAt,
+    metadata: { custom: {} }
+  }) as unknown as ThreadMessage
+
+function TranscriptHarness({ messages }: { messages: ThreadMessage[] }) {
+  return (
+    <ThreadRuntime messages={messages}>
       <Thread />
     </ThreadRuntime>
   )
@@ -141,6 +163,36 @@ describe('a settled turn', () => {
       expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(1)
     })
     expect(foldRow(container)).toBeNull()
+  })
+})
+
+describe('one question, several messages', () => {
+  const twoAnswers = () =>
+    [userTurn(), message(work(), settled, 'a-interim'), message([answer], settled, 'a-final')] as ThreadMessage[]
+
+  it('folds every message but the reply behind ONE row', async () => {
+    const { container } = render(<TranscriptHarness messages={twoAnswers()} />)
+
+    expect(await screen.findByText('the closing answer')).toBeTruthy()
+
+    // ONE header for the whole question, and the interim message is not on
+    // screen at all — not its text, not its tool rows.
+    expect(container.querySelectorAll('[data-slot="aui_turn-process"]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-role="assistant"]')).toHaveLength(1)
+    expect(container.querySelector('[data-tool-summary]')).toBeNull()
+    expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).toBeNull()
+  })
+
+  it('brings the interim work back when the one row is opened', async () => {
+    const { container } = render(<TranscriptHarness messages={twoAnswers()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Worked through|已处理/ }))
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-tool-summary]')).not.toBeNull()
+    })
+    expect(container.querySelectorAll('[data-role="assistant"]')).toHaveLength(2)
+    expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).not.toBeNull()
   })
 })
 
