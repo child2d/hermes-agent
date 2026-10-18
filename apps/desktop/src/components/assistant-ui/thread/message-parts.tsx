@@ -510,10 +510,7 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
 
   return (
     <div data-slot="aui_turn-process">
-      <div
-        className="border-b border-(--ui-stroke-tertiary) pb-(--conversation-fold-gap)"
-        data-slot="aui_turn-process-head"
-      >
+      <div data-slot="aui_turn-process-head">
         <ScaffoldRow
           onToggle={() => {
             const next = !open
@@ -527,7 +524,7 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
         </ScaffoldRow>
       </div>
       {open && (
-        <div className="min-w-0 max-w-full" data-slot="aui_turn-process-body">
+        <div className="min-w-0 max-w-full pt-(--conversation-fold-gap)" data-slot="aui_turn-process-body">
           {children}
         </div>
       )}
@@ -599,10 +596,7 @@ export const TurnSectionProcess: FC<{
   return (
     <>
       <div data-slot="aui_turn-process">
-        <div
-          className="border-b border-(--ui-stroke-tertiary) pb-(--conversation-fold-gap)"
-          data-slot="aui_turn-process-head"
-        >
+        <div data-slot="aui_turn-process-head">
           <ScaffoldRow
             onToggle={() => {
               const next = !open
@@ -712,7 +706,7 @@ export const TurnMessageParts: FC = () => {
             // inside it, each message only supplies its body.
             return section ? (
               section.open && (
-                <div className="min-w-0 max-w-full" data-slot="aui_turn-process-body">
+                <div className="min-w-0 max-w-full pt-(--conversation-fold-gap)" data-slot="aui_turn-process-body">
                   {children}
                 </div>
               )
@@ -736,9 +730,23 @@ export const TurnMessageParts: FC = () => {
 
           case 'reasoning':
             return <ReasoningTextPart />
+          case 'text': {
+            const reply = <TimelineMarkdownText {...(part as TimelineTextPartProps)} />
 
-          case 'text':
-            return <TimelineMarkdownText {...(part as TimelineTextPartProps)} />
+            // The closing reply is the one thing the fold keeps on screen, so the
+            // rule under the work belongs to IT: whatever the fold holds — this
+            // message's body, or the whole question's interims — ends up above
+            // the line, and the line is always the last thing before the answer.
+            const isReply = partsRef.current.indexOf(part) === folded && (folded > 0 || section !== null)
+
+            return isReply ? (
+              <div className="mt-(--conversation-fold-gap) border-t border-(--ui-stroke-tertiary) pt-(--conversation-line-height)">
+                {reply}
+              </div>
+            ) : (
+              reply
+            )
+          }
 
           case 'tool-call':
             return part.toolUI ?? <ChainToolFallback {...(part as TimelineToolCallProps)} />
