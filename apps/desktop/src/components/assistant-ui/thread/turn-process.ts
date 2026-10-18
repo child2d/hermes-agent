@@ -21,6 +21,39 @@ export const finalTextIndex = (parts: readonly { text?: unknown; type?: string }
   return -1
 }
 
+/**
+ * How long a turn took, derived from the timestamps every part already carries.
+ *
+ * This is the ONLY duration a transcript read back from history has: the live
+ * measurement lives in an in-memory registry and the backend stores no per-turn
+ * elapsed field (its `duration_seconds` belongs to delegation rows). First
+ * timestamp → last completion, so it spans the work AND the reply, which is what
+ * the row is summarizing anyway.
+ */
+interface SpanPart {
+  completedAt?: unknown
+  timestamp?: unknown
+}
+
+export const partSpanSeconds = (messages: readonly { parts: readonly unknown[] }[]): null | number => {
+  let first: null | number = null
+  let last: null | number = null
+
+  for (const message of messages) {
+    for (const part of message.parts as readonly SpanPart[]) {
+      if (typeof part.timestamp === 'number' && (first === null || part.timestamp < first)) {
+        first = part.timestamp
+      }
+
+      if (typeof part.completedAt === 'number' && (last === null || part.completedAt > last)) {
+        last = part.completedAt
+      }
+    }
+  }
+
+  return first !== null && last !== null && last > first ? Math.max(1, Math.round(last - first)) : null
+}
+
 /** A single line of work is not worth a header over it — the same threshold the
  *  tool runs use (below two entries they render expanded, with no header). */
 export const MIN_FOLDED_PARTS = 2

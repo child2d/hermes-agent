@@ -34,6 +34,7 @@ import { TimelineTimestamp } from '@/components/assistant-ui/thread/timeline-tim
 import {
   finalTextIndex,
   MIN_FOLDED_PARTS,
+  partSpanSeconds,
   SectionTurnFoldContext
 } from '@/components/assistant-ui/thread/turn-process'
 import { DelegateTool } from '@/components/assistant-ui/tool/delegate'
@@ -511,7 +512,10 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
     return typeof value === 'number' && Number.isFinite(value) && value >= 1 ? Math.round(value) : null
   })
 
-  const seconds = measured ?? stored
+  // A turn read back from history has neither: no measurement, no stamp. The
+  // parts' own timestamps still say how long it ran.
+  const span = useAuiState(s => partSpanSeconds([s.message]))
+  const seconds = measured ?? stored ?? span
 
   const label = running
     ? t.assistant.thread.turnProcessRunning
@@ -586,6 +590,18 @@ export const TurnSectionProcess: FC<{
     return null
   })
 
+  // Same last resort as the per-message fold; over every message of the
+  // question, which is what the row stands in for.
+  const span = useAuiState(s =>
+    partSpanSeconds(
+      indices.flatMap(index => {
+        const message = s.thread.messages[index]
+
+        return message ? [message] : []
+      })
+    )
+  )
+
   // A single message is not a question with interims — that turn folds inside
   // `TurnMessageParts` instead, where the threshold is about step count. Here the
   // question itself is the reason to fold: two messages means an interim reply
@@ -594,7 +610,7 @@ export const TurnSectionProcess: FC<{
     return <>{children}</>
   }
 
-  const seconds = measured ?? stored
+  const seconds = measured ?? stored ?? span
 
   const label = running
     ? t.assistant.thread.turnProcessRunning
