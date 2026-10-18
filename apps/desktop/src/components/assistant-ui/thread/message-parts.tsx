@@ -515,9 +515,7 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
 
   const label = running
     ? t.assistant.thread.turnProcessRunning
-    : seconds === null
-      ? t.assistant.thread.turnProcessSteps(indices.length)
-      : t.assistant.thread.turnProcessStepsWithDuration(indices.length, formatElapsed(seconds))
+    : t.assistant.thread.turnProcessDone(seconds === null ? null : formatElapsed(seconds))
 
   return (
     <div data-slot="aui_turn-process">
@@ -564,23 +562,6 @@ export const TurnSectionProcess: FC<{
 }> = ({ answerId, children, indices }) => {
   const { t } = useI18n()
 
-  // Only what the fold would hide counts: every part of the messages before the
-  // reply, plus the reply's own work. A number, so this re-renders when the count
-  // moves rather than on every streamed token.
-  const steps = useAuiState(s =>
-    indices.reduce((total, index) => {
-      const message = s.thread.messages[index]
-
-      if (!message) {
-        return total
-      }
-
-      const boundary = message.id === answerId ? finalTextIndex(message.parts) : -1
-
-      return total + (boundary < 0 ? message.parts.length : boundary)
-    }, 0)
-  )
-
   const running = useAuiState(s => indices.some(index => s.thread.messages[index]?.status?.type === 'running'))
   const firstId = useAuiState(s => s.thread.messages[indices[0] ?? -1]?.id)
   const disclosureId = `turn-process:section:${firstId ?? ''}`
@@ -617,9 +598,7 @@ export const TurnSectionProcess: FC<{
 
   const label = running
     ? t.assistant.thread.turnProcessRunning
-    : seconds === null
-      ? t.assistant.thread.turnProcessSteps(steps)
-      : t.assistant.thread.turnProcessStepsWithDuration(steps, formatElapsed(seconds))
+    : t.assistant.thread.turnProcessDone(seconds === null ? null : formatElapsed(seconds))
 
   return (
     <>

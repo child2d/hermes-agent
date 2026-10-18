@@ -136,7 +136,7 @@ describe('a settled turn', () => {
   it('opens the whole work back up on click', async () => {
     const { container } = render(<Harness content={[...work(), answer]} status={settled} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Worked through|已处理/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Worked|已处理/ }))
 
     await waitFor(() => {
       expect(container.querySelector('[data-tool-summary]')).not.toBeNull()
@@ -186,7 +186,7 @@ describe('one question, several messages', () => {
   it('brings the interim work back when the one row is opened', async () => {
     const { container } = render(<TranscriptHarness messages={twoAnswers()} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Worked through|已处理/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Worked|已处理/ }))
 
     await waitFor(() => {
       expect(container.querySelector('[data-tool-summary]')).not.toBeNull()

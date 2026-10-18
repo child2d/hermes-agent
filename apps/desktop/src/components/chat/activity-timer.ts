@@ -29,11 +29,17 @@ function startedAt(key?: string): number {
 }
 
 export function formatElapsed(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds}s`
+  const total = Math.max(0, Math.round(seconds))
+
+  if (total < 60) {
+    return `${total}s`
   }
 
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+  if (total < 3600) {
+    return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`
+  }
+
+  return `${Math.floor(total / 3600)}h ${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}m`
 }
 
 /**
