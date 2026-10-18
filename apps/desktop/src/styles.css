@@ -2392,6 +2392,13 @@ body.guest-pointer-lock :is(webview, iframe) {
   margin-top: var(--scaffold-block-gap);
 }
 
+/* The collapsed-turn row keeps its caret showing at rest. It is the only
+   affordance that row offers and there is one per turn, so a hover reveal would
+   leave the line looking inert on a transcript nobody is hovering. */
+[data-slot='aui_turn-process'] {
+  --disclosure-caret-rest: 0.8;
+}
+
 /* Except a file edit, which is the deliverable rather than another line in the
    run — a diff you read like a PR, so it keeps the full block gap on both
    sides while the scaffolding around it stays tight. `data-file-edit` is only

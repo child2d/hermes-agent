@@ -509,18 +509,23 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
       : t.assistant.thread.turnProcessStepsWithDuration(indices.length, formatElapsed(measured))
 
   return (
-    <div className="pb-(--conversation-fold-gap)" data-slot="aui_turn-process">
-      <ScaffoldRow
-        onToggle={() => {
-          const next = !open
-          setUserOpen(next)
-          setToolDisclosureOpen(disclosureId, next)
-        }}
-        open={open}
-        trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
+    <div data-slot="aui_turn-process">
+      <div
+        className="border-b border-(--ui-stroke-tertiary) pb-(--conversation-fold-gap)"
+        data-slot="aui_turn-process-head"
       >
-        <span className={cn(FOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
-      </ScaffoldRow>
+        <ScaffoldRow
+          onToggle={() => {
+            const next = !open
+            setUserOpen(next)
+            setToolDisclosureOpen(disclosureId, next)
+          }}
+          open={open}
+          trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
+        >
+          <span className={cn(FOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
+        </ScaffoldRow>
+      </div>
       {open && (
         <div className="min-w-0 max-w-full" data-slot="aui_turn-process-body">
           {children}
@@ -593,18 +598,23 @@ export const TurnSectionProcess: FC<{
 
   return (
     <>
-      <div className="pb-(--conversation-fold-gap)" data-slot="aui_turn-process">
-        <ScaffoldRow
-          onToggle={() => {
-            const next = !open
-            setUserOpen(next)
-            setToolDisclosureOpen(disclosureId, next)
-          }}
-          open={open}
-          trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
+      <div data-slot="aui_turn-process">
+        <div
+          className="border-b border-(--ui-stroke-tertiary) pb-(--conversation-fold-gap)"
+          data-slot="aui_turn-process-head"
         >
-          <span className={cn(FOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
-        </ScaffoldRow>
+          <ScaffoldRow
+            onToggle={() => {
+              const next = !open
+              setUserOpen(next)
+              setToolDisclosureOpen(disclosureId, next)
+            }}
+            open={open}
+            trailing={running ? <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} /> : undefined}
+          >
+            <span className={cn(FOLD_LABEL_CLASS, 'truncate', running && 'shimmer')}>{label}</span>
+          </ScaffoldRow>
+        </div>
       </div>
       <SectionTurnFoldContext.Provider value={{ answerId, open }}>{children}</SectionTurnFoldContext.Provider>
     </>
