@@ -1733,6 +1733,15 @@ body.guest-pointer-lock :is(webview, iframe) {
   line-height: var(--conversation-prose-line-height);
 }
 
+/* A QUESTION's fold row sits on the response group, outside any message
+   content — so it misses the gutter the content carries and lines up 12px left
+   of the reply, the divider and every row it stands in for. Give it the same
+   one. Scoped to the direct child so the in-message fold (already inside the
+   padded content) is not indented twice. */
+[data-slot='aui_response-group'] > [data-slot='aui_turn-process'] {
+  padding-left: var(--message-text-indent);
+}
+
 [data-slot='aui_assistant-message-root'] {
   width: 100%;
 }
