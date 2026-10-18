@@ -502,11 +502,22 @@ const TurnProcessFold: FC<PropsWithChildren<{ indices: readonly number[] }>> = (
   const elapsed = useElapsedSeconds(running, disclosureId)
   const measured = useMeasuredDuration(running, disclosureId)
 
+  // A turn read back from history was never watched live, so nothing measured it
+  // — but the stream stamped how long it took (`durationS`, the same number the
+  // footer's "this turn took" tooltip reads), which survives a reload.
+  const stored = useAuiState(s => {
+    const value = (s.message.metadata?.custom as { durationS?: unknown } | undefined)?.durationS
+
+    return typeof value === 'number' && Number.isFinite(value) && value >= 1 ? Math.round(value) : null
+  })
+
+  const seconds = measured ?? stored
+
   const label = running
     ? t.assistant.thread.turnProcessRunning
-    : measured === null
+    : seconds === null
       ? t.assistant.thread.turnProcessSteps(indices.length)
-      : t.assistant.thread.turnProcessStepsWithDuration(indices.length, formatElapsed(measured))
+      : t.assistant.thread.turnProcessStepsWithDuration(indices.length, formatElapsed(seconds))
 
   return (
     <div data-slot="aui_turn-process">
@@ -579,6 +590,21 @@ export const TurnSectionProcess: FC<{
   const elapsed = useElapsedSeconds(running, disclosureId)
   const measured = useMeasuredDuration(running, disclosureId)
 
+  // History again: the stream stamped each message with the turn's elapsed
+  // seconds, so the last one that has it already covers the whole question
+  // (summing would count the shared start once per message).
+  const stored = useAuiState(s => {
+    for (let at = indices.length - 1; at >= 0; at--) {
+      const value = (s.thread.messages[indices[at]!]?.metadata?.custom as { durationS?: unknown } | undefined)?.durationS
+
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 1) {
+        return Math.round(value)
+      }
+    }
+
+    return null
+  })
+
   // A single message is not a question with interims — that turn folds inside
   // `TurnMessageParts` instead, where the threshold is about step count. Here the
   // question itself is the reason to fold: two messages means an interim reply
@@ -587,11 +613,13 @@ export const TurnSectionProcess: FC<{
     return <>{children}</>
   }
 
+  const seconds = measured ?? stored
+
   const label = running
     ? t.assistant.thread.turnProcessRunning
-    : measured === null
+    : seconds === null
       ? t.assistant.thread.turnProcessSteps(steps)
-      : t.assistant.thread.turnProcessStepsWithDuration(steps, formatElapsed(measured))
+      : t.assistant.thread.turnProcessStepsWithDuration(steps, formatElapsed(seconds))
 
   return (
     <>
