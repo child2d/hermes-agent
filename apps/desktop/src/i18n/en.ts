@@ -5039,7 +5039,7 @@ export const en: Translations = {
       turnDuration: duration => `This turn took ${duration}`,
       turnProcessRunning: 'Working',
       turnProcessSteps: steps => `Worked through ${steps} steps`,
-      turnProcessStepsWithDuration: (steps, duration) => `Worked through ${steps} steps in ${duration}`,
+      turnProcessStepsWithDuration: (steps, duration) => `Worked ${duration} (${steps} steps)`,
       today: time => `Today, ${time}`,
       yesterday: time => `Yesterday, ${time}`,
       copy: 'Copy',

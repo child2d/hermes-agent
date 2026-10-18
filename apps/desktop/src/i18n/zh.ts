@@ -4979,7 +4979,7 @@ export const zh = defineLocale({
       turnDuration: duration => `本轮耗时 ${duration}`,
       turnProcessRunning: '处理中',
       turnProcessSteps: steps => `已处理 ${steps} 步`,
-      turnProcessStepsWithDuration: (steps, duration) => `已处理 ${steps} 步，用时 ${duration}`,
+      turnProcessStepsWithDuration: (steps, duration) => `已处理 ${duration}（${steps} 步）`,
       today: time => `今天，${time}`,
       yesterday: time => `昨天，${time}`,
       copy: '复制',
