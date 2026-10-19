@@ -13,7 +13,7 @@
 // as a toolbar dropdown rather than a floating search surface; the narrow-window
 // fallback still hugs the titlebar, where there is no room to float.
 export const HUD_POSITION =
-  'fixed left-1/2 top-[22vh] -translate-x-1/2 max-[44rem]:top-[calc(var(--titlebar-height,34px)+0.375rem)]'
+  'fixed left-1/2 top-[30vh] -translate-x-1/2 max-[44rem]:top-[calc(var(--titlebar-height,34px)+0.375rem)]'
 
 // Matches the app's borderless-overlay surface (dialog, keybind panel, …):
 // hairline `--stroke-nous` paired with the soft `--shadow-nous` float.
