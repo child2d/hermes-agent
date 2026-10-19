@@ -805,12 +805,15 @@ export function TreeGroup({
             // band a window handle, which is what the strip's empty right side
             // was doing before.
             <div
-              className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch pl-5 pr-3 [-webkit-app-region:drag]"
+              // The band's left edge is the conversation column's edge, not a
+              // bespoke number: the title, the transcript and the composer all
+              // start on `--conversation-inline-gutter`, so the top of the
+              // window lines up with the text below it. No status dot here —
+              // a 6px dot ahead of the name is exactly what breaks that edge
+              // (the sidebar row and the tab still carry it).
+              className="flex min-w-0 flex-1 items-center self-stretch pr-3 pl-(--conversation-inline-gutter) [-webkit-app-region:drag]"
               data-panel-title-band=""
             >
-              {paneChrome(paneFor(activeId)).tabLead ? (
-                <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).tabLead?.()}</span>
-              ) : null}
               <span className="m-0 min-w-0 truncate text-base font-semibold tracking-[0.02em] text-foreground">
                 {tabLabel(activeId)}
               </span>
