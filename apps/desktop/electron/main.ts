@@ -1837,10 +1837,16 @@ const APP_NAME: string = IDENTITY_APP_NAME || process.env.HERMES_DESKTOP_APP_NAM
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
+// The renderer's top band is TITLEBAR_HEIGHT + 10 (see TreeGroup: a 44px band is
+// what a 14px title needs, measured off the Codex window). The native traffic
+// lights are painted by macOS at this coordinate, so they must centre on the
+// SAME line as the renderer's clusters — deriving them from the bare 34px put
+// them 5px above the sidebar toggle and the title.
+const TOP_BAND_HEIGHT = TITLEBAR_HEIGHT + 10
 
 const WINDOW_BUTTON_POSITION = {
   x: 24,
-  y: TITLEBAR_HEIGHT / 2 - MACOS_TRAFFIC_LIGHTS_HEIGHT / 2
+  y: TOP_BAND_HEIGHT / 2 - MACOS_TRAFFIC_LIGHTS_HEIGHT / 2
 }
 
 // Right-edge window-control reservation lives in titlebar-overlay-width.ts

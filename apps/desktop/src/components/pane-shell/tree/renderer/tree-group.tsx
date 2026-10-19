@@ -435,21 +435,34 @@ export function TreeGroup({
   // no "+" to mint a second tab. What stays is the name — the session title,
   // sitting where a document window puts its title, so the band never reads as
   // an empty strip. Multi-tab zones and pages keep their strip.
+  // ONLY the workspace pane grows a title band: it is the one uncloseable main
+  // pane, so it cannot be stranded and it owns the window's name. Without the
+  // uncloseable test the SIDEBAR's zone (also top-edge, also a lone pane, also
+  // chromeless) painted a second title over the sidebar; without the headerVeto
+  // test a page route kept the last session's name in the band.
+  const activeChrome = paneChrome(paneFor(activeId))
   const titleOnly =
-    !headerVisible && !node.minimized && !isEmpty && Boolean(topEdge) && shown.length === 1 && !pageHeader
+    !headerVisible &&
+    !node.minimized &&
+    !isEmpty &&
+    Boolean(topEdge) &&
+    shown.length === 1 &&
+    !pageHeader &&
+    Boolean(activeChrome.uncloseable) &&
+    !activeChrome.headerVeto
 
   // A title needs more air than a tab strip: 34px is the window-chrome minimum
   // (it lines up with the traffic lights), not a title's own height. The extra
   // 10px is the title band's vertical padding — one knob, shared by the header,
   // the drag handle and the edit veil so none of them can drift.
-  const headerBandHeight = topEdge ? (titleOnly ? TITLEBAR_HEIGHT + 10 : TITLEBAR_HEIGHT) : undefined
+  const headerBandHeight = topEdge ? TITLEBAR_HEIGHT + 10 : undefined
 
   // The fixed titlebar clusters (traffic lights, bell, tools) center themselves
   // in the window's top band. A lone session makes that band 10px taller, so the
   // live height is published for them to read — otherwise every control in the
   // row sits 5px high against the band it visually belongs to.
   useEffect(() => {
-    if (!headerBandHeight || !titleOnly) {
+    if (!headerBandHeight) {
       return
     }
 
@@ -459,7 +472,7 @@ export function TreeGroup({
     return () => {
       root.style.removeProperty('--pane-titleband-height')
     }
-  }, [headerBandHeight, titleOnly])
+  }, [headerBandHeight])
 
   // Keep the activated tab — and, on the last one, the trailing "+" — inside
   // the strip's scroll window. Opening a tab past the right edge otherwise
