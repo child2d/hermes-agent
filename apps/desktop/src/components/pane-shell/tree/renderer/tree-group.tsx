@@ -801,7 +801,7 @@ export function TreeGroup({
               {paneChrome(paneFor(activeId)).tabLead ? (
                 <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).tabLead?.()}</span>
               ) : null}
-              <span className="m-0 min-w-0 truncate text-xs font-medium text-(--ui-text-secondary)">
+              <span className="m-0 min-w-0 truncate text-base font-semibold tracking-[-0.01em] text-foreground">
                 {tabLabel(activeId)}
               </span>
             </div>
