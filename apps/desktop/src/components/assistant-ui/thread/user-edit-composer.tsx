@@ -60,12 +60,11 @@ import {
 import { uploadComposerAttachment } from '@/app/session/hooks/use-prompt-actions'
 import { hermesDirectiveFormatter } from '@/components/assistant-ui/directive-text'
 import {
-  StickyHumanMessageContainer,
+  HumanMessageContainer,
   StopGlyph,
-  USER_ACTION_ICON_BUTTON_CLASS,
-  USER_ACTION_ICON_SIZE,
   USER_BUBBLE_BASE_CLASS
 } from '@/components/assistant-ui/thread/user-message'
+import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
@@ -836,9 +835,9 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
 
   return (
     <ComposerPrimitive.Root className="contents" data-slot="aui_edit-composer-root">
-      <StickyHumanMessageContainer>
+      <HumanMessageContainer>
         <div
-          className="composer-human-message-container human-execution-message-top relative flex w-full items-start rounded-md bg-(--ui-chat-surface-background)"
+          className="composer-human-message-container human-execution-message-top relative flex w-full items-end rounded-md bg-(--ui-chat-surface-background)"
           // A raised box over the transcript field: under window glass it keeps
           // a near-opaque fill instead of thinning with the field behind it.
           data-glass-raised=""
@@ -863,7 +862,13 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
           <div
             className={cn(
               USER_BUBBLE_BASE_CLASS,
-              'ui-prompt-input__container relative border-(--ui-stroke-secondary) data-[expanded=true]:min-h-20',
+              // Edit mode is a DRAWER, not the inverted bubble: it paints the
+              // composer's own fill (the `:root` --composer-fill fallback exists
+              // for exactly this drawer), takes normal foreground ink, spans the
+              // column instead of hugging its text, and wears an input stroke.
+              // Editing a black-on-black card was unreadable, and a fit-content
+              // box gave the caret nowhere to go.
+              'ui-prompt-input__container relative w-full bg-(--composer-fill) text-foreground ring-1 ring-(--ui-stroke-secondary) data-[expanded=true]:min-h-20',
               COMPOSER_DROP_FADE_CLASS,
               dragActive && COMPOSER_DROP_ACTIVE_CLASS
             )}
@@ -875,7 +880,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
               // Match the main composer: allow macOS replacements, not spellcheck.
               autoCorrect={isMacPlatform() ? 'on' : 'off'}
               className={cn(
-                'ui-prompt-input-editor__input max-h-48 w-full resize-none overflow-y-auto bg-transparent p-0 pr-7 text-[length:var(--conversation-text-font-size)] text-foreground/95 outline-none',
+                'ui-prompt-input-editor__input max-h-48 w-full resize-none overflow-y-auto bg-transparent p-0 pr-7 text-[length:var(--conversation-text-font-size)] outline-none',
                 '**:data-ref-text:cursor-default',
                 expanded ? 'min-h-16' : 'min-h-[1.25rem]'
               )}
@@ -934,9 +939,12 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
                 {copy.attachingFile}
               </span>
             )}
-            <button
+            <Button
               aria-label={copy.sendEdited}
-              className={cn('absolute right-2 bottom-2 size-5', USER_ACTION_ICON_BUTTON_CLASS)}
+              // Same spec as every other message action (shadcn Button, ghost +
+              // icon): styles.css renders it as a bare glyph in the bubble's
+              // corner, so no size/colour class belongs here.
+              className="absolute right-2 bottom-2"
               disabled={!canSubmit || submitting || staging}
               onClick={() => {
                 const editor = editorRef.current
@@ -952,13 +960,15 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
               // the edit silently never sends. The restore button guards the
               // same way.
               onPointerDown={event => event.preventDefault()}
+              size="icon"
               type="button"
+              variant="ghost"
             >
-              {submitting ? StopGlyph : <Codicon name="arrow-up" size={USER_ACTION_ICON_SIZE} />}
-            </button>
+              {submitting ? StopGlyph : <Codicon name="arrow-up" size="0.875rem" />}
+            </Button>
           </div>
         </div>
-      </StickyHumanMessageContainer>
+      </HumanMessageContainer>
     </ComposerPrimitive.Root>
   )
 }

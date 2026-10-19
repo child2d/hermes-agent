@@ -1,4 +1,4 @@
-import { createContext, memo, useCallback, useContext, useMemo, useRef, useState } from 'react'
+import { createContext, memo, useContext, useMemo, useRef } from 'react'
 
 import { ChatEmptySlot } from '@/components/assistant-ui/chat-empty-slot'
 import { AssistantMessage } from '@/components/assistant-ui/thread/assistant-message'
@@ -11,10 +11,8 @@ import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/type
 import { UserEditComposer } from '@/components/assistant-ui/thread/user-edit-composer'
 import { UserMessage } from '@/components/assistant-ui/thread/user-message'
 import { Intro, type IntroProps } from '@/components/chat/intro'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { notifyError } from '@/store/notifications'
 
 type ThreadLoadingState = 'response' | 'session'
 
@@ -71,7 +69,6 @@ export const Thread = memo(function Thread({
   sessionKey
 }: ThreadProps) {
   const { t } = useI18n()
-  const copy = t.assistant.thread
   const { isHistorical } = useTranscriptWindow()
 
   if (isHistorical) {
@@ -80,29 +77,6 @@ export const Thread = memo(function Thread({
     onDismissError = undefined
     onRestoreToMessage = undefined
   }
-
-  const [restoreConfirmTarget, setRestoreConfirmTarget] = useState<
-    (RestoreMessageTarget & { messageId: string }) | null
-  >(null)
-
-  const closeRestoreConfirm = useCallback(() => setRestoreConfirmTarget(null), [])
-
-  const confirmRestore = useCallback(() => {
-    if (!restoreConfirmTarget || !onRestoreToMessage) {
-      throw new Error('Restore is unavailable for this message.')
-    }
-
-    const { messageId, text, userOrdinal } = restoreConfirmTarget
-
-    closeRestoreConfirm()
-    void Promise.resolve(onRestoreToMessage(messageId, { text, userOrdinal })).catch((error: unknown) => {
-      notifyError(error, 'Restore failed')
-    })
-  }, [closeRestoreConfirm, onRestoreToMessage, restoreConfirmTarget])
-
-  const requestRestoreConfirm = useCallback((messageId: string, target: RestoreMessageTarget) => {
-    setRestoreConfirmTarget({ messageId, ...target })
-  }, [])
 
   // The values in this map are component *types*: when their identity
   // changes, React unmounts and remounts every visible message — async
@@ -129,9 +103,7 @@ export const Thread = memo(function Thread({
   const editContext = useMemo(() => ({ cwd, gateway, sessionId }), [cwd, gateway, sessionId])
 
   const hasBranchInNewChat = Boolean(onBranchInNewChat)
-  const hasCancel = Boolean(onCancel)
   const hasDismissError = Boolean(onDismissError)
-  const hasRestoreToMessage = Boolean(onRestoreToMessage)
 
   const messageComponents = useMemo(
     () => ({
@@ -149,14 +121,9 @@ export const Thread = memo(function Thread({
 
         return <UserEditComposer cwd={editCwd} gateway={editGateway} sessionId={editSessionId} />
       },
-      UserMessage: () => (
-        <UserMessage
-          onCancel={hasCancel ? () => callbacksRef.current.onCancel?.() : undefined}
-          onRequestRestoreConfirm={hasRestoreToMessage ? requestRestoreConfirm : undefined}
-        />
-      )
+      UserMessage
     }),
-    [hasBranchInNewChat, hasCancel, hasDismissError, hasRestoreToMessage, requestRestoreConfirm]
+    [hasBranchInNewChat, hasDismissError]
   )
 
   // Core's splash belongs to a fresh draft; a session that exists but has
@@ -193,15 +160,6 @@ export const Thread = memo(function Thread({
         />
         {loading === 'session' && <CenteredThreadSpinner />}
         <ThreadTimeline />
-        <ConfirmDialog
-          confirmLabel={copy.restoreConfirm}
-          description={copy.restoreBody}
-          destructive
-          onClose={closeRestoreConfirm}
-          onConfirm={confirmRestore}
-          open={Boolean(restoreConfirmTarget)}
-          title={copy.restoreTitle}
-        />
       </div>
     </ThreadEditContext.Provider>
   )

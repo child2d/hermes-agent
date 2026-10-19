@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 
 import { ConnectionSwitcher } from '@/app/chat/sidebar/connection-switcher'
@@ -32,15 +32,21 @@ import {
 } from '@/lib/icons'
 import { runtimeReadinessDisplay, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { resolveSessionTimerSince } from '@/lib/session-timer-since'
-import { cacheHitLabel, contextBarLabel, LiveDuration, tokensPerSecondLabel, usageContextLabel } from '@/lib/statusbar'
+import {
+  cacheHitLabel,
+  contextBarLabel,
+  EMPTY_USAGE,
+  LiveDuration,
+  mergeGaugeUsage,
+  tokensPerSecondLabel,
+  usageContextLabel
+} from '@/lib/statusbar'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { resolveVersionStatus } from '@/lib/version-status'
-import type { ApprovalModeRequester } from '@/store/approval-mode'
 import { copyFilePath, revealFile, shouldOfferLocalReveal } from '@/store/file-actions'
 import { $freeTierStatus, FREE_TIER_MODEL } from '@/store/free-tier'
 import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
-import { requestGatewayForProfile } from '@/store/gateway'
 import { revealFileInTree } from '@/store/layout'
 import { $onboardingGate, guidedOnboardingActive } from '@/store/onboarding-gate'
 import { $activeGatewayProfile } from '@/store/profile'
@@ -73,12 +79,10 @@ import {
   $updateStatus,
   openUpdateOverlayFor
 } from '@/store/updates'
-import type { StatusResponse, UsageStats } from '@/types/hermes'
+import type { StatusResponse } from '@/types/hermes'
 
 import { CRON_ROUTE, SETTINGS_ROUTE, WEBHOOKS_ROUTE } from '../../routes'
 import type { StatusbarItem } from '../statusbar-controls'
-
-const EMPTY_USAGE: UsageStats = { calls: 0, input: 0, output: 0, total: 0 }
 
 interface StatusbarItemsOptions {
   agentsOpen: boolean
@@ -309,27 +313,9 @@ export function useStatusbarItems({
     sessionId: activeSessionId
   })
 
-  // The breakdown wins whenever we have one, for two reasons: it reports the
-  // MEASURED occupancy once the backend has it (falling back to the estimate
-  // only before that), and it is keyed to the session it describes. The global
-  // `$currentUsage` is neither — a resumed session reports no context fields,
-  // and the store merges rather than replaces, so the PREVIOUS session's gauge
-  // numbers survive the switch. Mid-turn useContextBreakdown returns null (the
-  // snapshot is pre-turn), so the streamed usage carries the gauge.
-  const gaugeUsage = useMemo<UsageStats>(
-    () =>
-      contextBreakdown
-        ? {
-            ...currentUsage,
-            context_estimated: contextBreakdown.context_estimated,
-            context_source: contextBreakdown.context_source,
-            context_max: contextBreakdown.context_max,
-            context_percent: contextBreakdown.context_percent,
-            context_used: contextBreakdown.context_used
-          }
-        : currentUsage,
-    [contextBreakdown, currentUsage]
-  )
+  // The breakdown wins whenever we have one — `mergeGaugeUsage` in
+  // lib/statusbar owns that rule, shared with the composer's ring.
+  const gaugeUsage = useMemo(() => mergeGaugeUsage(contextBreakdown, currentUsage), [contextBreakdown, currentUsage])
 
   const contextUsage = useMemo(() => usageContextLabel(gaugeUsage), [gaugeUsage])
   const contextBar = useMemo(() => contextBarLabel(gaugeUsage), [gaugeUsage])
@@ -338,15 +324,9 @@ export function useStatusbarItems({
   const cacheHit = cacheHitLabel(currentUsage)
   const tokensPerSecond = tokensPerSecondLabel(currentUsage)
 
-  // Dial the viewed profile directly: the ambient `requestGateway` is the
-  // session-routed dispatcher, which re-scopes `params.profile` to the FOCUSED
-  // session's owner — a profile other than the one this menu shows.
-  const requestApprovalModeGateway = useCallback<ApprovalModeRequester>(
-    (method, params) => requestGatewayForProfile(activeGatewayProfile, method, params),
-    [activeGatewayProfile]
-  )
-
-  const approvalModeItem = useApprovalModeStatusbarItem(activeGatewayProfile, requestApprovalModeGateway)
+  // Approval mode dials the viewed profile itself — see
+  // `useApprovalModeControl`, which owns that scoping for every surface.
+  const approvalModeItem = useApprovalModeStatusbarItem(activeGatewayProfile)
   const systemResourcesItem = useSystemResourcesStatusbarItem()
 
   const gatewayMenuContent = useMemo(

@@ -4,7 +4,12 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { renderMessageStream } from '@/app/session/hooks/use-message-stream/test-harness'
-import { stubThreadEnvironment, stubThreadViewportSize, ThreadRuntime } from '@/components/assistant-ui/test-utils'
+import {
+  openTurnProcess,
+  stubThreadEnvironment,
+  stubThreadViewportSize,
+  ThreadRuntime
+} from '@/components/assistant-ui/test-utils'
 import { Thread } from '@/components/assistant-ui/thread'
 import { toRuntimeMessage } from '@/lib/chat-runtime'
 import { clearAllPrompts, setApprovalRequest } from '@/store/prompts'
@@ -124,6 +129,8 @@ describe('tool feed visibility policy', () => {
     const { container } = render(<Harness />)
 
     expect(await screen.findByText('final answer only')).toBeTruthy()
+    await openTurnProcess(container)
+
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).toBeNull()
     expect(container.querySelector('[data-tool-summary]')).toBeNull()
     expect(screen.getByRole('button', { name: /Run/ })).toBeTruthy()
@@ -138,6 +145,8 @@ describe('tool feed visibility policy', () => {
     const { container } = render(<Harness />)
 
     expect(await screen.findByText('final answer only')).toBeTruthy()
+    await openTurnProcess(container)
+
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).toBeNull()
     expect(await screen.findByText(/Explored 2 files/)).toBeTruthy()
     // The run scaffold is the visible flow here; the suppressed case above pins
@@ -147,6 +156,8 @@ describe('tool feed visibility policy', () => {
 
   it('still shows tool chrome when reasoning blocks are on', async () => {
     const { container } = render(<Harness />)
+
+    await openTurnProcess(container)
 
     expect(await screen.findByText(/Explored 2 files/)).toBeTruthy()
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).not.toBeNull()
@@ -158,6 +169,8 @@ describe('tool feed visibility policy', () => {
     const { container } = render(<Harness />)
 
     expect(await screen.findByText('final answer only')).toBeTruthy()
+    await openTurnProcess(container)
+
     expect(container.querySelector('[data-slot="aui_thinking-disclosure"]')).not.toBeNull()
     expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(1)
   })

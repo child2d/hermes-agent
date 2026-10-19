@@ -381,10 +381,10 @@ describe('ChatSidebar empty-profile sections', () => {
     // The Telegram platform section renders with its threads…
     expect(screen.getAllByText('Telegram').length).toBeGreaterThan(0)
     expect(screen.getByText('tg-one')).toBeTruthy()
-    // …and the sidebar did not collapse to the blank state: the search field
+    // …and the sidebar did not collapse to the blank state: the search toggle
     // only renders inside the session area, so its presence proves the area
     // (and the messaging sections inside it) rendered.
-    expect(screen.getByPlaceholderText('Search sessions…')).toBeTruthy()
+    expect(container.querySelector('[data-slot="sidebar-search-toggle"]')).not.toBeNull()
   })
 
   it('still shows the blank state when a profile has nothing at all', () => {
@@ -396,7 +396,7 @@ describe('ChatSidebar empty-profile sections', () => {
     const { container } = renderSidebar('/', 'chat')
 
     expect(container.textContent).toContain('No sessions yet')
-    expect(screen.queryByPlaceholderText('Search sessions…')).toBeNull()
+    expect(container.querySelector('[data-slot="sidebar-search-toggle"]')).toBeNull()
   })
 })
 

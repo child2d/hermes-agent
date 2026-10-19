@@ -5699,11 +5699,6 @@ export const frOverrides = {
       stop: 'Arrêter',
       restorePrevious: 'Restaurer le point de contrôle précédent',
       restoreCheckpoint: 'Restaurer le point de contrôle',
-      restoreFromHere: 'Restaurer le point de contrôle — relancer à partir de cette invite',
-      restoreTitle: 'Restaurer ce point de contrôle ?',
-      restoreBody:
-        "Tout ce qui suit cette invite est retiré de la conversation, puis l'invite est relancée à partir d'ici.",
-      restoreConfirm: 'Restaurer et relancer',
       restoreNext: 'Restaurer le point de contrôle suivant',
       goForward: 'Avancer',
       sendEdited: 'Envoyer le message modifié',

@@ -3,7 +3,7 @@ import { useState } from 'react'
 
 import { StableText } from '@/components/chat/stable-text'
 import { useViewedInterval } from '@/hooks/use-viewed-interval'
-import type { UsageStats } from '@/types/hermes'
+import type { ContextBreakdown, UsageStats } from '@/types/hermes'
 
 export function formatDuration(elapsedMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000))
@@ -41,6 +41,11 @@ export function contextBar(percent: number | undefined, width = 10): string {
   return `${'█'.repeat(filled)}${'░'.repeat(width - filled)}`
 }
 
+/** A referentially stable empty usage payload. The statusbar meter hands it
+ *  straight to its memos, so it must not be rebuilt per render; the composer's
+ *  ring spreads it as a base instead and does not depend on that identity. */
+export const EMPTY_USAGE: UsageStats = { calls: 0, input: 0, output: 0, total: 0 }
+
 export function usageContextLabel(usage: UsageStats): string {
   if (usage.context_max) {
     return `${usage.context_estimated ? '~' : ''}${compactNumber(usage.context_used ?? 0)}/${compactNumber(usage.context_max)}`
@@ -57,6 +62,32 @@ export function contextBarLabel(usage: UsageStats): string {
   const pct = Math.max(0, Math.min(100, Math.round(usage.context_percent ?? 0)))
 
   return `[${contextBar(usage.context_percent)}] ${usage.context_estimated ? '~' : ''}${pct}%`
+}
+
+/** The context gauge's merged figure — the breakdown when there is one, the live
+ *  usage payload otherwise. The breakdown wins for two reasons: it reports the
+ *  MEASURED occupancy once the backend has it (the estimate only covers the
+ *  window before that), and it is keyed to the session it describes. The live
+ *  payload is neither — a resumed session reports no context fields, and the
+ *  session store merges rather than replaces, so the previous session's gauge
+ *  numbers survive a switch. Mid-turn there is no breakdown (its snapshot is
+ *  pre-turn) and the streamed usage carries the gauge.
+ *
+ *  Shared by the statusbar meter and the composer's ring so the two surfaces
+ *  cannot disagree about how full the window is. */
+export function mergeGaugeUsage(breakdown: ContextBreakdown | null, current: UsageStats): UsageStats {
+  if (!breakdown) {
+    return current
+  }
+
+  return {
+    ...current,
+    context_estimated: breakdown.context_estimated,
+    context_source: breakdown.context_source,
+    context_max: breakdown.context_max,
+    context_percent: breakdown.context_percent,
+    context_used: breakdown.context_used
+  }
 }
 
 /** `87%` for a reported hit rate; '' when the backend omitted it (no cache

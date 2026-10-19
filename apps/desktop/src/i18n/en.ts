@@ -382,6 +382,7 @@ export const en: Translations = {
     delete: 'Delete',
     docs: 'Docs',
     done: 'Done',
+    edit: 'Edit',
     error: 'Error',
     expand: 'Expand',
     failed: 'Failed',
@@ -1175,7 +1176,8 @@ export const en: Translations = {
       backdropTitle: 'Chat Backdrop',
       backdropDesc: 'The faint statue image behind the conversation.',
       userBubbleTitle: 'Message Bubble',
-      userBubbleDesc: 'How see-through your own messages are. Solid at 0; only the outline remains at 100.',
+      userBubbleDesc:
+        'How solid your own message bubbles are. Filled at 0; at 100 the bubble is gone and your text reads as ordinary text.',
       textDirectionTitle: 'Text direction',
       textDirectionDesc:
         'How chat messages and the composer choose their direction. Auto follows the first letter of each paragraph; pick a direction when mixed text lines up the wrong way. Code always stays left-to-right.',
@@ -4723,6 +4725,7 @@ export const en: Translations = {
       openStarmap: 'Open memory graph',
       turnRunning: 'Running',
       contextUsage: 'Context usage',
+      contextUsageAria: label => `Context usage: ${label}`,
       compressions: count => `Compressions: ${count}`,
       systemResources: {
         title: 'System Resources',
@@ -5034,6 +5037,8 @@ export const en: Translations = {
       thoughtBriefly: 'Thought briefly',
       thoughtFor: duration => `Thought for ${duration}`,
       turnDuration: duration => `This turn took ${duration}`,
+      turnProcessRunning: 'Working',
+      turnProcessDone: duration => (duration === null ? 'Worked' : `Worked ${duration}`),
       today: time => `Today, ${time}`,
       yesterday: time => `Yesterday, ${time}`,
       copy: 'Copy',
@@ -5252,11 +5257,6 @@ export const en: Translations = {
       stop: 'Stop',
       restorePrevious: 'Restore previous checkpoint',
       restoreCheckpoint: 'Restore checkpoint',
-      restoreFromHere: 'Restore checkpoint — rerun from this prompt',
-      restoreTitle: 'Restore to this checkpoint?',
-      restoreBody:
-        'Everything after this prompt is removed from the conversation, and the prompt runs again from here.',
-      restoreConfirm: 'Restore & rerun',
       restoreNext: 'Restore next checkpoint',
       goForward: 'Go forward',
       sendEdited: 'Send edited message',

@@ -418,6 +418,7 @@ export interface Translations {
     delete: string
     docs: string
     done: string
+    edit: string
     error: string
     expand: string
     failed: string
@@ -3972,6 +3973,7 @@ export interface Translations {
       openStarmap: string
       turnRunning: string
       contextUsage: string
+      contextUsageAria: (label: string) => string
       compressions: (count: number) => string
       systemResources: {
         title: string
@@ -4267,6 +4269,8 @@ export interface Translations {
       thoughtBriefly: string
       thoughtFor: (duration: string) => string
       turnDuration: (duration: string) => string
+      turnProcessRunning: string
+      turnProcessDone: (duration: null | string) => string
       today: (time: string) => string
       yesterday: (time: string) => string
       copy: string
@@ -4358,10 +4362,6 @@ export interface Translations {
       stop: string
       restorePrevious: string
       restoreCheckpoint: string
-      restoreFromHere: string
-      restoreTitle: string
-      restoreBody: string
-      restoreConfirm: string
       restoreNext: string
       goForward: string
       sendEdited: string

@@ -147,6 +147,13 @@
 
   --color-midground: var(--dt-midground);
   --color-midground-foreground: var(--dt-midground-foreground);
+  /* The surface ramp (see `surfaceRamp()` in themes/context.tsx): `bg-surface-*`
+     with the full utility treatment — placeholders, variants, and the `/NN`
+     opacity modifier that `bg-(--var)` cannot offer. */
+  --color-surface-frame: var(--dt-surface-frame);
+  --color-surface-page: var(--dt-surface-page);
+  --color-surface-raised: var(--dt-surface-raised);
+  --color-surface-transcript: var(--dt-surface-transcript);
 
   --font-sans: var(--dt-font-sans);
   --font-mono: var(--dt-font-mono);
@@ -204,7 +211,13 @@
     inset 0 0.0625rem 0 color-mix(in srgb, #fff 28%, transparent),
     0 0 0 0.0625rem color-mix(in srgb, var(--dt-foreground) 8%, transparent),
     0 0.75rem 2rem color-mix(in srgb, #000 12%, transparent);
-  --shadow-composer: 0 0.0625rem 0.125rem color-mix(in srgb, #000 5%, transparent);
+  /* The composer card's elevation: one contact shadow plus a soft ambient
+     layer. Deliberately thin — the card separates itself by being OPAQUE on the
+     dimmed transcript, so the shadow only has to keep its edge from dissolving
+     into the page rather than to lift it off the screen. */
+  --shadow-composer:
+    0 0.0625rem 0.125rem color-mix(in srgb, #000 6%, transparent),
+    0 0.25rem 0.75rem -0.25rem color-mix(in srgb, #000 7%, transparent);
 }
 
 @layer base {
@@ -403,8 +416,16 @@
     --ui-sash-hover-border: color-mix(in srgb, var(--ui-accent) 18%, var(--ui-stroke-tertiary));
     --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
     --ui-surface-background: var(--ui-bg-editor);
-    --ui-sidebar-surface-background: var(--ui-bg-sidebar);
-    --ui-chat-surface-background: var(--ui-bg-chrome);
+    --ui-sidebar-surface-background: var(--dt-surface-frame);
+    /* The four surfaces the app paints are derived in ONE place —
+       `surfaceRamp()` in themes/context.tsx writes `--dt-surface-*` from the
+       theme seeds, per mode, as concrete values: `raised` (the composer card,
+       the theme's own popover surface) > `page` (raw chrome) > `transcript`
+       (the reading surface) > `frame` (window chrome, sidebar, rails). Roles map
+       to them here; components can also wear them as utilities
+       (`bg-surface-transcript`) thanks to the `@theme inline` bridge. This block
+       is only the pre-paint fallback, which is why it is flat. */
+    --ui-chat-surface-background: var(--dt-surface-transcript);
     --ui-editor-surface-background: var(--ui-bg-chrome);
     /* The integrated terminal wears the transcript's background, not the
        editor's — it reads as part of the conversation surface. Its own token so
@@ -426,7 +447,15 @@
     --ui-inline-code-foreground: color-mix(in srgb, #141414 88%, transparent);
     --ui-selection-background: color-mix(in srgb, #ffd24a 55%, transparent);
 
-    --dt-background: var(--ui-bg-chrome);
+    /* Pre-paint fallbacks for the surface ramp (themes/context.tsx overwrites
+       these with concrete per-mode values the moment the theme applies). Flat on
+       purpose: before the theme loads there is no hierarchy to know about. */
+    --dt-surface-frame: var(--ui-bg-chrome);
+    --dt-surface-page: var(--ui-bg-chrome);
+    --dt-surface-raised: var(--ui-bg-elevated);
+    --dt-surface-transcript: var(--ui-bg-chrome);
+
+    --dt-background: var(--dt-surface-page);
     --dt-foreground: var(--ui-text-primary);
     --dt-card: var(--ui-bg-editor);
     --dt-card-foreground: var(--ui-text-primary);
@@ -474,11 +503,19 @@
     --dt-sidebar-bg: var(--ui-bg-sidebar);
     --dt-sidebar-border: var(--ui-stroke-secondary);
     /* `--user-bubble-keep` is the Settings → Appearance → Message Bubble lever
-       (store/user-bubble-transparency.ts): the share of the theme's bubble
-       fill to keep. Unset at the default, so the mix is a no-op and the bubble
-       is the theme's fill exactly as before. The border stays put either way —
-       at full transparency the outline is what still marks your turn. */
-    --dt-user-bubble: color-mix(in srgb, var(--ui-chat-bubble-background) var(--user-bubble-keep, 100%), transparent);
+       (store/user-bubble-transparency.ts): the share of the bubble fill to
+       keep. Unset at the default, so the mix is a no-op. Your turn renders
+       INVERTED — the theme's foreground as the fill and the chat surface as
+       the ink — so in light mode it is a near-black bubble with white text and
+       dark mode flips it, with no border either way. The lever still thins the
+       fill, and the ink closes the gap behind it: at 100 the bubble is gone
+       and your turn reads as ordinary foreground text. */
+    --dt-user-bubble: color-mix(in srgb, var(--dt-foreground) var(--user-bubble-keep, 100%), transparent);
+    --dt-user-bubble-foreground: color-mix(
+      in srgb,
+      var(--dt-background) var(--user-bubble-keep, 100%),
+      var(--dt-foreground)
+    );
     --dt-user-bubble-border: var(--ui-stroke-tertiary);
 
     --dt-font-sans:
@@ -531,6 +568,17 @@
     --conversation-caption-font-size: var(--conversation-caption-base-size);
     --conversation-line-height: var(--conversation-base-line-height);
     --conversation-caption-line-height: var(--conversation-caption-base-line-height);
+    /* The collapsed turn — ONE row standing in for a whole turn's work. It is the
+       only scaffold line that REPLACES prose rather than annotating it, so it
+       reads one rung above a tool row: caption size (12px, between the 11px tool
+       rows and the 14px reply) on the conversation line box (18px), at secondary
+       ink rather than the scaffold grey, because what it hides is one click away
+       rather than gone. Codex's equivalent line sits at ~0.93 of body size, a
+       mid grey, one line box tall, and ~8px above the reply it introduces. */
+    --conversation-fold-font-size: var(--conversation-caption-font-size);
+    --conversation-fold-line-height: var(--conversation-line-height);
+    --conversation-fold-text: color-mix(in srgb, var(--ui-base) 74%, transparent);
+    --conversation-fold-gap: 0.5rem;
     /* Reading line-height for assistant prose only. Unitless on purpose: it
        rides the chat-text scale through the font-size, not through a px value,
        and prose is the one place a looser measure is worth the extra height.
@@ -555,7 +603,6 @@
        markdown block and between consecutive prose parts. Single knob; tweak
        freely. */
     --paragraph-gap: 0.875rem;
-    --sticky-human-top: 0.23rem;
     --file-tree-row-height: 1.375rem;
 
     --composer-width: 100%;
@@ -651,6 +698,11 @@
     --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 12%, transparent);
     --composer-ring-strength: 1.3;
     --backdrop-invert-mul: 0;
+    /* A dark page swallows a black shadow, so the composer card needs more of
+       it to read as lifted at all. */
+    --shadow-composer:
+      0 0.0625rem 0.125rem color-mix(in srgb, #000 32%, transparent),
+      0 0.25rem 0.875rem -0.25rem color-mix(in srgb, #000 34%, transparent);
     /* Dark mode: a dark card needs a stronger black inset to show the recess. */
     --dt-input-inset: inset 0 1px 1px color-mix(in srgb, #000 38%, transparent);
     --ui-tab-hover-darken: 6%;
@@ -696,7 +748,14 @@
      which does not composite page alpha. */
   :root[data-hermes-glass] {
     background-color: transparent !important;
-    --ui-chat-surface-background: transparent;
+    /* The transcript keeps the ramp's opaque surface instead of
+       going transparent with the rest of the field: under glass the window's
+       own tint shows through a transparent transcript, which reads as the SAME
+       white as the composer card — the two surfaces collapse and the card has
+       no floor. Translucency belongs to the chrome the user asked for it on
+       (the sidebar's own token below, the body tint); the transcript is a
+       reading surface, and it stays one in every mode. */
+    --ui-chat-surface-background: var(--dt-surface-transcript);
     --ui-sidebar-surface-background: transparent;
     --ui-editor-surface-background: transparent;
     --ui-terminal-surface-background: var(--ui-bg-chrome);
@@ -925,34 +984,34 @@
 [data-ref='image'],
 [data-ref='session'],
 [data-ref='theme'] {
-  --ref-color: color-mix(in srgb, var(--ui-accent-secondary) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-accent-secondary) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='command'],
 [data-ref='tool'] {
-  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='skill'],
 [data-ref='git'],
 [data-ref='diff'],
 [data-ref='staged'] {
-  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 /* Bot Mode group-room mentions (#91359): a routed @bot reads as an agent
    reference, @user as a human handoff the room is waiting on, and
    @everyone/@all as a quieter broadcast. Text, not pills — same contract. */
 [data-ref='agent'] {
-  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-accent) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='human'] {
-  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--foreground));
+  --ref-color: color-mix(in srgb, var(--ui-warm) 82%, var(--ref-mix-partner, var(--foreground)));
 }
 
 [data-ref='broadcast'] {
-  --ref-color: color-mix(in srgb, var(--foreground) 70%, var(--ui-accent));
+  --ref-color: color-mix(in srgb, var(--ref-mix-partner, var(--foreground)) 70%, var(--ui-accent));
 }
 
 .ref {
@@ -1425,9 +1484,11 @@ button,
   user-select: none;
 }
 
-/* User bubbles are <button>s (click → edit), so the rule above would kill
-   drag-to-select and leave ⌘C with nothing to grab. Message text stays
-   selectable; chrome controls outside the bubble keep user-select: none. */
+/* User bubbles used to be <button>s (click → edit), which the rule above would
+   strip of drag-to-select. The bubble is plain content now and the edit button
+   lives in the row below it, but the carve-out stays: the row's controls and a
+   watch window's expand toggle still sit inside the turn, and message text must
+   never lose ⌘C. */
 [data-slot='aui_user-message-root'] button,
 [data-slot='aui_user-message-root'] [role='button'] {
   -webkit-user-select: text;
@@ -1672,6 +1733,15 @@ body.guest-pointer-lock :is(webview, iframe) {
   line-height: var(--conversation-prose-line-height);
 }
 
+/* A QUESTION's fold row sits on the response group, outside any message
+   content — so it misses the gutter the content carries and lines up 12px left
+   of the reply, the divider and every row it stands in for. Give it the same
+   one. Scoped to the direct child so the in-message fold (already inside the
+   padded content) is not indented twice. */
+[data-slot='aui_response-group'] > [data-slot='aui_turn-process'] {
+  padding-left: var(--message-text-indent);
+}
+
 [data-slot='aui_assistant-message-root'] {
   width: 100%;
 }
@@ -1806,17 +1876,6 @@ body.guest-pointer-lock :is(webview, iframe) {
   text-align: left;
 }
 
-[data-slot='aui_user-message-root'] {
-  --sticky-human-offset: calc(var(--sticky-human-top) + 1px);
-  top: var(--sticky-human-offset);
-}
-
-/* The sticky prompt owns no field paint. Clip only the scrolling siblings
-   behind it, including the top gap, so bubble transparency still works. */
-[data-sticky-prompt-clip] {
-  clip-path: inset(var(--sticky-prompt-clip) 0 0);
-}
-
 [data-slot='aui_user-message-root'],
 [data-slot='aui_edit-composer-root'] {
   --human-msg-line-height: 1.4;
@@ -1831,17 +1890,39 @@ body.guest-pointer-lock :is(webview, iframe) {
   line-height: var(--human-msg-line-height);
 }
 
-/* Sticky human bubbles clamp to ~2 lines with a soft bottom fade so a long
-   prompt doesn't dominate the viewport. The clamp lifts only in the edit
-   composer; expanding on read-only :focus-within ran on mousedown (before the
-   swap) and fought stick-to-bottom when parked at the bottom. */
-.sticky-human-clamp {
-  cursor: pointer;
+/* ── Inside the inverted user bubble (see --dt-user-bubble) ──────────────────
+   The bubble is foreground-on-background, so every colour inside it that was
+   pitched against a LIGHT surface sinks into the fill. Two casualties, one rule
+   each:
+
+   · reference chips — each kind's --ref-color is its hue mixed 82% toward
+     --foreground, which here IS the fill. Re-point that mix at the ink.
+   · the kind-less fallback (a bare URL, --dt-primary) — same problem, and a
+     raw accent is too dark to read on a near-black card: lift it toward the
+     ink instead.
+
+   Scoped to the read-only bubble: the edit composer reuses USER_BUBBLE_BASE_CLASS
+   but paints the LIGHT composer fill (`ui-prompt-input__container`), so it keeps
+   the app's own mix partner. The bubble text itself, inline code and fences need
+   nothing — they all read `currentColor`. */
+.composer-human-message:not(.ui-prompt-input__container) :is(.ref, [data-ref]) {
+  --ref-mix-partner: var(--dt-user-bubble-foreground);
+}
+
+.composer-human-message:not(.ui-prompt-input__container) .ref:not([data-ref]) {
+  --ref-color: color-mix(in srgb, var(--dt-primary) 72%, var(--dt-user-bubble-foreground));
+}
+
+/* A long prompt clamps to four lines with a soft bottom fade instead of pushing
+   the answer off screen. Nothing lifts it back open: the bubble itself is inert
+   (no click, no hover state) — the edit drawer is where the whole text is
+   visible, and `data-clamped` is what the fade hangs off. */
+.human-msg-clamp {
   max-height: calc(4 * var(--human-msg-line-height) * var(--conversation-text-font-size) + 0.15rem);
   overflow: hidden;
 }
 
-.sticky-human-clamp[data-clamped='true'] {
+.human-msg-clamp[data-clamped='true'] {
   -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
   mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
@@ -2030,7 +2111,13 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 [data-slot='composer-surface'] {
-  border-color: var(--ui-stroke-secondary) !important;
+  /* Borderless by design. The card is defined by its opaque fill (the ramp's
+     `raised` surface), the dimmed transcript behind it, and --shadow-composer —
+     the hairline that used to sit here repeated the editor-frame language in the
+     one place meant to read as a sheet of paper on the page. (HUD overrides
+     both, with !important.) */
+  border: 0;
+  box-shadow: var(--shadow-composer);
   min-height: var(--composer-surface-min-height);
 }
 
@@ -2048,20 +2135,19 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 /* ── Composer fill — ONE var painted by the surface AND anything docked to it
-   (slash·@ popover, `?` help). State ladder sets the var; consumers just paint
-   `background: var(--composer-fill)`, so every state matches by construction. */
+   (slash·@ popover, `?` help). It is OPAQUE and the same in every state, and it
+   IS the ramp's `raised` surface: the composer card is the app's floating
+   surface, so it wears the theme's popover colour rather than a hand-tuned lift.
+   The old rest/scrolled mixes let the transcript ghost through the surface while
+   scrolling, which is exactly what an opaque card must not do — content passing
+   under it just disappears behind it. */
 :root {
-  /* Fallback for drawers outside the main composer (e.g. edit-message). */
-  --composer-fill: color-mix(in srgb, var(--dt-card) 90%, var(--dt-background));
+  --composer-fill: var(--dt-surface-raised);
 }
 
-[data-slot='composer-root'] {
-  --composer-fill: color-mix(in srgb, var(--dt-card) 88%, transparent);
-}
-
-[data-slot='composer-root'][data-thread-scrolled-up] {
-  --composer-fill: color-mix(in srgb, var(--dt-card) 80%, transparent);
-}
+/* Dark mode needs no lift: a dark card is already the raised surface, and mixing
+   a dark fill toward white would turn the composer into a lit panel. No rule
+   needed here any more — the ramp derives `raised` per mode. */
 
 /* Tool/thinking blocks now live at message-text alignment (no leading
    chevron column to escape into), so their headers and bodies share a
@@ -2315,6 +2401,13 @@ body.guest-pointer-lock :is(webview, iframe) {
   margin-top: var(--scaffold-block-gap);
 }
 
+/* The collapsed-turn row keeps its caret showing at rest. It is the only
+   affordance that row offers and there is one per turn, so a hover reveal would
+   leave the line looking inert on a transcript nobody is hovering. */
+[data-slot='aui_turn-process'] {
+  --disclosure-caret-rest: 0.8;
+}
+
 /* Except a file edit, which is the deliverable rather than another line in the
    run — a diff you read like a PR, so it keeps the full block gap on both
    sides while the scaffolding around it stays tight. `data-file-edit` is only
@@ -2364,10 +2457,19 @@ body.guest-pointer-lock :is(webview, iframe) {
   margin-top: calc(var(--scaffold-block-gap) - var(--conversation-turn-gap));
 }
 
-/* Message action bars — flat icon hits with default dim; only the hovered/focused control is full-strength.
-   The reaction slot lives OUTSIDE the bar (a landed emoji must not ride the
-   bar's hover fade) but is still one of these controls visually. */
+/* Message action bars — ONE spec, bare glyphs, for every message action in the
+   transcript: the assistant bar (aui_msg-actions), the user turn's row under the
+   bubble (aui_user-actions), the edit drawer's send arrow (inside
+   aui_edit-composer-root, scoped to the bubble so the completion drawer's own
+   buttons keep their skin) and the reaction slot. The controls are shadcn
+   Buttons (`variant="ghost" size="icon"`) for the component layer; this spec is
+   the presentation layer, so a row of them reads as flat icon hits with default
+   dim and only the hovered/focused control at full strength — no boxes, no
+   per-row drift. The reaction slot lives OUTSIDE the bar (a landed emoji must
+   not ride the bar's hover fade) but is still one of these controls visually. */
 [data-slot='aui_msg-actions'] button,
+[data-slot='aui_user-actions'] button,
+[data-slot='aui_edit-composer-root'] .composer-human-message button,
 button[data-slot='aui_msg-reactions'] {
   border: 0;
   border-radius: 0;
@@ -2443,11 +2545,15 @@ span[data-slot='aui_msg-reactions'] {
   opacity: 1;
 }
 
-[data-slot='aui_msg-actions'] button:disabled {
+[data-slot='aui_msg-actions'] button:disabled,
+[data-slot='aui_user-actions'] button:disabled,
+[data-slot='aui_edit-composer-root'] .composer-human-message button:disabled {
   cursor: default;
 }
 
 [data-slot='aui_msg-actions'] button:hover,
+[data-slot='aui_user-actions'] button:hover,
+[data-slot='aui_edit-composer-root'] .composer-human-message button:hover,
 button[data-slot='aui_msg-reactions']:hover {
   background: transparent;
   color: var(--color-foreground);
@@ -2455,16 +2561,24 @@ button[data-slot='aui_msg-reactions']:hover {
 }
 
 [data-slot='aui_msg-actions'] button:active,
+[data-slot='aui_user-actions'] button:active,
+[data-slot='aui_edit-composer-root'] .composer-human-message button:active,
 button[data-slot='aui_msg-reactions']:active {
   background: transparent;
 }
 
 [data-slot='aui_msg-actions'] button:focus-visible,
+[data-slot='aui_user-actions'] button:focus-visible,
+[data-slot='aui_edit-composer-root'] .composer-human-message button:focus-visible,
 button[data-slot='aui_msg-reactions']:focus-visible {
   opacity: 1;
 }
 
+/* The glyph sizes itself, not the box — declared here so a bare Button of any
+   variant lands on the same 0.875rem as every other message action. */
 [data-slot='aui_msg-actions'] button svg,
+[data-slot='aui_user-actions'] button svg,
+[data-slot='aui_edit-composer-root'] .composer-human-message button svg,
 button[data-slot='aui_msg-reactions'] svg {
   width: 0.875rem;
   height: 0.875rem;
@@ -3292,12 +3406,10 @@ button[data-slot='aui_msg-reactions'] svg {
   background: var(--dt-card) !important;
 }
 
-/* User messages ride the band like every other line. In the app each sticky
-   user row paints an OPAQUE chat-surface slab behind it (so a stuck bubble can
-   slide over scrolled text) and the bubble is solid --dt-user-bubble — inside
-   the smoked band both read as fully opaque cards that ignore every fade. The
-   slab goes unconditionally; the bubble is gone entirely at rest and returns
-   when engaged. ONE variable carries the fill so there is no specificity fight
+/* User messages ride the band like every other line. The bubble is solid
+   --dt-user-bubble, so inside the smoked band it reads as a fully opaque card
+   that ignores every fade. It is gone entirely at rest and returns when
+   engaged; ONE variable carries the fill so there is no specificity fight
    between rest/engaged rules — the states just move the var. */
 [data-hud-shell] {
   /* At rest there is no bubble: unfocused, the band is bare text over someone
@@ -3322,11 +3434,6 @@ button[data-slot='aui_msg-reactions'] svg {
 
 [data-hud-shell] [data-slot='aui_user-message-root'] {
   background: transparent !important;
-  /* Not sticky in HUD mode: the band is a short log, and a pinned bubble
-     spends a third of it on a line you already read. Static rows scroll away
-     like everything else (the app keeps its sticky behavior — this is the
-     HUD's call, not a global one). */
-  position: static !important;
 }
 
 /* User bubbles: the ONE thing in the band that paints its own opaque fill

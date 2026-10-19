@@ -121,7 +121,9 @@ interface SidebarSessionsSectionProps {
   pinned: boolean
   rootClassName?: string
   contentClassName?: string
-  emptyState: React.ReactNode
+  /** Rendered when the section has no rows. Optional: a section that only
+   *  renders with rows (pinned) has no empty state to show. */
+  emptyState?: React.ReactNode
   forceEmptyState?: boolean
   headerAction?: React.ReactNode
   footer?: React.ReactNode

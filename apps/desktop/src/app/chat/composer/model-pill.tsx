@@ -16,21 +16,18 @@ import { cn } from '@/lib/utils'
 import { $currentModelSource, setModelPickerOpen } from '@/store/session'
 
 import { useComposerModelPillLabel } from './contrib'
+import { CONTROL_PILL } from './control-classes'
 import { onComposerModelMenuRequest } from './focus'
 import { RICH_INPUT_SLOT } from './rich-editor'
 import { useComposerScope } from './scope'
 import type { ChatBarState } from './types'
 
-// `shrink` (not `shrink-0`) with a truncating label: the pill is the one
-// control in the row that can give width back continuously, so it absorbs the
-// squeeze between collapse stages instead of pushing Send past the edge.
-// No `max-w-*` cap: the pill sizes to its label, so a long model name only
-// truncates when the row is genuinely out of room (#49340) — not at an
-// arbitrary 160px.
-const PILL = cn(
-  'h-(--composer-control-size) min-w-0 shrink gap-1 rounded-md px-2 text-xs font-normal',
-  'text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'
-)
+// Shared with the other labelled composer controls (see CONTROL_PILL). The
+// pill is the one control in the row that can give width back continuously, so
+// it absorbs the squeeze between collapse stages — hence `shrink`, with a
+// truncating label and no `max-w-*` cap: a long model name only truncates when
+// the row is genuinely out of room (#49340), not at an arbitrary 160px.
+const PILL = cn(CONTROL_PILL, 'shrink')
 
 /**
  * Composer model selector — the relocated status-bar pill. Reuses the live

@@ -77,7 +77,7 @@ describe('thread edit context', () => {
   it('passes a same-session cwd change to the mounted edit composer', async () => {
     const { rerender } = render(<Harness cwd="/old" sessionKey="k1" />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     await screen.findByTestId('edit-composer')
 
     expect(composerRenders.at(-1)?.cwd).toBe('/old')
@@ -100,7 +100,7 @@ describe('thread edit context', () => {
       rerender(<Harness cwd="/new" sessionKey="k2" />)
     })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit message' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     await screen.findByTestId('edit-composer')
 
     expect(composerRenders.at(-1)?.cwd).toBe('/new')

@@ -84,7 +84,7 @@ async function openEdit() {
   const main = screen.getByRole('textbox', { name: 'Message' })
   main.focus()
 
-  const bubble = await screen.findByRole('button', { name: 'Edit message' })
+  const bubble = await screen.findByRole('button', { name: 'Edit' })
 
   await act(async () => {
     fireEvent.pointerDown(bubble, { button: 0 })
@@ -106,7 +106,7 @@ const settleBlurGuard = () =>
   })
 
 describe('inline edit inside a shared composer surface', () => {
-  it('keeps the edit composer open and focused after the bubble click', async () => {
+  it('keeps the edit composer open and focused after the edit button click', async () => {
     const { container, editor } = await openEdit()
 
     await settleBlurGuard()

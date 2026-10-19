@@ -8,7 +8,7 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { DAY, fmtFullDateTime, relativeTime } from '@/lib/time'
+import { fmtFullDateTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { $displayTimestamps } from '@/store/display-timestamps'
 
@@ -27,26 +27,24 @@ const useMessageTime = (): number | undefined =>
     return Number.isFinite(at) && at > 0 ? at : undefined
   })
 
-/** Rendered only while the tip is open, so "5 min ago" is as of the hover.
- *  The age is only worth saying within the day; past that the label already
- *  names the day, and an hour-rounded "2 days ago" would contradict a
- *  calendar "Yesterday". */
-const HoverTimeDetail: FC<{ ms: number }> = ({ ms }) => {
-  const full = fmtFullDateTime.format(new Date(ms))
-
-  return <span className="tabular-nums">{Date.now() - ms < DAY ? `${relativeTime(ms)} · ${full}` : full}</span>
-}
-
 const clockOnly = (time: string) => time
 
 /**
  * The time a message landed, revealed with the message's hover actions
- * ("3:27 PM"; "Yesterday, 3:27 PM"; "Sep 28, 3:27 PM"), with the age and full
- * date in its tip. Visibility belongs to the host's hover group: this paints
+ * ("3:27 PM"; "Yesterday, 3:27 PM"; "Sep 28, 3:27 PM"); the tip carries the
+ * full date/time. Visibility belongs to the host's hover group: this paints
  * the label only. Stands down while `display.timestamps` is on, because the
  * transcript already prints every stamp.
+ *
+ * No age anywhere — not in the tip, not in the standing line. 「1 min. ago」
+ * says nothing the date does not, and once `plain` turned this into text under
+ * every user turn it read as noise on each row. Ask what landed WHEN and the
+ * absolute stamp is the whole answer.
+ *
+ * `plain` drops the tip and prints the full date/time as standing text under
+ * the message instead of a hover reveal.
  */
-export const MessageHoverTime: FC<{ className?: string }> = ({ className }) => {
+export const MessageHoverTime: FC<{ className?: string; plain?: boolean }> = ({ className, plain }) => {
   const { t } = useI18n()
   const timelineStamps = useStore($displayTimestamps)
   const seconds = useMessageTime()
@@ -57,17 +55,30 @@ export const MessageHoverTime: FC<{ className?: string }> = ({ className }) => {
 
   const date = new Date(seconds * 1000)
 
+  const stamp = (
+    <time
+      className={cn(
+        'pointer-events-auto cursor-default select-none whitespace-nowrap text-2xs leading-5 tabular-nums text-(--ui-text-tertiary)',
+        className
+      )}
+      dateTime={date.toISOString()}
+    >
+      {plain ? (
+        fmtFullDateTime.format(date)
+      ) : (
+        formatMessageTimestamp(date, { today: clockOnly, yesterday: t.assistant.thread.yesterday })
+      )}
+    </time>
+  )
+
+  if (plain) {
+    return stamp
+  }
+
   return (
-    <Tooltip><TooltipTrigger asChild>
-      <time
-        className={cn(
-          'pointer-events-auto cursor-default select-none whitespace-nowrap text-2xs leading-5 tabular-nums text-(--ui-text-tertiary)',
-          className
-        )}
-        dateTime={date.toISOString()}
-      >
-        {formatMessageTimestamp(date, { today: clockOnly, yesterday: t.assistant.thread.yesterday })}
-      </time>
-    </TooltipTrigger><TooltipContent side="top">{<HoverTimeDetail ms={date.getTime()} />}</TooltipContent></Tooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>{stamp}</TooltipTrigger>
+      <TooltipContent side="top">{fmtFullDateTime.format(date)}</TooltipContent>
+    </Tooltip>
   )
 }

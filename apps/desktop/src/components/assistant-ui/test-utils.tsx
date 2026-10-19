@@ -1,8 +1,34 @@
 import { AssistantRuntimeProvider, type ThreadMessage, useExternalStoreRuntime } from '@assistant-ui/react'
+import { fireEvent, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { vi } from 'vitest'
 
 import { stubResizeObserver } from '@/test/jsdom'
+
+/**
+ * Open a settled turn's work fold.
+ *
+ * A turn that wrote a closing reply folds everything before it behind one row,
+ * and a mid-turn message with no reply at all folds whole — so a suite asserting
+ * on the run summaries, tool rows or thinking blocks inside that work has to
+ * open it first. The disclosure is persisted per message id: clicking an
+ * already-open fold closes it, so check `aria-expanded` before clicking.
+ */
+export async function openTurnProcess(container: HTMLElement): Promise<void> {
+  const row = await waitFor(() => {
+    const button = container.querySelector('[data-slot="aui_turn-process"] button')
+
+    if (!button) {
+      throw new Error('the turn folded no work: no aui_turn-process row')
+    }
+
+    return button as HTMLElement
+  })
+
+  if (row.getAttribute('aria-expanded') === 'false') {
+    fireEvent.click(row)
+  }
+}
 
 /** Fixed clock for message fixtures, so nothing sorts by "now". */
 export const createdAt = new Date('2026-05-01T00:00:00.000Z')

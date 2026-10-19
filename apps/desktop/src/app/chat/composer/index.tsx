@@ -42,6 +42,7 @@ import { $threadScrolledUpBySession } from '@/store/thread-scroll'
 import { $autoSpeakReplies } from '@/store/voice-prefs'
 import { useTheme } from '@/themes'
 
+import { ApprovalModeChip } from './approval-mode-chip'
 import { AttachmentList } from './attachments'
 import {
   acceptsTriggerCompletion,
@@ -53,6 +54,7 @@ import {
   slashArgStage
 } from './composer-utils'
 import { ContextMenu } from './context-menu'
+import { ContextUsageRing } from './context-usage-ring'
 import { COMPOSER_AREAS, runComposerMiddleware } from './contrib'
 import { ComposerControls } from './controls'
 import { ComposerDirectiveActions } from './directive-actions'
@@ -412,6 +414,14 @@ export function ChatBar({
     editorRef,
     poppedOut
   })
+
+  // The two composer readouts added from the reference — approval mode, context
+  // ring — drop together on the surfaces that are chrome-free by design: the HUD
+  // spotlight bar, the onboarding chat, and every `minimal` stage (where the row
+  // is the send button and nothing else). Everywhere else they ARE the point:
+  // Simple mode hides the statusbar, and `minimal` only kicks in when the row
+  // genuinely runs out of room.
+  const composerChrome = !minimal && !guidedChat && !hudMode
 
   const hasComposerPayload = hasText || attachments.length > 0
   const canSubmit = busy || hasComposerPayload
@@ -1453,7 +1463,7 @@ export function ChatBar({
                   // track past the surface — and every `w-full` child (the fade,
                   // the input/controls row) laid out against that phantom width
                   // and got clipped by overflow-hidden, send button first.
-                  'group/composer-surface relative z-4 isolate grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden rounded-[inherit] border border-[color-mix(in_srgb,var(--dt-composer-ring)_calc(18%*var(--composer-ring-strength)),var(--dt-input))]',
+                  'group/composer-surface relative z-4 isolate grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden rounded-[inherit]',
                   COMPOSER_DROP_FADE_CLASS,
                   dragActive && COMPOSER_DROP_ACTIVE_CLASS
                 )}
@@ -1546,9 +1556,14 @@ export function ChatBar({
                   >
                     {/* `/` menu and the contributed leading slot. Centred in the
                       control row — the old +3px nudge aligned the "+" with the
-                      input's first text line back when it shared that row. */}
+                      input's first text line back when it shared that row.
+                      The approval mode rides here, beside the "+", because that
+                      is where the reference product puts it — and because in
+                      Simple mode the statusbar that used to own this control is
+                      not on screen at all. */}
                     <div className="flex items-center gap-(--composer-control-gap) self-center [grid-area:menu]">
                       {contextMenu}
+                      {composerChrome ? <ApprovalModeChip disabled={inputDisabled} /> : null}
                       <ContribSlot area={COMPOSER_AREAS.leading} />
                     </div>
                     <div className="min-w-0 [grid-area:input]">{input}</div>
@@ -1559,6 +1574,9 @@ export function ChatBar({
                       start, detached from the cluster (#116332). */}
                     <div className="flex min-w-0 items-center justify-end gap-(--composer-control-gap) [grid-area:controls]">
                       <ContribSlot area={COMPOSER_AREAS.actions} />
+                      {/* Left of the model pill, where the reference puts it:
+                          how full the context window is, as a ring. */}
+                      {composerChrome ? <ContextUsageRing busy={busy} sessionId={statusSessionId} /> : null}
                       {controls}
                     </div>
                   </div>
@@ -1598,7 +1616,7 @@ export function ChatBarFallback() {
       )}
       data-slot="composer-root"
     >
-      <div className="composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit] border border-[color-mix(in_srgb,var(--dt-composer-ring)_calc(18%*var(--composer-ring-strength)),var(--dt-input))]">
+      <div className="composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit] shadow-composer">
         <div aria-hidden className={composerInputBacking} />
       </div>
     </div>

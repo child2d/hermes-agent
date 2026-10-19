@@ -23,3 +23,15 @@ export const PRIMARY_ICON_BTN = cn(
 
 /** A toggle that is currently ON — dictation, spoken replies, the wake word. */
 export const ACTIVE_ICON_BTN = 'bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary'
+
+// The pill a labelled control wears in the composer row (model, approval mode):
+// same height and radius as the icon buttons beside it, padded for text rather
+// than a glyph. Flex behaviour is deliberately NOT part of the spec — the call
+// site says whether it may give width back (the model pill is the row's one
+// flexible control and passes `shrink`; a short fixed label passes
+// `shrink-0`), because `shrink` and `shrink-0` cannot be layered by string
+// order.
+export const CONTROL_PILL = cn(
+  'h-(--composer-control-size) min-w-0 gap-1 rounded-md px-2 text-xs font-normal',
+  'text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'
+)

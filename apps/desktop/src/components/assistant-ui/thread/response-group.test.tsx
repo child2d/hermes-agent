@@ -4,9 +4,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { toChatMessages } from '@/lib/chat-messages'
 import { toRuntimeMessage } from '@/lib/chat-runtime'
+import { $toolDisclosureStates } from '@/store/tool-view'
 import type { SessionMessage } from '@/types/hermes'
 
-import { stubThreadEnvironment, ThreadRuntime } from '../test-utils'
+import { openTurnProcess, stubThreadEnvironment, ThreadRuntime } from '../test-utils'
 
 import { Thread } from '.'
 
@@ -27,6 +28,10 @@ it('keeps background continuations in one response with one action bar and the o
     { display_kind: 'process_complete', display_metadata: { display_text: 'Background Process Finished: verify' } },
     { display_kind: 'async_delegation_complete', display_metadata: { display_text: 'Background agent finished' } }
   ]) {
+    // The turn's fold remembers that a reader opened it (per message id), and
+    // this fixture's ids are deterministic across the three display kinds.
+    $toolDisclosureStates.set({})
+
     const stored = [
       { role: 'user', content: 'Verify it.', timestamp: 1 },
       { role: 'assistant', content: 'Checking the deployment.', timestamp: 2 },
@@ -42,18 +47,27 @@ it('keeps background continuations in one response with one action bar and the o
       </ThreadRuntime>
     )
 
-    const original = container.querySelector('[data-role="assistant"]')
-
     rerender(
       <ThreadRuntime messages={messages}>
         <Thread onBranchInNewChat={branch} />
       </ThreadRuntime>
     )
     await waitFor(() => expect(container.textContent).toContain('The deployment is verified.'))
+
+    // One question, folded across its messages: the interim reply is behind the
+    // turn's single row, so only the closing reply is mounted. Node identity no
+    // longer survives that (the interim message mounts when the fold opens);
+    // message identity — what branching and the copy scopes key off — still does.
     expect(container.querySelectorAll('[data-slot="aui_turn-pair"]')).toHaveLength(1)
     expect(container.querySelectorAll('[data-slot="aui_response-group"]')).toHaveLength(1)
     expect(container.querySelectorAll('[data-slot="aui_msg-actions"]')).toHaveLength(1)
-    expect(container.querySelector('[data-role="assistant"]')).toBe(original)
+    expect([...container.querySelectorAll('[data-role="assistant"]')].map(e => e.getAttribute('data-message-id'))).toEqual([
+      messages[3]!.id
+    ])
+
+    await openTurnProcess(container)
+
+    expect(container.querySelectorAll('[data-slot="aui_msg-actions"]')).toHaveLength(1)
     expect(
       [...container.querySelectorAll('[data-role="assistant"]')].map(e => e.getAttribute('data-message-id'))
     ).toEqual([messages[1]!.id, messages[3]!.id])

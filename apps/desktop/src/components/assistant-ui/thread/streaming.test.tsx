@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $reasoningCollapsedByDefault, setShowReasoningFromConfig } from '@/store/reasoning-disclosure'
 
-import { stubThreadEnvironment, stubThreadViewportSize, ThreadRuntime } from '../test-utils'
+import { openTurnProcess, stubThreadEnvironment, stubThreadViewportSize, ThreadRuntime } from '../test-utils'
 
 import { MESSAGE_PARTS_COMPONENTS } from './message-parts'
 
@@ -504,7 +504,7 @@ describe('assistant-ui streaming renderer', () => {
     })
   })
 
-  it('suppresses the action footer on sealed interim messages, keeping it on the final reply', () => {
+  it('suppresses the action footer on sealed interim messages, keeping it on the final reply', async () => {
     const { container } = render(
       <TranscriptHarness
         messages={[
@@ -515,6 +515,10 @@ describe('assistant-ui streaming renderer', () => {
         ]}
       />
     )
+
+    // Interim commentary is the turn's work, so it sits behind the turn's fold;
+    // opening it puts every message of the response back on screen.
+    await openTurnProcess(container)
 
     // Interim commentary stays visible…
     expect(container.textContent).toContain('Let me check the files.')
@@ -710,8 +714,11 @@ describe('assistant-ui streaming renderer', () => {
     )
   })
 
-  it('groups consecutive reasoning parts under one thinking disclosure', () => {
+  it('groups consecutive reasoning parts under one thinking disclosure', async () => {
     const { container } = render(<GroupedReasoningHarness />)
+    // Two reasoning blocks and no closing reply: the message is work end to end,
+    // so its disclosure now lives inside the turn's fold.
+    await openTurnProcess(container)
 
     const disclosures = container.querySelectorAll('[data-slot="aui_thinking-disclosure"]')
     expect(disclosures.length).toBe(1)
