@@ -188,7 +188,6 @@ import { WorktreeDialog } from './projects/worktree-dialog'
 import {
   SidebarBlankState,
   SidebarLoadErrorState,
-  SidebarPinnedEmptyState,
   SidebarSessionSkeletons,
   SidebarStorageCorruptNotice
 } from './section-states'
@@ -1823,7 +1822,11 @@ export function ChatSidebar({
               />
             )}
 
-            {!trimmedQuery && (
+            {/* No pins, no section: a heading plus a hint row for something
+                empty is two lines of the list's most valuable space saying
+                nothing. The hint earns its place only once there is a pin to
+                drag. */}
+            {!trimmedQuery && pinnedSessions.length > 0 && (
               <SidebarSessionsSection
                 activeSessionId={activeSidebarSessionId}
                 // Inbox style rides whichever view is active — pinned rows
@@ -1832,7 +1835,6 @@ export function ChatSidebar({
                 card={cardRows}
                 contentClassName="flex flex-col gap-px rounded-lg pb-2 pt-1"
                 dndSensors={dndSensors}
-                emptyState={<SidebarPinnedEmptyState />}
                 label={s.pinned}
                 onArchiveSession={onArchiveSession}
                 onBranchSession={onBranchSession}
