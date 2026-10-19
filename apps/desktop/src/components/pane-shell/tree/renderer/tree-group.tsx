@@ -822,16 +822,19 @@ export function TreeGroup({
             // band a window handle, which is what the strip's empty right side
             // was doing before.
             <div
-              // The band's left edge is the conversation column's edge, not a
-              // bespoke number: the title, the transcript and the composer all
-              // start on `--conversation-inline-gutter`, so the top of the
-              // window lines up with the text below it. No status dot here —
-              // a 6px dot ahead of the name is exactly what breaks that edge
-              // (the sidebar row and the tab still carry it).
-              className="flex min-w-0 flex-1 items-center self-stretch pr-3 pl-(--conversation-inline-gutter) [-webkit-app-region:drag]"
+              // Measured off the Codex window (2x screenshot, halved): a 44px
+              // band whose every glyph centers on y≈22, the title starting
+              // 15px from the pane edge with its own leading glyph, at ~14px.
+              // The conversation column's 64px gutter is deliberately NOT the
+              // reference here — the title belongs to the pane chrome, not to
+              // the transcript.
+              className="flex min-w-0 flex-1 items-center gap-2 self-stretch pr-3 pl-4 [-webkit-app-region:drag]"
               data-panel-title-band=""
             >
-              <span className="m-0 min-w-0 truncate text-base font-semibold tracking-[0.02em] text-foreground">
+              {paneChrome(paneFor(activeId)).tabLead ? (
+                <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).tabLead?.()}</span>
+              ) : null}
+              <span className="m-0 min-w-0 truncate text-sm font-medium text-foreground">
                 {tabLabel(activeId)}
               </span>
             </div>
