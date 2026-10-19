@@ -831,8 +831,8 @@ export function TreeGroup({
               className="flex min-w-0 flex-1 items-center gap-2 self-stretch pr-3 pl-4 [-webkit-app-region:drag]"
               data-panel-title-band=""
             >
-              {paneChrome(paneFor(activeId)).tabLead ? (
-                <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).tabLead?.()}</span>
+              {paneChrome(paneFor(activeId)).titleLead ? (
+                <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).titleLead?.()}</span>
               ) : null}
               <span className="m-0 min-w-0 truncate text-sm font-medium text-foreground">
                 {tabLabel(activeId)}

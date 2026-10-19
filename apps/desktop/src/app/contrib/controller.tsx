@@ -35,6 +35,7 @@ import {
   toggleTargetZoneTabStrip
 } from '@/components/pane-shell/tree/store'
 import { $workspaceOwnerLabels, workspaceOwnerTitle } from '@/components/pane-shell/workspace-scope'
+import { Codicon } from '@/components/ui/codicon'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { discoverBundledPlugins } from '@/contrib/plugins'
 import { Slot } from '@/contrib/react/slot'
@@ -76,6 +77,7 @@ import {
 import { $profiles } from '@/store/profile'
 import { $profileRailVisible } from '@/store/profile-rail-prefs'
 import { runExportProfileFlow, runImportProfileFlow } from '@/store/profile-share'
+import { $projectOwnerBySessionId, $projectTree } from '@/store/projects'
 import {
   $reviewOpen,
   $reviewScopeCwd,
@@ -532,6 +534,20 @@ const syncWorkspaceTitle = () => {
       // fresh draft has no session to key by, which IS its status: the dot
       // resolves to `draft` and marks the tab rather than leaving a hole.
       tabLead: () => <SessionStatusDot session={stored} storedSessionId={selected} />,
+      // The title band's leading glyph is the session's PROJECT folder, the way
+      // Codex labels a chat — not the status dot (that stays on the tab). A chat
+      // that belongs to no project or path shows no glyph at all, so the title
+      // is just the name.
+      titleLead: () => {
+        const ownerId = selected ? $projectOwnerBySessionId.get().get(selected) : undefined
+        const project = ownerId ? $projectTree.get().find(node => node.id === ownerId) : undefined
+
+        if (!project || project.isNoProject || !project.path) {
+          return null
+        }
+
+        return <Codicon name={project.icon || (project.isAuto ? 'repo' : 'folder-library')} size="0.875rem" />
+      },
       // A draft's name lives in its composer, not in any session row, so the
       // label subscribes to it directly — typing renames the tab without
       // re-registering the pane.

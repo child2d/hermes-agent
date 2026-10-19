@@ -102,6 +102,10 @@ interface PaneChrome extends PaneSizing {
    *  the tab and the sidebar row render status/color from the ONE primitive
    *  (self-subscribing — it updates without the strip re-registering). */
   tabLead?: () => React.ReactNode
+  /** A lead glyph for the window TITLE band, not the tab: the session's project
+   *  folder (Codex labels a chat that way). Absent for a chat that belongs to no
+   *  project or path — the title then reads as the bare name. */
+  titleLead?: () => React.ReactNode
   /** Mint another tab of THIS pane's kind — the strip's "+" while this pane is
    *  active. A Browser tab makes another Browser tab; a pane that is one of a
    *  kind (a file peek) leaves it absent and the strip falls back to the chat
