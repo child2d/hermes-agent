@@ -149,7 +149,7 @@ export function CatalogRow({ request, target }: CatalogRowProps) {
           aria-hidden
           className="grid size-10 shrink-0 place-items-center rounded-xl bg-(--ui-bg-quaternary) text-(--ui-text-secondary)"
         >
-          <Glyph className="size-5" stroke={1.75} />
+          <Glyph className="size-5" strokeWidth={1.75} />
         </span>
         <div className="grid min-w-0 flex-1 gap-0.5">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1">
