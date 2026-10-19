@@ -1327,7 +1327,11 @@ export function ContribWiring({ children }: { children: ReactNode }) {
         style={
           {
             '--titlebar-controls-left': `${controlsPos.left}px`,
-            '--titlebar-controls-top': `${controlsPos.top}px`,
+            // Centered in the LIVE top band, not the 34px minimum: a lone
+            // session keeps a 44px title band, and a fixed 5px top would leave
+            // every control in the row 5px high against it.
+            '--titlebar-controls-top':
+              'calc((var(--pane-titleband-height, 34px) - var(--titlebar-control-size, 24px)) / 2)',
             '--titlebar-controls-width': leftToolsWidth,
             '--titlebar-controls-y-nudge': titlebarControlsYNudge(titlebarChrome),
             '--titlebar-tools-right': titlebarToolsRight,

@@ -444,6 +444,23 @@ export function TreeGroup({
   // the drag handle and the edit veil so none of them can drift.
   const headerBandHeight = topEdge ? (titleOnly ? TITLEBAR_HEIGHT + 10 : TITLEBAR_HEIGHT) : undefined
 
+  // The fixed titlebar clusters (traffic lights, bell, tools) center themselves
+  // in the window's top band. A lone session makes that band 10px taller, so the
+  // live height is published for them to read — otherwise every control in the
+  // row sits 5px high against the band it visually belongs to.
+  useEffect(() => {
+    if (!headerBandHeight || !titleOnly) {
+      return
+    }
+
+    const root = document.documentElement
+    root.style.setProperty('--pane-titleband-height', `${headerBandHeight}px`)
+
+    return () => {
+      root.style.removeProperty('--pane-titleband-height')
+    }
+  }, [headerBandHeight, titleOnly])
+
   // Keep the activated tab — and, on the last one, the trailing "+" — inside
   // the strip's scroll window. Opening a tab past the right edge otherwise
   // left both the new tab and the button that made it out of view.
