@@ -98,10 +98,10 @@ export function SidebarSectionAddButton({
                 }
               : undefined
         }
-        size="icon"
+        size="icon-xs"
         variant="ghost"
       >
-        <Codicon name="add" size="0.75rem" />
+        <Codicon name="add" size="0.875rem" />
       </Button>
     </TooltipTrigger><TooltipContent>{ariaLabel}</TooltipContent></Tooltip>
   )

@@ -244,11 +244,11 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
             // for a session that is actually doing something.
             filtersActive && 'bg-(--ui-control-active-background) text-foreground opacity-100'
           )}
-          size="icon"
+          size="icon-xs"
           type="button"
           variant="ghost"
         >
-          <Codicon name="list-filter" size="0.75rem" />
+          <Codicon name="list-filter" size="0.875rem" />
         </Button>
       </DropdownMenuTrigger>
 

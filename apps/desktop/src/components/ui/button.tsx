@@ -29,6 +29,11 @@ const buttonVariants = cva(
         sm: 'h-8 rounded-md px-3 text-xs',
         lg: 'h-10 rounded-md px-8',
         icon: 'h-9 w-9',
+        // Dense chrome icons (sidebar headers, section actions, panel tools).
+        // Stock `icon` is h-9 — a 12-14px glyph floating in a 36px box reads as
+        // a stray dot next to the 24px controls the rest of the chrome uses, so
+        // the sidebar's header buttons land on the measured 24px band instead.
+        'icon-xs': 'size-6',
         // NOT a legacy alias — a deliberate Plankton extension of the shadcn
         // ladder. The titlebar reserves its control band from these same
         // measured tokens (window controls + tab strip geometry), so stock

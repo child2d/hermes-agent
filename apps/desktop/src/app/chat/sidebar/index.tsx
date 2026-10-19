@@ -1934,10 +1934,10 @@ export function ChatSidebar({
                             // refresh repaints every dot just dismissed.
                             ackAllSessionsRead()
                           }}
-                          size="icon"
+                          size="icon-xs"
                           variant="ghost"
                         >
-                          <Codicon name="check-all" size="0.75rem" />
+                          <Codicon name="check-all" size="0.875rem" />
                         </Button>
                       </TooltipTrigger><TooltipContent>{s.markAllRead}</TooltipContent></Tooltip>
                     )}
@@ -1962,10 +1962,10 @@ export function ChatSidebar({
                                 event.stopPropagation()
                                 exitProjectScope()
                               }}
-                              size="icon"
+                              size="icon-xs"
                               variant="ghost"
                             >
-                              <Codicon name="list-unordered" size="0.75rem" />
+                              <Codicon name="list-unordered" size="0.875rem" />
                             </Button>
                           </TooltipTrigger><TooltipContent>{s.showProjects}</TooltipContent></Tooltip>
                         </div>

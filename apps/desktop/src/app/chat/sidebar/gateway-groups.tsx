@@ -240,8 +240,8 @@ function GatewayProfileGroup({
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button aria-label={`${copy.actions}: ${label}`} size="icon" variant="ghost">
-                  <Codicon name="ellipsis" />
+                <Button aria-label={`${copy.actions}: ${label}`} size="icon-xs" variant="ghost">
+                  <Codicon name="ellipsis" size="0.875rem" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -287,7 +287,7 @@ function GatewayProfileGroup({
                 name={group.profile}
               />
             ) : (
-              <Codicon name="remote" />
+              <Codicon name="remote" size="0.875rem" />
             )}
           </SidebarRowGrab>
         }
