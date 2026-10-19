@@ -33,6 +33,7 @@ import { comboTokens } from '@/lib/keybinds/combo'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
+import { openCommandPalette } from '@/store/command-palette'
 import { $connectionsRegistry } from '@/store/connection-registry-state'
 import { $activeConnectionId } from '@/store/connections'
 import { $cronJobs } from '@/store/cron'
@@ -1621,17 +1622,11 @@ export function ChatSidebar({
             <span className="truncate text-lg font-semibold tracking-tight text-(--ui-text-primary)">Plankton</span>
             {showSessionSections && (
               <button
-                aria-expanded={searchOpen}
+
                 aria-label={s.searchAria}
                 className="grid size-6 shrink-0 place-items-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-(--ui-text-primary)"
                 data-slot="sidebar-search-toggle"
-                onClick={() => {
-                  setSearchOpen(!searchOpen)
-
-                  if (searchOpen) {
-                    setSearchQuery('')
-                  }
-                }}
+                onClick={openCommandPalette}
                 type="button"
               >
                 <Codicon name="search" size="0.875rem" />
