@@ -805,13 +805,13 @@ export function TreeGroup({
             // band a window handle, which is what the strip's empty right side
             // was doing before.
             <div
-              className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch pl-4 pr-2 [-webkit-app-region:drag]"
+              className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch pl-5 pr-3 [-webkit-app-region:drag]"
               data-panel-title-band=""
             >
               {paneChrome(paneFor(activeId)).tabLead ? (
                 <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).tabLead?.()}</span>
               ) : null}
-              <span className="m-0 min-w-0 truncate text-base font-semibold tracking-[0.01em] text-foreground">
+              <span className="m-0 min-w-0 truncate text-base font-semibold tracking-[0.02em] text-foreground">
                 {tabLabel(activeId)}
               </span>
             </div>
