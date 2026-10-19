@@ -550,6 +550,10 @@ export function ChatSidebar({
   const newSessionCombo = useStore($bindings)['session.new']?.[0]
   const newSessionKbd = newSessionCombo ? comboTokens(newSessionCombo) : []
   const [searchQuery, setSearchQuery] = useState('')
+  // The search field is a magnifier in the header until someone asks for it
+  // (Codex's shape): a full-width placeholder row costs a whole line above every
+  // session list to say what one glyph says.
+  const [searchOpen, setSearchOpen] = useState(false)
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
   const [searchPending, setSearchPending] = useState(false)
   const [newSessionKbdFlash, setNewSessionKbdFlash] = useState(false)
@@ -561,14 +565,24 @@ export function ChatSidebar({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const trimmedQuery = searchQuery.trim()
 
-  // Hotkey (session.focusSearch) → focus the field once it's mounted.
+  // Hotkey (session.focusSearch) → reveal the field, then focus it once mounted.
   useEffect(() => {
-    const onFocus = () => searchInputRef.current?.focus({ preventScroll: true })
+    const onFocus = () => {
+      setSearchOpen(true)
+      searchInputRef.current?.focus({ preventScroll: true })
+    }
 
     window.addEventListener(SESSION_SEARCH_FOCUS_EVENT, onFocus)
 
     return () => window.removeEventListener(SESSION_SEARCH_FOCUS_EVENT, onFocus)
   }, [])
+
+  // First open mounts the field after the state lands, so focus from here.
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus({ preventScroll: true })
+    }
+  }, [searchOpen])
 
   // Flash the ⌘N hint full-opacity (no transition) for the press, so hitting
   // the shortcut visibly pings its affordance in the sidebar.
@@ -1601,6 +1615,29 @@ export function ChatSidebar({
     >
       <SidebarContent className="gap-0 overflow-hidden bg-transparent px-2.5">
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
+          <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
+            {/* The fork's own name, standing where Codex puts its own — the
+                titlebar carries the icon, this carries the word. */}
+            <span className="truncate text-lg font-semibold tracking-tight text-(--ui-text-primary)">Plankton</span>
+            {showSessionSections && (
+              <button
+                aria-expanded={searchOpen}
+                aria-label={s.searchAria}
+                className="grid size-6 shrink-0 place-items-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-(--ui-text-primary)"
+                data-slot="sidebar-search-toggle"
+                onClick={() => {
+                  setSearchOpen(!searchOpen)
+
+                  if (searchOpen) {
+                    setSearchQuery('')
+                  }
+                }}
+                type="button"
+              >
+                <Codicon name="search" size="0.875rem" />
+              </button>
+            )}
+          </div>
           <SidebarGroupContent>
             <SidebarMenu className="gap-px">
               {navItems.map(item => {
@@ -1737,12 +1774,18 @@ export function ChatSidebar({
 
         <SidebarStorageCorruptNotice />
 
-        {showSessionSections && (
-          <div className="shrink-0 px-2 pb-1 pt-1">
+        {showSessionSections && searchOpen && (
+          <div className="shrink-0 px-2 pt-1 pb-1">
             <SearchField
               aria-label={s.searchAria}
               inputRef={searchInputRef}
               onChange={setSearchQuery}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
+                  setSearchOpen(false)
+                  setSearchQuery('')
+                }
+              }}
               placeholder={s.searchPlaceholder}
               value={searchQuery}
             />
