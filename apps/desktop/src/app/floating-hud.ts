@@ -8,8 +8,12 @@
 // begins) drop the whole surface beneath the titlebar band so the search row
 // always clears the window controls. These HUDs portal to <body>, outside the
 // app-shell subtree that defines --titlebar-height, so the var needs a fallback.
+// Horizontally on the window, vertically about a quarter down it — the resting
+// place Codex's own palette uses. `top-3` pinned it to the titlebar, which reads
+// as a toolbar dropdown rather than a floating search surface; the narrow-window
+// fallback still hugs the titlebar, where there is no room to float.
 export const HUD_POSITION =
-  'fixed left-1/2 top-3 -translate-x-1/2 max-[44rem]:top-[calc(var(--titlebar-height,34px)+0.375rem)]'
+  'fixed left-1/2 top-[22vh] -translate-x-1/2 max-[44rem]:top-[calc(var(--titlebar-height,34px)+0.375rem)]'
 
 // Matches the app's borderless-overlay surface (dialog, keybind panel, …):
 // hairline `--stroke-nous` paired with the soft `--shadow-nous` float.
