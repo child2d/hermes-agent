@@ -438,6 +438,12 @@ export function TreeGroup({
   const titleOnly =
     !headerVisible && !node.minimized && !isEmpty && Boolean(topEdge) && shown.length === 1 && !pageHeader
 
+  // A title needs more air than a tab strip: 34px is the window-chrome minimum
+  // (it lines up with the traffic lights), not a title's own height. The extra
+  // 10px is the title band's vertical padding — one knob, shared by the header,
+  // the drag handle and the edit veil so none of them can drift.
+  const headerBandHeight = topEdge ? (titleOnly ? TITLEBAR_HEIGHT + 10 : TITLEBAR_HEIGHT) : undefined
+
   // Keep the activated tab — and, on the last one, the trailing "+" — inside
   // the strip's scroll window. Opening a tab past the right edge otherwise
   // left both the new tab and the button that made it out of view.
@@ -594,7 +600,11 @@ export function TreeGroup({
         <div
           className="relative flex min-w-0 shrink-0 bg-(--ui-sidebar-surface-background)"
           data-panel-header=""
-          style={topEdge ? { height: TITLEBAR_HEIGHT + (tabsBelowControls && headerVisible ? 28 : 0) } : undefined}
+          style={
+            headerBandHeight
+              ? { height: headerBandHeight + (tabsBelowControls && headerVisible ? 28 : 0) }
+              : undefined
+          }
         >
           {topEdge && (
             <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-left, 100%)' }} />
@@ -820,7 +830,7 @@ export function TreeGroup({
               )}
               data-window-drag-handle=""
               style={{
-                height: TITLEBAR_HEIGHT,
+                height: headerBandHeight ?? TITLEBAR_HEIGHT,
                 width: headerVisible && tabsInTitlebar ? TITLEBAR_DRAG_HANDLE_WIDTH : undefined
               }}
             />
@@ -937,7 +947,11 @@ export function TreeGroup({
             className="absolute inset-x-0 bottom-0 z-50 flex cursor-grab items-center justify-center outline-1 -outline-offset-2 outline-dashed backdrop-blur-[2px]"
             onPointerDown={e => startPaneDrag(activeId, e, undefined, undefined, tabText(activeId))}
             style={{
-              top: topEdge ? TITLEBAR_HEIGHT + (tabsBelowControls && headerVisible ? 28 : 0) : headerVisible ? 28 : 0,
+              top: topEdge
+                ? (headerBandHeight ?? TITLEBAR_HEIGHT) + (tabsBelowControls && headerVisible ? 28 : 0)
+                : headerVisible
+                  ? 28
+                  : 0,
               background:
                 'color-mix(in srgb, var(--ui-accent) 6%, color-mix(in srgb, var(--ui-bg-chrome) 55%, transparent))',
               outlineColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)'
