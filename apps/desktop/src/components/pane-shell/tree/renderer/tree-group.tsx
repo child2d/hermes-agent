@@ -430,6 +430,14 @@ export function TreeGroup({
   const headerVisible =
     !isEmpty && !verticalCollapse && (Boolean(node.minimized) || stripVisible || Boolean(pageHeader))
 
+  // A lone workspace pane keeps the titleband but loses the tab strip: there is
+  // nothing to switch between, no ✕ to carry (the workspace is uncloseable) and
+  // no "+" to mint a second tab. What stays is the name — the session title,
+  // sitting where a document window puts its title, so the band never reads as
+  // an empty strip. Multi-tab zones and pages keep their strip.
+  const titleOnly =
+    !headerVisible && !node.minimized && !isEmpty && Boolean(topEdge) && shown.length === 1 && !pageHeader
+
   // Keep the activated tab — and, on the last one, the trailing "+" — inside
   // the strip's scroll window. Opening a tab past the right edge otherwise
   // left both the new tab and the button that made it out of view.
@@ -781,6 +789,22 @@ export function TreeGroup({
                 )}
               </PaneTabStrip>
             </ZoneMenu>
+          ) : titleOnly ? (
+            // The whole title of a single-session window: status dot + name,
+            // no pill, no ✕, no "+". `[-webkit-app-region:drag]` keeps the
+            // band a window handle, which is what the strip's empty right side
+            // was doing before.
+            <div
+              className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch px-2 [-webkit-app-region:drag]"
+              data-panel-title-band=""
+            >
+              {paneChrome(paneFor(activeId)).tabLead ? (
+                <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).tabLead?.()}</span>
+              ) : null}
+              <span className="m-0 min-w-0 truncate text-xs font-medium text-(--ui-text-secondary)">
+                {tabLabel(activeId)}
+              </span>
+            </div>
           ) : null}
           {/* Tabs sharing the titlebar band are all `no-drag` and the strip's
               list scrolls, so a crowded strip can cover every draggable pixel

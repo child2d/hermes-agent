@@ -65,6 +65,15 @@ function stranded(shown: readonly StripPane[]): boolean {
 
   const [only] = shown
 
+  // The workspace is the one uncloseable main pane: there is no ✕ for the
+  // strip to carry, and the session behind it is always reachable from the
+  // sidebar. So a lone workspace is NOT stranded — it trades the tab strip for
+  // a plain title band (see TreeGroup), and hiding still has a way back
+  // (sidebar row, ⌘⌥T).
+  if (only.uncloseable && !only.collapsePane) {
+    return false
+  }
+
   return only.collapsePane || only.placement === 'main'
 }
 

@@ -11,8 +11,8 @@ const toolPanel = (): StripPane => ({ collapsePane: true, placement: 'bottom' })
 const sideChrome = (): StripPane => ({ collapsePane: false, placement: 'right' })
 
 describe('auto (no stored choice)', () => {
-  it('gives a lone workspace its strip so the tab and + stay on screen', () => {
-    expect(resolveTabStripVisible({ shown: [workspace()] })).toBe(true)
+  it('leaves a lone workspace without a strip — its title band carries the name', () => {
+    expect(resolveTabStripVisible({ shown: [workspace()] })).toBe(false)
     expect(resolveTabStripVisible({ shown: [workspace(), sideChrome()] })).toBe(true)
   })
 
@@ -44,10 +44,12 @@ describe('no dead zone', () => {
     expect(resolveTabStripVisible({ mode: 'never', shown: [toolPanel()] })).toBe(true)
   })
 
-  it('keeps the strip for a lone workspace even when the zone says never', () => {
-    // Workspace cannot leave the tree, but Close still empties it to a draft
-    // and + still opens a tab. Chromeless is a dead zone for those handles.
-    expect(resolveTabStripVisible({ mode: 'never', shown: [workspace()] })).toBe(true)
+  it('hides a lone workspace that says never — nothing is stranded there', () => {
+    // The workspace is uncloseable (no ✕ for the strip to carry), its session
+    // stays reachable from the sidebar, and ⌘⌥T is the documented way back. So
+    // a lone workspace is the one main pane that may go chromeless; the zone's
+    // title band still names it.
+    expect(resolveTabStripVisible({ mode: 'never', shown: [workspace()] })).toBe(false)
   })
 
   it('still hides a zone that cannot strand anything', () => {
@@ -90,12 +92,14 @@ describe('a full-page view', () => {
   })
 })
 
-// Every launch and client update lands on a lone workspace. Chromeless, that
-// layout had no session switcher, no Close and no "+" (#89350).
+// Every launch and client update lands on a lone workspace. It carries no tab
+// strip by default (the band shows the session title instead), but `always`
+// still brings the strip — and the + that mints a second tab — back.
 describe('a lone workspace', () => {
-  it('keeps its strip whatever the zone says', () => {
-    expect(resolveTabStripVisible({ shown: [workspace()] })).toBe(true)
-    expect(resolveTabStripVisible({ mode: 'never', shown: [workspace()] })).toBe(true)
+  it('shows no strip on auto or never, and honors always', () => {
+    expect(resolveTabStripVisible({ shown: [workspace()] })).toBe(false)
+    expect(resolveTabStripVisible({ mode: 'never', shown: [workspace()] })).toBe(false)
+    expect(resolveTabStripVisible({ mode: 'always', shown: [workspace()] })).toBe(true)
     // Standing side chrome never joins the tabbed workflow.
     expect(resolveTabStripVisible({ shown: [sideChrome()] })).toBe(false)
   })
@@ -129,8 +133,8 @@ describe('tabStripVisibleForZone', () => {
   afterEach(() => setTabStripDefault('auto'))
 
   it('reads placement, uncloseable and collapse off the contributions', () => {
-    expect(visible(['workspace'])).toBe(true)
-    expect(visible(['workspace'], 'never')).toBe(true)
+    expect(visible(['workspace'])).toBe(false)
+    expect(visible(['workspace'], 'never')).toBe(false)
     expect(visible(['tile:a'], 'never')).toBe(true)
     expect(visible(['terminal'], 'never')).toBe(true)
   })
@@ -140,7 +144,7 @@ describe('tabStripVisibleForZone', () => {
     expect(visible(['workspace'])).toBe(true)
 
     setTabStripDefault('never')
-    expect(visible(['workspace'])).toBe(true)
+    expect(visible(['workspace'])).toBe(false)
     expect(visible(['workspace', 'terminal'])).toBe(false)
   })
 
