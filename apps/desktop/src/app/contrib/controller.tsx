@@ -4,6 +4,7 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
+import { NO_PROJECT_ID, sessionBucketId } from '@/app/chat/sidebar/projects/workspace-groups'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { AskDirective } from '@/components/assistant-ui/ask-directive'
@@ -77,7 +78,7 @@ import {
 import { $profiles } from '@/store/profile'
 import { $profileRailVisible } from '@/store/profile-rail-prefs'
 import { runExportProfileFlow, runImportProfileFlow } from '@/store/profile-share'
-import { $projectOwnerBySessionId, $projectTree } from '@/store/projects'
+import { $projectOwnerBySessionId, $projects, $projectTree } from '@/store/projects'
 import {
   $reviewOpen,
   $reviewScopeCwd,
@@ -539,8 +540,20 @@ const syncWorkspaceTitle = () => {
       // that belongs to no project or path shows no glyph at all, so the title
       // is just the name.
       titleLead: () => {
-        const ownerId = selected ? $projectOwnerBySessionId.get().get(selected) : undefined
-        const project = ownerId ? $projectTree.get().find(node => node.id === ownerId) : undefined
+        if (!stored) {
+          return null
+        }
+
+        // Same filing the sidebar row uses: owners are keyed by the LIVE session
+        // id (and by every id in a compression chain), so read the bucket off
+        // the row — not off the stored/lineage id the workspace is selected by.
+        const bucket = sessionBucketId(stored, $projects.get(), $projectOwnerBySessionId.get())
+
+        if (!bucket || bucket === NO_PROJECT_ID) {
+          return null
+        }
+
+        const project = $projectTree.get().find(node => node.id === bucket)
 
         if (!project || project.isNoProject || !project.path) {
           return null
