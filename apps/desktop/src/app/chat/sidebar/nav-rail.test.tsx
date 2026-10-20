@@ -25,13 +25,13 @@ const renderRail = (items: SidebarNavItem[]) =>
   )
 
 describe('SidebarNavRail', () => {
-  it('draws a lucide SVG at 18px for a known codicon name', () => {
+  it('draws a lucide SVG at 20px for a known codicon name', () => {
     const { container } = renderRail([navItem({ codicon: 'symbol-misc' })])
 
     const svg = container.querySelector('svg')
 
     expect(svg).not.toBeNull()
-    expect(svg?.getAttribute('width')).toBe('18')
+    expect(svg?.getAttribute('width')).toBe('20')
     expect(container.querySelector('.codicon')).toBeNull()
   })
 

@@ -210,8 +210,9 @@ export const MINIMIZED_TRACK = '1.75rem'
 
 /** …unless the collapsed pane keeps working chrome (the chat sidebar's nav
  *  rail): then the strip is a glyph column, and it must match the rail's
- *  expanded width or every icon shifts sideways the moment the list folds. */
-export const MINIMIZED_RAIL_TRACK = '2.75rem'
+ *  expanded width (`RAIL_SHELL`'s `w-13`) or every icon shifts sideways the
+ *  moment the list folds. */
+export const MINIMIZED_RAIL_TRACK = '3.25rem'
 
 /**
  * The strip thickness for a minimized zone. Only a SINGLE-pane zone can widen:

@@ -43,16 +43,20 @@ const RAIL_ICONS: Record<string, SidebarNavItem['icon']> = {
 const railIcon = (item: SidebarNavItem) =>
   (item.codicon ? RAIL_ICONS[item.codicon] : undefined) ?? item.icon
 
-/** The rail's shell: a fixed 44px column, padded UP UNDER the titlebar by the
+/** The rail's shell: a fixed 52px column, padded UP UNDER the titlebar by the
  *  same expression the sidebar uses, one hairline on the list's side. Shared by
- *  the expanded rail and the collapsed strip's copy so the two cannot drift. */
+ *  the expanded rail and the collapsed strip's copy so the two cannot drift —
+ *  and its WIDTH is restated in two core places that must move with it:
+ *  `tree-group.tsx` (the collapsed strip's `w-*`) and `track-model.ts`
+ *  (`MINIMIZED_RAIL_TRACK`). */
 const RAIL_SHELL =
-  'flex w-11 shrink-0 flex-col items-center gap-0.5 border-r border-(--sidebar-edge-border) px-1.5 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]'
+  'flex w-13 shrink-0 flex-col items-center gap-1.5 border-r border-(--sidebar-edge-border) px-2 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]'
 
-/** One nav button — an 18px icon in a 28px box. The rail is icon-only, so the
- *  icon IS the label, and it is deliberately larger than a titled row's. */
+/** One nav button — a 20px icon in a 32px box, 9.5px of air on both sides once
+ *  the rail's width and hairline are counted. The rail is icon-only, so the icon
+ *  IS the label, and it is deliberately larger than a titled row's. */
 const RAIL_BUTTON =
-  'grid size-7 shrink-0 place-items-center rounded-md border border-transparent text-(--ui-text-tertiary) transition-colors duration-100 ease-out [-webkit-app-region:no-drag] hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none'
+  'grid size-8 shrink-0 place-items-center rounded-md border border-transparent text-(--ui-text-tertiary) transition-colors duration-100 ease-out [-webkit-app-region:no-drag] hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none'
 
 const RAIL_BUTTON_ACTIVE =
   'border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-foreground shadow-none'
@@ -61,8 +65,8 @@ const RAIL_BUTTON_ACTIVE =
  *  width/height, and the `size-*` class keeps the box (and the collapsed copy)
  *  identical. Do not size a Codicon this way — a codicon glyph is a FONT and
  *  only `font-size` moves it (see `Codicon`'s `size` prop). */
-const RAIL_GLYPH = 'size-4.5 shrink-0'
-const RAIL_GLYPH_PX = 18
+const RAIL_GLYPH = 'size-5 shrink-0'
+const RAIL_GLYPH_PX = 20
 
 export function SidebarNavRail({
   isActive,

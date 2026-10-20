@@ -601,7 +601,7 @@ export function TreeGroup({
               'flex h-full min-h-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
               // A pane that keeps working chrome while collapsed (the sidebar's
               // nav rail) needs the width of a glyph column, not a tab's.
-              collapsedRail ? 'w-11 min-w-11' : 'w-7 min-w-7',
+              collapsedRail ? 'w-13 min-w-13' : 'w-7 min-w-7',
               // Strip line faces the content the zone collapsed away from.
               railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
             )}
