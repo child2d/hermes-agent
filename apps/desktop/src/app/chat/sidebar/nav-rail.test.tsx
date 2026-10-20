@@ -25,13 +25,15 @@ const renderRail = (items: SidebarNavItem[]) =>
   )
 
 describe('SidebarNavRail', () => {
-  it('draws a lucide SVG at 20px for a known codicon name', () => {
+  it('draws a lucide SVG at 20px, with the rail line weight', () => {
     const { container } = renderRail([navItem({ codicon: 'symbol-misc' })])
 
     const svg = container.querySelector('svg')
 
     expect(svg).not.toBeNull()
     expect(svg?.getAttribute('width')).toBe('20')
+    // A thinner line than lucide's default 2 — this is what "icons look heavy" moves.
+    expect(svg?.getAttribute('stroke-width')).toBe('1.5')
     expect(container.querySelector('.codicon')).toBeNull()
   })
 

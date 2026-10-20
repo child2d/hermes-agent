@@ -133,8 +133,10 @@ export interface SidebarNavItem extends Tiered {
   id: SidebarNavId | (string & {})
   label: string
   /** `size` is the glyph size in px (Codicon renders a font glyph, so width/
-   *  height alone would not scale it; SVG icons take it as width/height). */
-  icon: React.ComponentType<{ className?: string; size?: number | string }>
+   *  height alone would not scale it; SVG icons take it as width/height).
+   *  `strokeWidth` is the SVG line weight — a codicon ignores it, so a surface
+   *  must only pass it to an icon that actually draws strokes. */
+  icon: React.ComponentType<{ className?: string; size?: number | string; strokeWidth?: number | string }>
   /** The codicon NAME the icon was built from (`'comment'`, `'hubot'`, …) or a
    *  contribution's `data.codicon`. Surfaces that draw a different icon family
    *  resolve their own glyph from it; the row itself still renders `icon`. */

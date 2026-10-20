@@ -40,8 +40,14 @@ const RAIL_ICONS: Record<string, SidebarNavItem['icon']> = {
   hubot: Bot // 机器人（插件）
 }
 
-const railIcon = (item: SidebarNavItem) =>
-  (item.codicon ? RAIL_ICONS[item.codicon] : undefined) ?? item.icon
+/** A rail glyph: lucide where the item's codicon name has an equivalent (the
+ *  usual case), the item's own icon otherwise. `svg` says which — a stroke weight
+ *  must reach an SVG only, or it lands on a Codicon's `<i>` as a stray attribute. */
+function railIcon(item: SidebarNavItem) {
+  const lucide = item.codicon ? RAIL_ICONS[item.codicon] : undefined
+
+  return { Icon: lucide ?? item.icon, svg: Boolean(lucide) }
+}
 
 /** The rail's shell: a fixed 52px column, padded UP UNDER the titlebar by the
  *  same expression the sidebar uses, one hairline on the list's side. Shared by
@@ -68,6 +74,11 @@ const RAIL_BUTTON_ACTIVE =
 const RAIL_GLYPH = 'size-5 shrink-0'
 const RAIL_GLYPH_PX = 20
 
+/** Line weight, in the icon's own 24-unit viewBox. lucide's default (2) renders
+ *  ≈1.7 CSS px at 20px and reads heavy on an icon-only surface; 1.5 lands at
+ *  ≈1.25 px — the weight the app's hand-drawn SVGs already use. */
+const RAIL_STROKE = 1.5
+
 export function SidebarNavRail({
   isActive,
   items,
@@ -88,7 +99,7 @@ export function SidebarNavRail({
       {items.map(item => {
         const active = isActive(item)
         const label = labelFor(item)
-        const Icon = railIcon(item)
+        const { Icon, svg } = railIcon(item)
 
         return (
           <button
@@ -101,7 +112,7 @@ export function SidebarNavRail({
             onClick={() => onNavigate(item)}
             type="button"
           >
-            <Icon className={RAIL_GLYPH} size={RAIL_GLYPH_PX} />
+            <Icon className={RAIL_GLYPH} size={RAIL_GLYPH_PX} {...(svg ? { strokeWidth: RAIL_STROKE } : {})} />
           </button>
         )
       })}
@@ -136,7 +147,7 @@ export function CollapsedSidebarRail() {
         // Rail items are page-backed by construction (new session stays in the
         // list), so the path IS the active state — no view lookup needed here.
         const active = Boolean(item.route) && pathname === item.route
-        const Icon = railIcon(item)
+        const { Icon, svg } = railIcon(item)
 
         return (
           <button
@@ -155,7 +166,7 @@ export function CollapsedSidebarRail() {
             }}
             type="button"
           >
-            <Icon className={RAIL_GLYPH} size={RAIL_GLYPH_PX} />
+            <Icon className={RAIL_GLYPH} size={RAIL_GLYPH_PX} {...(svg ? { strokeWidth: RAIL_STROKE } : {})} />
           </button>
         )
       })}
