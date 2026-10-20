@@ -548,6 +548,10 @@ export function TreeGroup({
     targetPane
   }
 
+  // A pane that keeps working chrome while collapsed (the sidebar's nav rail).
+  // Single-pane zones only: a strip holding several tabs belongs to none of them.
+  const collapsedRail = shown.length === 1 ? paneChrome(paneFor(activeId)).collapsedRail : undefined
+
   return (
     <div
       className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--ui-editor-surface-background)"
@@ -566,11 +570,17 @@ export function TreeGroup({
       }}
       ref={ref}
       style={
-        wcOverlap
-          ? { paddingTop: wcOverlap.y + wcOverlap.height }
-          : topEdge && verticalCollapse
-            ? { paddingTop: TITLEBAR_HEIGHT }
-            : undefined
+        // A strip that keeps the rail pads ITSELF up under the titlebar (the
+        // rail's own `pt-[calc(var(--titlebar-height)…)]`), so the zone must not
+        // pad a second time — that is what keeps a glyph from moving a pixel
+        // when the list folds.
+        collapsedRail
+          ? undefined
+          : wcOverlap
+            ? { paddingTop: wcOverlap.y + wcOverlap.height }
+            : topEdge && verticalCollapse
+              ? { paddingTop: TITLEBAR_HEIGHT }
+              : undefined
       }
     >
       {wcOverlap && (
@@ -591,15 +601,18 @@ export function TreeGroup({
               'flex h-full min-h-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
               // A pane that keeps working chrome while collapsed (the sidebar's
               // nav rail) needs the width of a glyph column, not a tab's.
-              shown.length === 1 && paneChrome(paneFor(activeId)).collapsedRail
-                ? 'w-11 min-w-11'
-                : 'w-7 min-w-7',
+              collapsedRail ? 'w-11 min-w-11' : 'w-7 min-w-7',
               // Strip line faces the content the zone collapsed away from.
               railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
             )}
             onClick={() => restoreTreePane(activeId)}
             title={t.zones.restore}
           >
+            {/* The rail comes FIRST: it is working chrome, so it keeps the corner
+                it occupies while the list is open and the restore tab moves below
+                it instead. Padding is the rail's own (the zone adds none for this
+                case) — that is what makes the two states pixel-identical. */}
+            {collapsedRail?.()}
             <div
               className="flex min-h-0 flex-col overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               role="tablist"
@@ -628,7 +641,6 @@ export function TreeGroup({
                 )
               })}
             </div>
-            {shown.length === 1 && paneChrome(paneFor(activeId)).collapsedRail?.()}
           </div>
         </ZoneMenu>
       )}
