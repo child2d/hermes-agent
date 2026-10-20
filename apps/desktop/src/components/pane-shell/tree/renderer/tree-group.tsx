@@ -408,13 +408,33 @@ export function TreeGroup({
   // it is the resolver's call, not this component's — see strip-visibility.ts
   // for the precedence. The same resolver answers for the toggle command, so
   // the keystroke and the screen always agree about which way "toggle" points.
-  const stripVisible = tabStripVisibleForZone({
+  const stripWanted = tabStripVisibleForZone({
     active: activeId,
     isCollapsePane,
     mode: node.tabStrip,
     paneFor,
     shown
   })
+
+  // The MAIN zone (the one holding the uncloseable workspace) names the window
+  // in a title band instead of a tab strip — for EVERY pane it can show, so
+  // switching a tab, a session or a page renames the band instead of leaving the
+  // previous name behind. Excluded by construction: the SIDEBAR's zone (it has
+  // no uncloseable pane, and painting a title there put a second one over the
+  // sidebar) and pages that bring their own header (`headerVeto`). An explicit
+  // `tabStrip: 'always'` wins, so the strip is still reachable as an escape
+  // hatch (⌘⌥T / 设置›外观›标签栏).
+  const activeChrome = paneChrome(paneFor(activeId))
+  const mainZone = shown.some(id => Boolean(paneChrome(paneFor(id)).uncloseable))
+  const titleBand =
+    Boolean(topEdge) &&
+    !node.minimized &&
+    !isEmpty &&
+    mainZone &&
+    !pageHeader &&
+    !activeChrome.headerVeto &&
+    node.tabStrip !== 'always'
+  const stripVisible = stripWanted && !titleBand
 
   // A group collapses ALONG its parent split's axis. In a row that means the
   // WIDTH collapses — a full-width horizontal header would strand a tall
@@ -429,27 +449,7 @@ export function TreeGroup({
   // A minimized group IS its header, so it shows one regardless.
   const headerVisible =
     !isEmpty && !verticalCollapse && (Boolean(node.minimized) || stripVisible || Boolean(pageHeader))
-
-  // A lone workspace pane keeps the titleband but loses the tab strip: there is
-  // nothing to switch between, no ✕ to carry (the workspace is uncloseable) and
-  // no "+" to mint a second tab. What stays is the name — the session title,
-  // sitting where a document window puts its title, so the band never reads as
-  // an empty strip. Multi-tab zones and pages keep their strip.
-  // ONLY the workspace pane grows a title band: it is the one uncloseable main
-  // pane, so it cannot be stranded and it owns the window's name. Without the
-  // uncloseable test the SIDEBAR's zone (also top-edge, also a lone pane, also
-  // chromeless) painted a second title over the sidebar; without the headerVeto
-  // test a page route kept the last session's name in the band.
-  const activeChrome = paneChrome(paneFor(activeId))
-  const titleOnly =
-    !headerVisible &&
-    !node.minimized &&
-    !isEmpty &&
-    Boolean(topEdge) &&
-    shown.length === 1 &&
-    !pageHeader &&
-    Boolean(activeChrome.uncloseable) &&
-    !activeChrome.headerVeto
+  const titleOnly = titleBand && !headerVisible
 
   // A title needs more air than a tab strip: 34px is the window-chrome minimum
   // (it lines up with the traffic lights), not a title's own height. The extra
