@@ -31,15 +31,21 @@ import { sidebarRailItems, useSidebarNavItems } from './nav-model'
 const RAIL_SHELL =
   'flex w-11 shrink-0 flex-col items-center gap-0.5 border-r border-(--sidebar-edge-border) px-1.5 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]'
 
-/** One nav button — 18px glyph in a 28px box. The rail is icon-only, so the
- *  glyph IS the label: a step up from the 16px the titled rows use. */
+/** One nav button — an 18px icon in a 28px box. The rail is icon-only, so the
+ *  icon IS the label, and it is deliberately larger than a titled row's: a
+ *  Codicon renders at `0.875em` of its inherited text, i.e. ≈12px in a 14px row. */
 const RAIL_BUTTON =
   'grid size-7 shrink-0 place-items-center rounded-md border border-transparent text-(--ui-text-tertiary) transition-colors duration-100 ease-out [-webkit-app-region:no-drag] hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none'
 
 const RAIL_BUTTON_ACTIVE =
   'border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-foreground shadow-none'
 
+/** The icon's box AND its size. For a Codicon this is a FONT glyph whose size
+ *  comes from `font-size` (`.codicon{font-size:.875em}`): a `size-*` class alone
+ *  only sets width/height and leaves the glyph at its inherited size — which is
+ *  why the rail passed `size` (→ inline font-size) as well. */
 const RAIL_GLYPH = 'size-4.5 shrink-0'
+const RAIL_GLYPH_PX = 18
 
 export function SidebarNavRail({
   isActive,
@@ -73,7 +79,7 @@ export function SidebarNavRail({
             onClick={() => onNavigate(item)}
             type="button"
           >
-            <item.icon className={RAIL_GLYPH} />
+            <item.icon className={RAIL_GLYPH} size={RAIL_GLYPH_PX} />
           </button>
         )
       })}
@@ -126,7 +132,7 @@ export function CollapsedSidebarRail() {
             }}
             type="button"
           >
-            <item.icon className={RAIL_GLYPH} />
+            <item.icon className={RAIL_GLYPH} size={RAIL_GLYPH_PX} />
           </button>
         )
       })}

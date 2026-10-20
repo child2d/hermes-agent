@@ -132,7 +132,9 @@ export interface SidebarNavItem extends Tiered {
   /** Built-in view id, or a contributed row's namespaced contribution id. */
   id: SidebarNavId | (string & {})
   label: string
-  icon: React.ComponentType<{ className?: string }>
+  /** `size` is the glyph size in px (Codicon renders a font glyph, so width/
+   *  height alone would not scale it; SVG icons take it as width/height). */
+  icon: React.ComponentType<{ className?: string; size?: number | string }>
   route?: string
   action?: 'new-session'
   /** Keybind action id — when set, the tooltip shows the keybind hint. */
