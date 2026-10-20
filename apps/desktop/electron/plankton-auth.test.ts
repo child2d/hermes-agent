@@ -143,14 +143,22 @@ afterEach(async () => {
 function makeAuth(
   opts: { issuer?: string; secret?: string; sessionDir?: string; timeoutMs?: number } = {}
 ): ReturnType<typeof createPlanktonAuth> {
-  const config = resolvePlanktonSsoConfig({
-    env: {
-      PLANKTON_OIDC_CLIENT_ID: 'plankton',
-      PLANKTON_OIDC_ISSUER: opts.issuer ?? stub?.url ?? 'http://127.0.0.1:1',
-      PLANKTON_OIDC_REDIRECT_URI: 'http://127.0.0.1:0/callback',
-      ...(opts.secret === undefined ? { PLANKTON_OIDC_CLIENT_SECRET: 'test-client-secret' } : { PLANKTON_OIDC_CLIENT_SECRET: opts.secret })
-    }
+  // Secret resolution goes through the real resolver (that path is under test).
+  const resolved = resolvePlanktonSsoConfig({
+    env:
+      opts.secret === undefined
+        ? { PLANKTON_OIDC_CLIENT_SECRET: 'test-client-secret' }
+        : { PLANKTON_OIDC_CLIENT_SECRET: opts.secret },
+    stateDir: null
   })
+
+  // issuer/redirect are PINNED in production (a local file must not choose the
+  // IdP), so the test double overrides them directly to reach a loopback stub.
+  const config = {
+    ...resolved,
+    issuer: opts.issuer ?? stub?.url ?? 'http://127.0.0.1:1',
+    redirectUri: 'http://127.0.0.1:0/callback'
+  }
 
   return createPlanktonAuth({
     resolveConfig: () => config,

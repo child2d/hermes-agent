@@ -146,6 +146,17 @@ module.exports = {
           // pack script guarantees the file exists (a keyless placeholder when
           // no secret seed is present), so this entry never dangles.
           { from: 'build/enterprise/model-seed.json', to: 'enterprise/model-seed.json' },
+          // SSO client secret (plankton only) so a fresh install logs in with
+          // no setup. Staged by the pack script from the build machine's local
+          // plankton-state file; `existsSync` keeps a secret-less build (and
+          // every upstream variant) packable — the app then asks for
+          // provisioning, exactly as before. NOTE: this ships the SECRET inside
+          // the artifact. What it buys is zero-config login; what it must never
+          // buy is trust — the identity source is pinned in code and the
+          // backend must validate the token, because a bundle is readable.
+          ...(fs.existsSync(path.join(__dirname, 'build/enterprise/sso-config.json'))
+            ? [{ from: 'build/enterprise/sso-config.json', to: 'enterprise/sso-config.json' }]
+            : []),
           // The enterprise plugin payload (agent half + dashboard backend +
           // desktop half). Committed in-repo; first launch copies it into
           // <HERMES_HOME>/plugins + <HERMES_HOME>/desktop-plugins (see

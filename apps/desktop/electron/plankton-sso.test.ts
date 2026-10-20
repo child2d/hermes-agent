@@ -78,6 +78,61 @@ describe('resolvePlanktonSsoConfig — source precedence, secret hygiene', () =>
     expect(config.ok).toBe(false)
   })
 
+  it('pins the identity source: issuer / clientId / redirectUri are not configurable', () => {
+    // A machine-local file (or env) that points the app at another IdP would let
+    // its writer mint an identity: the `userinfo` answer would come from them.
+    // Only the secret is injectable; the three identity fields are constants.
+    const config = resolvePlanktonSsoConfig({
+      env: {
+        PLANKTON_OIDC_CLIENT_ID: 'someone-else',
+        PLANKTON_OIDC_ISSUER: 'https://evil.example',
+        PLANKTON_OIDC_REDIRECT_URI: 'http://127.0.0.1:1/callback'
+      },
+      stateDir: '/state',
+      readFile: readerFor({
+        '/state/sso-config.local.json': {
+          clientId: 'someone-else',
+          clientSecret: 'file-secret',
+          issuer: 'https://evil.example',
+          redirectUri: 'http://127.0.0.1:1/callback'
+        }
+      })
+    })
+
+    expect(config.clientSecret).toBe('file-secret')
+    expect(config.clientId).toBe(PLANKTON_SSO_DEFAULTS.clientId)
+    expect(config.issuer).toBe(PLANKTON_SSO_DEFAULTS.issuer)
+    expect(config.redirectUri).toBe(PLANKTON_SSO_DEFAULTS.redirectUri)
+  })
+
+  it('a packaged build reads the SHIPPED secret (zero-config), state file still wins', () => {
+    const bundled = resolvePlanktonSsoConfig({
+      env: {},
+      stateDir: '/state',
+      bundledDir: '/app/Resources/enterprise',
+      isPackaged: true,
+      readFile: readerFor({ '/app/Resources/enterprise/sso-config.json': { clientSecret: 'shipped' } })
+    })
+
+    expect(bundled.clientSecret).toBe('shipped')
+    expect(bundled.clientSecretSource).toBe('bundled')
+    expect(bundled.ok).toBe(true)
+
+    const overridden = resolvePlanktonSsoConfig({
+      env: {},
+      stateDir: '/state',
+      bundledDir: '/app/Resources/enterprise',
+      isPackaged: true,
+      readFile: readerFor({
+        '/state/sso-config.local.json': { clientSecret: 'machine' },
+        '/app/Resources/enterprise/sso-config.json': { clientSecret: 'shipped' }
+      })
+    })
+
+    expect(overridden.clientSecret).toBe('machine')
+    expect(overridden.clientSecretSource).toBe('state')
+  })
+
   it('treats an unparseable / non-object config file as absent', () => {
     const config = resolvePlanktonSsoConfig({
       env: {},

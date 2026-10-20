@@ -47,12 +47,23 @@ export const PLANKTON_SSO_DEFAULTS = Object.freeze({
 /** The local file name a state-dir config may use (same shape as the old shell). */
 export const PLANKTON_SSO_CONFIG_FILE = 'sso-config.local.json'
 
-/** Env var per config key — the highest-precedence source, secret included. */
+/** The SHIPPED default beside the app (`Resources/enterprise/`): what makes a
+ *  fresh install log in with no setup. Only `clientSecret` is read from it —
+ *  the identity source stays pinned in code. */
+export const PLANKTON_SSO_BUNDLED_FILE = 'sso-config.json'
+
+/**
+ * The ONE thing a machine may supply: the client secret.
+ *
+ * `issuer` / `clientId` / `redirectUri` are NOT configurable — not by env, not
+ * by the local JSON. Whoever can write that file could otherwise point the app
+ * at their own IdP, hand themselves a token, and be trusted by a `userinfo`
+ * answer they wrote: a self-issued identity. Pinning the identity source in
+ * code is what closes that, and it is the part that actually matters — hiding
+ * the secret does not (an Electron bundle is a readable archive).
+ */
 export const PLANKTON_SSO_ENV_KEYS = Object.freeze({
-  clientId: 'PLANKTON_OIDC_CLIENT_ID',
-  clientSecret: 'PLANKTON_OIDC_CLIENT_SECRET',
-  issuer: 'PLANKTON_OIDC_ISSUER',
-  redirectUri: 'PLANKTON_OIDC_REDIRECT_URI'
+  clientSecret: 'PLANKTON_OIDC_CLIENT_SECRET'
 })
 
 export const PLANKTON_LOGIN_CHANNELS = Object.freeze(['feishu', 'password'] as const)
@@ -64,7 +75,7 @@ export interface PlanktonSsoConfig {
   issuer: string
   redirectUri: string
   /** Where the client_secret came from — lets the UI name the exact fix. */
-  clientSecretSource: 'env' | 'state' | 'none'
+  clientSecretSource: 'env' | 'state' | 'bundled' | 'none'
   clientSecretFile: string | null
   /** Candidate files the resolver consulted, in precedence order. */
   candidateFiles: string[]
@@ -78,6 +89,10 @@ export interface ResolvePlanktonSsoOptions {
   stateDir?: string | null
   /** Test/dev fallback dir. Ignored when `isPackaged` is true. */
   configDir?: string | null
+  /** `<Resources>/enterprise`: the SHIPPED default (zero-config first login).
+   *  Read from the artifact, so a packaged build works out of the box; the
+   *  state-dir file above still wins, so a machine can override it. */
+  bundledDir?: string | null
   isPackaged?: boolean
   /** Injected for tests; defaults to fs.readFileSync. */
   readFile?: (file: string, encoding: string) => string
@@ -106,12 +121,14 @@ function readConfig(
 /**
  * Resolve the Plankton SSO client config.
  *
- * Precedence per key: env → `<stateDir>/sso-config.local.json` → (dev only)
- * `<configDir>/sso-config.local.json` → built-in default. A packaged build
- * NEVER reads a bundled config file: the client_secret must stay out of the
- * asar (the old shell's hard-won rule — a build machine without the local file
- * produced an app that could not log in, silently). The secret value is never
- * logged or returned anywhere but this struct.
+ * The secret resolves env → `<stateDir>/sso-config.local.json` → (dev only)
+ * `<configDir>/sso-config.local.json`. Everything else (issuer, client id,
+ * redirect) is a CONSTANT: a packaged build must not let a machine-local file
+ * decide where identity comes from. A packaged build never reads a bundled
+ * config file either — the secret stays out of the asar (the old shell's
+ * hard-won rule: a build machine without the local file produced an app that
+ * could not log in, silently). The secret value is never logged, and is
+ * returned only in this struct.
  */
 export function resolvePlanktonSsoConfig(
   options: ResolvePlanktonSsoOptions = {}
@@ -131,6 +148,10 @@ export function resolvePlanktonSsoConfig(
     candidates.push({ source: 'bundled', file: `${options.configDir}/${PLANKTON_SSO_CONFIG_FILE}` })
   }
 
+  if (options.bundledDir) {
+    candidates.push({ source: 'bundled', file: `${options.bundledDir}/${PLANKTON_SSO_BUNDLED_FILE}` })
+  }
+
   const cache = new Map<string, Record<string, unknown>>()
 
   const dataOf = (file: string): Record<string, unknown> => {
@@ -141,40 +162,36 @@ export function resolvePlanktonSsoConfig(
     return cache.get(file) as Record<string, unknown>
   }
 
-  const pick = (
-    key: keyof typeof PLANKTON_SSO_ENV_KEYS
-  ): { value: string; source: 'env' | 'state' | 'bundled' | 'none'; file: string | null } => {
-    const fromEnv = trimmed(env[PLANKTON_SSO_ENV_KEYS[key]])
+  const secretFromEnv = trimmed(env[PLANKTON_SSO_ENV_KEYS.clientSecret])
 
-    if (fromEnv) {
-      return { value: fromEnv, source: 'env', file: null }
-    }
+  let clientSecret = secretFromEnv
+  let secretSource: 'env' | 'state' | 'bundled' | 'none' = secretFromEnv ? 'env' : 'none'
+  let secretFile: string | null = null
 
+  if (!secretFromEnv) {
     for (const candidate of candidates) {
-      const value = trimmed(dataOf(candidate.file)[key])
+      const value = trimmed(dataOf(candidate.file).clientSecret)
 
       if (value) {
-        return { value, source: candidate.source, file: candidate.file }
+        clientSecret = value
+        secretSource = candidate.source
+        secretFile = candidate.file
+        break
       }
     }
-
-    return { value: '', source: 'none', file: null }
   }
 
-  const clientId = pick('clientId')
-  const clientSecret = pick('clientSecret')
-  const issuer = pick('issuer')
-  const redirectUri = pick('redirectUri')
-
   return {
-    clientId: clientId.value || PLANKTON_SSO_DEFAULTS.clientId,
-    clientSecret: clientSecret.value,
-    issuer: (issuer.value || PLANKTON_SSO_DEFAULTS.issuer).replace(/\/+$/, ''),
-    redirectUri: redirectUri.value || PLANKTON_SSO_DEFAULTS.redirectUri,
-    clientSecretSource: clientSecret.source === 'bundled' ? 'state' : clientSecret.source,
-    clientSecretFile: clientSecret.source === 'bundled' ? candidates[0]?.file ?? null : clientSecret.file,
+    // Constants, not config: see PLANKTON_SSO_ENV_KEYS above. A file that
+    // carries these keys is ignored for them (only `clientSecret` is read).
+    clientId: PLANKTON_SSO_DEFAULTS.clientId,
+    clientSecret,
+    issuer: PLANKTON_SSO_DEFAULTS.issuer,
+    redirectUri: PLANKTON_SSO_DEFAULTS.redirectUri,
+    clientSecretSource: secretSource,
+    clientSecretFile: secretFile,
     candidateFiles: candidates.map(candidate => candidate.file),
-    ok: Boolean(clientSecret.value)
+    ok: Boolean(clientSecret)
   }
 }
 
@@ -182,7 +199,7 @@ export function resolvePlanktonSsoConfig(
 export function planktonMissingSecretMessage(candidateFiles: string[] = []): string {
   const where = candidateFiles[0] || `<应用数据根>/state/${PLANKTON_SSO_CONFIG_FILE}`
 
-  return `未配置 plankton client_secret：请写入 ${where}（或设环境变量 ${PLANKTON_SSO_ENV_KEYS.clientSecret}）`
+  return `未配置 plankton client_secret（客户端凭证）：请把 IT 提供的 provisioning 文件放到 ${where}（或设环境变量 ${PLANKTON_SSO_ENV_KEYS.clientSecret}）后重新检查登录状态`
 }
 
 /** Whitelist a login channel fail-closed: anything but 'password' is the Feishu flow. */

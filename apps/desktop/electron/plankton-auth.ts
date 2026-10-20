@@ -426,6 +426,9 @@ export function planktonConfigResolver(options: {
   stateDir: string
   configDir: string
   isPackaged: boolean
+  /** `<Resources>/enterprise` — the shipped secret that makes a fresh install
+   *  log in with no setup. Absent in dev and in a secret-less build. */
+  bundledDir?: string | null
   env?: NodeJS.ProcessEnv
 }): () => PlanktonSsoConfig {
   return () =>
@@ -433,6 +436,7 @@ export function planktonConfigResolver(options: {
       env: options.env ?? process.env,
       stateDir: options.stateDir,
       configDir: options.configDir,
+      bundledDir: options.bundledDir ?? null,
       isPackaged: options.isPackaged
     })
 }

@@ -1439,6 +1439,12 @@ function getPlanktonAuth(): PlanktonAuth {
         // in dev (`electron .` → apps/desktop) and the asar path when packaged,
         // and needs no import.meta/__dirname shim.
         configDir: app.getAppPath(),
+        // Zero-config login: the secret ships beside the app in
+        // `Resources/enterprise/sso-config.json` (staged by
+        // scripts/plankton-pack.sh). Only the SECRET is read from it — the
+        // issuer/client/redirect stay pinned in plankton-sso.ts, so a shipped
+        // file cannot point the app at another IdP.
+        bundledDir: app.isPackaged ? path.join(process.resourcesPath, 'enterprise') : null,
         isPackaged: app.isPackaged
       }),
       sessionDir: path.join(stateDir, 'sso'),

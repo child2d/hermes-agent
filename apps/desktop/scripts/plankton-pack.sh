@@ -48,6 +48,37 @@ JSON
   echo "[plankton-pack] wrote keyless seed placeholder: $SEED"
 fi
 
+# --- SSO client secret (zero-config first login) ------------------------------
+# The artifact carries Resources/enterprise/sso-config.json so a colleague who
+# installs the dmg can log in without provisioning anything. The secret is a
+# tenant credential: it lives OUTSIDE the repo (build/ is gitignored) and is
+# staged here from this machine's local plankton-state file — or from
+# $PLANKTON_SSO_SECRET_FILE. Shipping it means anyone who has the dmg can read
+# it; that is the accepted trade for zero-config. What must NOT be in that file
+# is the identity source: issuer / client id / redirect are pinned in
+# electron/plankton-sso.ts and any such keys here are ignored.
+SSO_DEST="build/enterprise/sso-config.json"
+SSO_SRC="${PLANKTON_SSO_SECRET_FILE:-}"
+if [ -z "$SSO_SRC" ]; then
+  for candidate in \
+    "$HOME/Library/Application Support/Plankton/plankton-state/sso-config.local.json" \
+    "$HOME/.plankton/engine/home/plankton-state/sso-config.local.json"; do
+    if [ -f "$candidate" ]; then
+      SSO_SRC="$candidate"
+      break
+    fi
+  done
+fi
+if [ -n "$SSO_SRC" ] && [ -f "$SSO_SRC" ]; then
+  cp -f "$SSO_SRC" "$SSO_DEST"
+  chmod 600 "$SSO_DEST"
+  echo "[plankton-pack] staged SSO secret: $SSO_SRC -> $SSO_DEST (ships inside the artifact)"
+else
+  rm -f "$SSO_DEST"
+  echo "[plankton-pack] WARNING: no SSO secret staged (set PLANKTON_SSO_SECRET_FILE)." >&2
+  echo "[plankton-pack]          Recipients will have to provision sso-config.local.json by hand." >&2
+fi
+
 # --- bundled shaoke-cli (per-OS/arch) ----------------------------------------
 # The artifact carries a CLI copy that first launch drops into
 # <HERMES_HOME>/bin (see electron/enterprise-cli.ts). The binary must NOT live
