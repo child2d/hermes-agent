@@ -4,6 +4,7 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
+import { CollapsedSidebarRail } from '@/app/chat/sidebar/nav-rail'
 import { NO_PROJECT_ID, sessionBucketId } from '@/app/chat/sidebar/projects/workspace-groups'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
@@ -213,6 +214,9 @@ registry.registerMany([
       hideOnly: true,
       tabTitle: () => <LocalizedTabTitle select={t => t.sidebar.sessions} />,
       tabTitleText: () => translateNow('sidebar.sessions'),
+      // Setup / messaging / bots stay reachable while the list is collapsed:
+      // the rail is its own surface, not part of what the list shows.
+      collapsedRail: () => <CollapsedSidebarRail />,
       width: `${SIDEBAR_DEFAULT_WIDTH}px`,
       minWidth: `${SIDEBAR_DEFAULT_WIDTH}px`,
       maxWidth: `${SIDEBAR_MAX_WIDTH}px`

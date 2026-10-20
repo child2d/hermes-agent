@@ -106,6 +106,12 @@ interface PaneChrome extends PaneSizing {
    *  folder (Codex labels a chat that way). Absent for a chat that belongs to no
    *  project or path — the title then reads as the bare name. */
   titleLead?: () => React.ReactNode
+  /** Content that survives the pane COLLAPSING, drawn inside the vertical
+   *  restore strip. The chat sidebar's nav rail lives here: it is the way into
+   *  setup and the bots, not part of the session list it sits beside, so
+   *  collapsing the list must not take it away. Rendered for a single-pane
+   *  zone only (a multi-pane strip belongs to none of them). */
+  collapsedRail?: () => React.ReactNode
   /** Mint another tab of THIS pane's kind — the strip's "+" while this pane is
    *  active. A Browser tab makes another Browser tab; a pane that is one of a
    *  kind (a file peek) leaves it absent and the strip falls back to the chat

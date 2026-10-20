@@ -426,6 +426,7 @@ export function TreeGroup({
   // hatch (⌘⌥T / 设置›外观›标签栏).
   const activeChrome = paneChrome(paneFor(activeId))
   const mainZone = shown.some(id => Boolean(paneChrome(paneFor(id)).uncloseable))
+
   const titleBand =
     Boolean(topEdge) &&
     !node.minimized &&
@@ -434,6 +435,7 @@ export function TreeGroup({
     !pageHeader &&
     !activeChrome.headerVeto &&
     node.tabStrip !== 'always'
+
   const stripVisible = stripWanted && !titleBand
 
   // A group collapses ALONG its parent split's axis. In a row that means the
@@ -449,6 +451,7 @@ export function TreeGroup({
   // A minimized group IS its header, so it shows one regardless.
   const headerVisible =
     !isEmpty && !verticalCollapse && (Boolean(node.minimized) || stripVisible || Boolean(pageHeader))
+
   const titleOnly = titleBand && !headerVisible
 
   // A title needs more air than a tab strip: 34px is the window-chrome minimum
@@ -585,7 +588,12 @@ export function TreeGroup({
         <ZoneMenu {...zoneMenu}>
           <div
             className={cn(
-              'flex h-full min-h-7 w-7 min-w-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
+              'flex h-full min-h-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
+              // A pane that keeps working chrome while collapsed (the sidebar's
+              // nav rail) needs the width of a glyph column, not a tab's.
+              shown.length === 1 && paneChrome(paneFor(activeId)).collapsedRail
+                ? 'w-11 min-w-11'
+                : 'w-7 min-w-7',
               // Strip line faces the content the zone collapsed away from.
               railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
             )}
@@ -620,6 +628,7 @@ export function TreeGroup({
                 )
               })}
             </div>
+            {shown.length === 1 && paneChrome(paneFor(activeId)).collapsedRail?.()}
           </div>
         </ZoneMenu>
       )}
