@@ -194,6 +194,7 @@ import {
 } from './section-states'
 import { buildSessionByAnyId, resolvePinnedSessions } from './session-index'
 import { SidebarSessionsSection, VIRTUALIZE_THRESHOLD } from './sessions-section'
+import { SidebarNavRail } from './nav-rail'
 import { CONTEXT_SPLIT_KIT, SplitSubmenu } from './split-submenu'
 import { useEnteredProjectSessions } from './use-entered-project-sessions'
 import { SidebarUserMenu } from './user-menu'
@@ -457,6 +458,12 @@ export function ChatSidebar({
     () => applySidebarNavPrefs([...SIDEBAR_NAV, ...contributedNav].filter(shownInMode(interfaceMode)), navPrefs),
     [contributedNav, interfaceMode, navPrefs]
   )
+
+  // The session list owns exactly one nav row now. Everything else — setup
+  // surfaces (skills & tools, messaging, bots) and contributed pages — is a
+  // glyph in the rail, out of the list's reading order.
+  const navRows = useMemo(() => navItems.filter(item => item.id === 'new-session'), [navItems])
+  const navRailItems = useMemo(() => navItems.filter(item => item.id !== 'new-session'), [navItems])
 
   const panesFlipped = useStore($panesFlipped)
   const grouping = useStore($sidebarGrouping)
@@ -1600,6 +1607,17 @@ export function ChatSidebar({
       })
     )
 
+  // One definition for both places a nav item can live (the list row, the rail):
+  // built-in routes, plus a contributed page lighting up at its own path.
+  const isNavActive = (item: SidebarNavItem) =>
+    item.id === 'new-session'
+      ? false
+      : (item.id === 'capabilities' && currentView === 'capabilities') ||
+        (item.id === 'messaging' && currentView === 'messaging') ||
+        (item.id === 'artifacts' && currentView === 'artifacts') ||
+        (item.id === 'cron' && currentView === 'cron') ||
+        (currentView === 'extension' && Boolean(item.route) && pathname === item.route)
+
   return (
     // Quiet tooltips: every sidebar row and header button already carries an
     // aria-label, so the hover bubble only repeated it.
@@ -1617,7 +1635,16 @@ export function ChatSidebar({
       data-tip-region=""
       data-tour="sessions-sidebar"
     >
-      <SidebarContent className="gap-0 overflow-hidden bg-transparent px-2.5">
+      {/* Rail + list share the pane: the rail is a fixed 44px strip on the
+          window's left edge, the list keeps the resizable remainder. */}
+      <div className="flex h-full min-h-0 w-full">
+        <SidebarNavRail
+          isActive={isNavActive}
+          items={navRailItems}
+          labelFor={item => s.nav[item.id] ?? item.label}
+          onNavigate={onNavigate}
+        />
+        <SidebarContent className="min-w-0 gap-0 overflow-hidden bg-transparent px-2.5">
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
             {/* The fork's own name, standing where Codex puts its own — the
@@ -1638,16 +1665,10 @@ export function ChatSidebar({
           </div>
           <SidebarGroupContent>
             <SidebarMenu className="gap-px">
-              {navItems.map(item => {
+              {navRows.map(item => {
                 const isInteractive = Boolean(item.action) || Boolean(item.route)
 
-                const active =
-                  (item.id === 'capabilities' && currentView === 'capabilities') ||
-                  (item.id === 'messaging' && currentView === 'messaging') ||
-                  (item.id === 'artifacts' && currentView === 'artifacts') ||
-                  (item.id === 'cron' && currentView === 'cron') ||
-                  // Contributed rows light up at their own route.
-                  (currentView === 'extension' && Boolean(item.route) && pathname === item.route)
+                const active = isNavActive(item)
 
                 const isNewSession = item.id === 'new-session'
 
@@ -2139,7 +2160,8 @@ export function ChatSidebar({
 
         {/* The signed-in account, at the foot: enterprise builds only. */}
         <SidebarUserMenu />
-      </SidebarContent>
+        </SidebarContent>
+      </div>
       <ProjectDialog />
       {/* One mount for the whole app. The header of WorktreeDialog tells why. */}
       <WorktreeDialog />
