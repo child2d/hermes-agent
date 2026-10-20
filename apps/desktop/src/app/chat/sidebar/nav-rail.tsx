@@ -104,7 +104,7 @@ export function CollapsedSidebarRail() {
             aria-current={active ? 'page' : undefined}
             aria-label={t.sidebar.nav[item.id] ?? item.label}
             className={cn(
-              'grid size-6 shrink-0 place-items-center rounded-md border border-transparent text-(--ui-text-tertiary) transition-colors duration-100 ease-out hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none',
+              'grid size-7 shrink-0 place-items-center rounded-md border border-transparent text-(--ui-text-tertiary) transition-colors duration-100 ease-out hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none',
               active &&
                 'border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-foreground shadow-none'
             )}
@@ -120,7 +120,7 @@ export function CollapsedSidebarRail() {
             }}
             type="button"
           >
-            <item.icon className="size-3.5 shrink-0" />
+            <item.icon className="size-4 shrink-0" />
           </button>
         )
       })}

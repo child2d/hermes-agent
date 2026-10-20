@@ -39,7 +39,7 @@ import {
   edgeFixedZone,
   fixedTrackSize,
   MIN_PANE_PX,
-  MINIMIZED_TRACK,
+  minimizedTrackFor,
   paneChrome,
   type PaneSizing,
   resolveCssPx,
@@ -676,7 +676,15 @@ export function TreeSplit({
     // only for panes the breakpoint collapsed, not ones a chrome toggle hid.
     const narrowCollapsed = narrow && collapsed && allPaneIds(child).some(id => !hiddenPanes.has(id))
 
-    return { child, collapsed, minimized, narrowCollapsed, sizing, track }
+    return {
+      child,
+      collapsed,
+      minimized,
+      minimizedTrack: minimized ? minimizedTrackFor(child, trackCtx) : null,
+      narrowCollapsed,
+      sizing,
+      track
+    }
   })
 
   const growable = tracks.map((_, i) => i).filter(i => !tracks[i].collapsed && !tracks[i].minimized)
@@ -739,7 +747,7 @@ export function TreeSplit({
       data-tree-split={node.id}
       ref={containerRef}
     >
-      {tracks.map(({ child, collapsed, minimized, narrowCollapsed, sizing, track }, i) => {
+      {tracks.map(({ child, collapsed, minimized, minimizedTrack, narrowCollapsed, sizing, track }, i) => {
         const partner = collapsed ? -1 : seamPartner(i)
         const absorbs = i === absorberIndex
 
@@ -751,7 +759,7 @@ export function TreeSplit({
               collapsed
                 ? { display: 'none' }
                 : minimized
-                  ? { flex: `0 0 ${horizontal ? MINIMIZED_TRACK : 'auto'}` }
+                  ? { flex: `0 0 ${horizontal ? minimizedTrack : 'auto'}` }
                   : {
                       // One flexbox formula for everything: a sized zone is
                       // grow-0 shrink-1 from its preferred basis (it yields

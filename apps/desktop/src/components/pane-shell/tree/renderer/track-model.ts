@@ -208,6 +208,25 @@ export const cssMax = (values: (string | null | undefined)[]): string | undefine
  *  are both 28px thick. */
 export const MINIMIZED_TRACK = '1.75rem'
 
+/** …unless the collapsed pane keeps working chrome (the chat sidebar's nav
+ *  rail): then the strip is a glyph column, and it must match the rail's
+ *  expanded width or every icon shifts sideways the moment the list folds. */
+export const MINIMIZED_RAIL_TRACK = '2.75rem'
+
+/**
+ * The strip thickness for a minimized zone. Only a SINGLE-pane zone can widen:
+ * a strip holding several tabs belongs to none of them, so it stays a tab rail.
+ */
+export function minimizedTrackFor(node: LayoutNode, ctx: TrackContext): string {
+  if (node.type !== 'group' || node.panes.length !== 1) {
+    return MINIMIZED_TRACK
+  }
+
+  const chrome = ctx.paneFor(node.panes[0])?.data as PaneChrome | undefined
+
+  return chrome?.collapsedRail ? MINIMIZED_RAIL_TRACK : MINIMIZED_TRACK
+}
+
 /**
  * In an all-fixed split, the last uncapped track may absorb leftover space
  * (terminal/logs stacked at 38vh with nothing else to fill the column). A
@@ -244,7 +263,7 @@ export function fixedTrackSize(node: LayoutNode, axis: 'row' | 'column', ctx: Tr
     // panes' declared widths — otherwise the outer track keeps reserving the
     // full sidebar width and the collapsed rail floats in a dead column.
     if (node.minimized) {
-      return MINIMIZED_TRACK
+      return minimizedTrackFor(node, ctx)
     }
 
     const overrideKey = axis === 'row' ? 'widthOverride' : 'heightOverride'
