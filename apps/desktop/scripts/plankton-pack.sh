@@ -21,8 +21,13 @@ ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://registry.npmmirror.com/-/binary/elec
 export HERMES_PYTHON
 export ELECTRON_MIRROR
 export HERMES_DESKTOP_VARIANT=plankton
-# Unsigned local build (no Apple Developer identity on this machine).
-export CSC_IDENTITY_AUTO_DISCOVERY=false
+# Signing is OFF by default: this machine has no Apple Developer identity, and
+# auto-discovery would otherwise fail the pack. Both switches stay overridable,
+# so a machine WITH a "Developer ID Application" cert signs by exporting
+# CSC_IDENTITY_AUTO_DISCOVERY=true (or CSC_LINK/CSC_KEY_PASSWORD for CI), and
+# notarization then runs if APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER
+# are set (scripts/notarize.mjs runs from afterSign).
+export CSC_IDENTITY_AUTO_DISCOVERY="${CSC_IDENTITY_AUTO_DISCOVERY:-false}"
 
 # --- first-launch model seed resource ----------------------------------------
 # The real seed (which may carry the provider key) lives here on the build
