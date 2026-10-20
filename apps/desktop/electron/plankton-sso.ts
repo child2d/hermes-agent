@@ -195,11 +195,16 @@ export function resolvePlanktonSsoConfig(
   }
 }
 
-/** Missing-secret message that names the exact file a packaged build reads. */
-export function planktonMissingSecretMessage(candidateFiles: string[] = []): string {
-  const where = candidateFiles[0] || `<应用数据根>/state/${PLANKTON_SSO_CONFIG_FILE}`
-
-  return `未配置 plankton client_secret（客户端凭证）：请把 IT 提供的 provisioning 文件放到 ${where}（或设环境变量 ${PLANKTON_SSO_ENV_KEYS.clientSecret}）后重新检查登录状态`
+/**
+ * The ONE thing the user may be told if the shipped secret is missing.
+ *
+ * A correct build always carries it (the pack script and electron-builder both
+ * fail closed), so this is not a "configure me" state — it means the app on disk
+ * is incomplete. Say that, and nothing else: no file paths, no env var names, no
+ * instructions to hand-write credentials. The paths go to the log instead.
+ */
+export function planktonMissingSecretMessage(_candidateFiles: string[] = []): string {
+  return '登录组件未就绪：这个安装包不完整，请重新安装最新版本。'
 }
 
 /** Whitelist a login channel fail-closed: anything but 'password' is the Feishu flow. */

@@ -69,15 +69,18 @@ if [ -z "$SSO_SRC" ]; then
     fi
   done
 fi
-if [ -n "$SSO_SRC" ] && [ -f "$SSO_SRC" ]; then
-  cp -f "$SSO_SRC" "$SSO_DEST"
-  chmod 600 "$SSO_DEST"
-  echo "[plankton-pack] staged SSO secret: $SSO_SRC -> $SSO_DEST (ships inside the artifact)"
-else
+if [ -z "$SSO_SRC" ] || [ ! -f "$SSO_SRC" ]; then
   rm -f "$SSO_DEST"
-  echo "[plankton-pack] WARNING: no SSO secret staged (set PLANKTON_SSO_SECRET_FILE)." >&2
-  echo "[plankton-pack]          Recipients will have to provision sso-config.local.json by hand." >&2
+  echo "[plankton-pack] ERROR: no SSO client secret to bundle." >&2
+  echo "[plankton-pack]        A plankton artifact without it installs but CANNOT log in," >&2
+  echo "[plankton-pack]        so this is a failed build, not a warning." >&2
+  echo "[plankton-pack]        Put sso-config.local.json in the app's plankton-state dir, or set" >&2
+  echo "[plankton-pack]        PLANKTON_SSO_SECRET_FILE=/path/to/sso-config.local.json." >&2
+  exit 1
 fi
+cp -f "$SSO_SRC" "$SSO_DEST"
+chmod 600 "$SSO_DEST"
+echo "[plankton-pack] staged SSO secret: $SSO_SRC -> $SSO_DEST (ships inside the artifact)"
 
 # --- bundled shaoke-cli (per-OS/arch) ----------------------------------------
 # The artifact carries a CLI copy that first launch drops into

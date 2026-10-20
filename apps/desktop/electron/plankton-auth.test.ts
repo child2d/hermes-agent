@@ -230,14 +230,20 @@ describe('plankton SSO login — full chain against a local stub service', () =>
     expect(planktonGateDecision({ channel: 'hermes:api', loggedIn: auth.isLoggedIn() }).allow).toBe(false)
   })
 
-  it('missing client_secret → login is not ready and login fails loudly', async () => {
+  it('missing client_secret → not ready, and the user is NOT told to hand-configure anything', async () => {
     stub = await startStubService('ok')
     const auth = makeAuth({ secret: '' })
 
     const status = auth.status()
 
     expect(status.loginReady).toBe(false)
-    expect(status.loginBlockedReason).toContain('client_secret')
+    // A correct build always ships the secret; reaching this state means the
+    // installed copy is incomplete. The user gets no paths, no env var names and
+    // no credentials recipe — the detail goes to the log.
+    expect(status.loginBlockedReason).toContain('重新安装')
+    expect(status.loginBlockedReason).not.toContain('sso-config')
+    expect(status.loginBlockedReason).not.toContain('PLANKTON_OIDC')
+    expect(status.loginBlockedReason).not.toContain('client_secret')
 
     const result = await auth.login('feishu')
 

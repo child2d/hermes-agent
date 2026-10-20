@@ -188,7 +188,10 @@ export function createPlanktonAuth(deps: PlanktonAuthDeps): PlanktonAuth {
     return {
       ok: true,
       loginReady,
-      loginBlockedReason: loginReady ? null : planktonMissingSecretMessage(config.candidateFiles),
+      loginBlockedReason: loginReady
+        ? null
+        : (deps.log?.(`[plankton-sso] client_secret missing; looked at ${config.candidateFiles.join(', ') || '(no candidates)'}`),
+          planktonMissingSecretMessage(config.candidateFiles)),
       loggedIn: whoami !== null,
       whoami,
       identity: planktonSessionIdentity(whoami)
@@ -241,6 +244,8 @@ export function createPlanktonAuth(deps: PlanktonAuthDeps): PlanktonAuth {
     const config = deps.resolveConfig()
 
     if (!config.clientSecret) {
+      deps.log?.(`[plankton-sso] login refused: client_secret missing; looked at ${config.candidateFiles.join(', ') || '(no candidates)'}`)
+
       return { ok: false, error: planktonMissingSecretMessage(config.candidateFiles) }
     }
 

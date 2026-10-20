@@ -154,9 +154,10 @@ module.exports = {
           // the artifact. What it buys is zero-config login; what it must never
           // buy is trust — the identity source is pinned in code and the
           // backend must validate the token, because a bundle is readable.
-          ...(fs.existsSync(path.join(__dirname, 'build/enterprise/sso-config.json'))
-            ? [{ from: 'build/enterprise/sso-config.json', to: 'enterprise/sso-config.json' }]
-            : []),
+          // REQUIRED: an artifact without it installs and then cannot log in, so
+          // electron-builder must fail here rather than ship a dead build. The
+          // pack script stages it (and fails first, with a clearer message).
+          { from: 'build/enterprise/sso-config.json', to: 'enterprise/sso-config.json' },
           // The enterprise plugin payload (agent half + dashboard backend +
           // desktop half). Committed in-repo; first launch copies it into
           // <HERMES_HOME>/plugins + <HERMES_HOME>/desktop-plugins (see
