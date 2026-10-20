@@ -207,7 +207,9 @@ if [ -n "$APP_PATH" ]; then
 else
   echo "[plankton-pack] artifact dir: $(pwd)/$OUTPUT_DIR (no .app found)"
 fi
-DMG_PATH="$(find "$OUTPUT_DIR" -maxdepth 1 -name '*.dmg' 2>/dev/null | head -1)"
+# NEWEST, not first: `find` order is unspecified and reported a previous
+# version's dmg after a bump (it named 0.1.0 when 0.1.1 had just been built).
+DMG_PATH="$(ls -t "$OUTPUT_DIR"/*.dmg 2>/dev/null | head -1)"
 if [ -n "$DMG_PATH" ]; then
   echo "[plankton-pack] dmg: $(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
 fi
