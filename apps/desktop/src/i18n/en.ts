@@ -3452,6 +3452,37 @@ export const en: Translations = {
     }
   },
 
+  baymax: {
+    title: 'Workbench',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing',
+    statTodo: 'Open',
+    statDueToday: 'Due today',
+    statOverdue: 'Overdue',
+    statNoDeadline: 'No deadline',
+    tabAll: 'My queue',
+    tabDueSoon: 'Due soon',
+    tabCreated: 'Created by me',
+    tabProcessing: 'In progress',
+    showing: (shown, total) => `${shown} of ${total}`,
+    noDeadline: 'No deadline',
+    dueToday: 'Due today',
+    overdueDays: days => `${days}d late`,
+    colOwner: 'Owner',
+    planStart: 'Planned start',
+    planEnd: 'Planned end',
+    actualWorkload: 'Actual effort',
+    lastUpdated: 'Last updated',
+    comments: 'Progress comments',
+    noComments: 'No progress comments yet',
+    detailHint: 'Read-only — ask Hermes to write back, then confirm the card',
+    emptyTitle: 'Nothing in this group',
+    noProjectTitle: 'No project available',
+    noProjectDesc: 'The project list could not be read, or this account has none',
+    failedTitle: 'Could not read the ledger',
+    failedDesc: 'read failed'
+  },
+
   artifacts: {
     search: 'Search artifacts...',
     refresh: 'Refresh artifacts',

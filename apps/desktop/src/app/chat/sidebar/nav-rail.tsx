@@ -1,4 +1,4 @@
-import { Blocks, Bot, FolderOpen, MessagesSquare, SquareKanban, Timer } from 'lucide-react'
+import { Blocks, Bot, ClipboardList, FolderOpen, MessagesSquare, SquareKanban, Timer } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 
 import type { SidebarNavItem } from '@/app/types'
@@ -37,7 +37,8 @@ const RAIL_ICONS: Record<string, SidebarNavItem['icon']> = {
   files: FolderOpen, // 产物
   watch: Timer, // 定时任务
   project: SquareKanban, // 看板（插件）
-  hubot: Bot // 机器人（插件）
+  hubot: Bot, // 机器人（插件）
+  pulse: ClipboardList // 个人工作台（baymax 页）
 }
 
 /** A rail glyph: lucide where the item's codicon name has an equivalent (the

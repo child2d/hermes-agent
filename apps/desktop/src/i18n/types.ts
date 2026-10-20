@@ -2882,6 +2882,37 @@ export interface Translations {
     }
   }
 
+  baymax: {
+    title: string
+    refresh: string
+    refreshing: string
+    statTodo: string
+    statDueToday: string
+    statOverdue: string
+    statNoDeadline: string
+    tabAll: string
+    tabDueSoon: string
+    tabCreated: string
+    tabProcessing: string
+    showing: (shown: number, total: number) => string
+    noDeadline: string
+    dueToday: string
+    overdueDays: (days: number) => string
+    colOwner: string
+    planStart: string
+    planEnd: string
+    actualWorkload: string
+    lastUpdated: string
+    comments: string
+    noComments: string
+    detailHint: string
+    emptyTitle: string
+    noProjectTitle: string
+    noProjectDesc: string
+    failedTitle: string
+    failedDesc: string
+  }
+
   artifacts: {
     search: string
     refresh: string

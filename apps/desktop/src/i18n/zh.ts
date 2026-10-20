@@ -3480,6 +3480,37 @@ export const zh = defineLocale({
     }
   },
 
+  baymax: {
+    title: '工作台',
+    refresh: '刷新',
+    refreshing: '正在刷新',
+    statTodo: '待办',
+    statDueToday: '今日到期',
+    statOverdue: '逾期',
+    statNoDeadline: '无截止日期',
+    tabAll: '待办',
+    tabDueSoon: '临期',
+    tabCreated: '我创建的',
+    tabProcessing: '我处理中',
+    showing: (shown, total) => `显示 ${shown} / 共 ${total}`,
+    noDeadline: '无截止',
+    dueToday: '今天到期',
+    overdueDays: days => `逾期 ${days} 天`,
+    colOwner: '负责人',
+    planStart: '计划开始',
+    planEnd: '计划完成',
+    actualWorkload: '实际工时',
+    lastUpdated: '最近更新',
+    comments: '进展评论',
+    noComments: '还没有进展评论',
+    detailHint: '只读视图 — 写回工单请在对话里让 Hermes 代写、你确认',
+    emptyTitle: '这一组没有工单',
+    noProjectTitle: '还没有可用的项目',
+    noProjectDesc: '项目清单读取失败，或这个账号没有项目',
+    failedTitle: '没读到台账数据',
+    failedDesc: '读取失败'
+  },
+
   artifacts: {
     search: '搜索产物…',
     refresh: '刷新产物',

@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { atom, computed } from 'nanostores'
 import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } from 'react'
 
+import { registerBaymaxPage } from '@/app/baymax/register'
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
 import { CollapsedSidebarRail } from '@/app/chat/sidebar/nav-rail'
@@ -193,6 +194,11 @@ const workspaceTabDrag = (event: ReactPointerEvent<HTMLElement>, onTap: () => vo
 
   return true
 }
+
+// First-party page contributions (a page + its rail row), registered the same
+// way plugins do. Baymax is the local personal workbench; its reads go through
+// the enterprise plugin's read-only pack port, so this page adds no backend.
+registerBaymaxPage()
 
 registry.registerMany([
   {
