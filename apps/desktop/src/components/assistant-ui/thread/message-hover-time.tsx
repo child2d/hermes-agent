@@ -2,11 +2,6 @@ import { useAuiState } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
 import type { FC } from 'react'
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { fmtFullDateTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -71,14 +66,9 @@ export const MessageHoverTime: FC<{ className?: string; plain?: boolean }> = ({ 
     </time>
   )
 
-  if (plain) {
-    return stamp
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{stamp}</TooltipTrigger>
-      <TooltipContent side="top">{fmtFullDateTime.format(date)}</TooltipContent>
-    </Tooltip>
-  )
+  // No hover tip on the stamp either: the row is standing chrome now, and a
+  // bubble that repeats the same instant in a longer format is one more thing
+  // appearing under the pointer. `plain` still prints the FULL date inline when
+  // a caller wants that.
+  return stamp
 }

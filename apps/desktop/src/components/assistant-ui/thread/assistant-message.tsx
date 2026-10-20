@@ -1034,14 +1034,17 @@ const AssistantActionBar: FC<MessageActionProps & { durationS?: number }> = ({
       )}
       <ActionBarPrimitive.Root
         className={
-          // NOTE: intentionally NOT `hideWhenRunning`. That prop unmounts the
-          // bar while the thread streams, which collapses every completed
-          // assistant message's footer by this bar's height and shifts the
-          // whole conversation when the turn resolves. The bar is already
-          // invisible by default (opacity-0 + pointer-events-none, reveals on
-          // hover), so keeping it mounted reserves stable layout height with
-          // no visual change during streaming.
-          'relative flex flex-row items-center justify-end gap-1.5 py-1.5 opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
+          // NOTE: intentionally NOT `hideWhenRunning` — unmounting while the
+          // thread streams collapses every completed message's footer by this
+          // bar's height and shifts the conversation when the turn resolves.
+          //
+          // ALWAYS VISIBLE. The row (timestamp, fork, copy, reload, more) used
+          // to fade in on hover; on a transcript you read top-to-bottom that
+          // meant the affordances appeared and vanished under the pointer on
+          // every pass. It stays put now — the glyphs are already dimmed by the
+          // shared action-bar spec, so a standing row is a quiet footer, not
+          // chrome.
+          'relative flex flex-row items-center justify-end gap-1.5 py-1.5'
         }
         data-slot="aui_msg-actions"
       >
