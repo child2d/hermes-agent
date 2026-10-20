@@ -6,44 +6,46 @@ import { Codicon } from '@/components/ui/codicon'
 
 import { SidebarNavRail } from './nav-rail'
 
-// A Codicon is a FONT glyph: `.codicon{font-size:.875em}` sizes it, so a `size-*`
-// utility only sets the box and leaves the icon at its inherited size. The rail
-// therefore hands the icon an explicit px size — that is the thing a "make the
-// rail icons bigger" change actually has to move.
-const item: SidebarNavItem = {
-  icon: props => <Codicon name="symbol-misc" {...props} />,
+// The rail draws the app's own icon family (lucide SVGs) at 18px, resolved from
+// the codicon NAME its nav model carries — the list's row keeps its codicon.
+// Locked here: a rail icon must be an SVG sized in px (a Codicon is a FONT glyph,
+// whose size is font-size and ignores a `size-*` box), and an unmapped name must
+// degrade to the item's own icon instead of leaving a hole.
+const navItem = (over: Partial<SidebarNavItem> & { codicon: string }): SidebarNavItem => ({
+  // The row's icon IS the codicon the model names — the rail then chooses.
+  icon: props => <Codicon name={over.codicon} {...props} />,
   id: 'capabilities',
   label: 'Capabilities',
-  route: '/capabilities'
-}
+  ...over
+})
+
+const renderRail = (items: SidebarNavItem[]) =>
+  render(
+    <SidebarNavRail isActive={() => false} items={items} labelFor={item => item.label} onNavigate={() => undefined} />
+  )
 
 describe('SidebarNavRail', () => {
-  it('sizes the icon glyph itself, not just its box', () => {
-    const { container } = render(
-      <SidebarNavRail
-        isActive={() => false}
-        items={[item]}
-        labelFor={() => 'Capabilities'}
-        onNavigate={() => undefined}
-      />
-    )
+  it('draws a lucide SVG at 18px for a known codicon name', () => {
+    const { container } = renderRail([navItem({ codicon: 'symbol-misc' })])
 
-    const icon = container.querySelector<HTMLElement>('.codicon')
+    const svg = container.querySelector('svg')
 
-    expect(icon?.style.fontSize).toBe('18px')
-    expect(icon?.classList.contains('size-4.5')).toBe(true)
+    expect(svg).not.toBeNull()
+    expect(svg?.getAttribute('width')).toBe('18')
+    expect(container.querySelector('.codicon')).toBeNull()
+  })
+
+  it("keeps the item's own icon when the name has no lucide equivalent", () => {
+    const { container } = renderRail([navItem({ codicon: 'some-unknown-codicon' })])
+
+    const glyph = container.querySelector<HTMLElement>('.codicon')
+
+    expect(glyph?.classList.contains('codicon-some-unknown-codicon')).toBe(true)
   })
 
   it('names the button even though the rail draws no label', () => {
-    const { getByRole } = render(
-      <SidebarNavRail
-        isActive={() => true}
-        items={[item]}
-        labelFor={() => 'Capabilities'}
-        onNavigate={() => undefined}
-      />
-    )
+    const { getByRole } = renderRail([navItem({ codicon: 'comment' })])
 
-    expect(getByRole('button', { name: 'Capabilities' }).getAttribute('aria-current')).toBe('page')
+    expect(getByRole('button', { name: 'Capabilities' }).getAttribute('aria-current')).toBeNull()
   })
 })

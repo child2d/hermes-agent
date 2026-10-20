@@ -135,6 +135,10 @@ export interface SidebarNavItem extends Tiered {
   /** `size` is the glyph size in px (Codicon renders a font glyph, so width/
    *  height alone would not scale it; SVG icons take it as width/height). */
   icon: React.ComponentType<{ className?: string; size?: number | string }>
+  /** The codicon NAME the icon was built from (`'comment'`, `'hubot'`, …) or a
+   *  contribution's `data.codicon`. Surfaces that draw a different icon family
+   *  resolve their own glyph from it; the row itself still renders `icon`. */
+  codicon?: string
   route?: string
   action?: 'new-session'
   /** Keybind action id — when set, the tooltip shows the keybind hint. */

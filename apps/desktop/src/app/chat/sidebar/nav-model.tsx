@@ -23,6 +23,7 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     id: 'new-session',
     label: '',
     icon: props => <Codicon name="robot" {...props} />,
+    codicon: 'robot',
     action: 'new-session',
     keybindActionId: 'session.new'
   },
@@ -30,6 +31,7 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     id: 'capabilities',
     label: '',
     icon: props => <Codicon name="symbol-misc" {...props} />,
+    codicon: 'symbol-misc',
     route: CAPABILITIES_ROUTE,
     keybindActionId: 'nav.capabilities'
   },
@@ -37,6 +39,7 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     id: 'messaging',
     label: '',
     icon: props => <Codicon name="comment" {...props} />,
+    codicon: 'comment',
     route: MESSAGING_ROUTE,
     keybindActionId: 'nav.messaging'
   },
@@ -46,6 +49,7 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     id: 'artifacts',
     label: '',
     icon: props => <Codicon name="files" {...props} />,
+    codicon: 'files',
     route: ARTIFACTS_ROUTE,
     keybindActionId: 'nav.artifacts',
     tier: 'advanced'
@@ -54,6 +58,7 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     id: 'cron',
     label: '',
     icon: props => <Codicon name="watch" {...props} />,
+    codicon: 'watch',
     route: CRON_ROUTE,
     keybindActionId: 'nav.cron',
     tier: 'advanced'
@@ -87,7 +92,10 @@ export function useSidebarNavItems(): SidebarNavItem[] {
           {
             id: c.id,
             label: data.label,
-            icon: (props: { className?: string }) => <Codicon name={codicon} {...props} />,
+            // The contribution names its glyph; the row draws the codicon, the
+            // rail resolves its own family from `codicon`.
+            icon: (props: { className?: string; size?: number | string }) => <Codicon name={codicon} {...props} />,
+            codicon,
             route: data.path,
             tier: data.tier
           }
