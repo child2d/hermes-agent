@@ -586,6 +586,11 @@
        stays on --conversation-line-height. */
     --conversation-prose-line-height: 1.6;
     --conversation-turn-gap: 0.5rem;
+    /* Response → next question. Its own token because it is the turn BOUNDARY
+       and must out-read the block gaps inside a reply (0.5/0.75rem): at the
+       turn gap alone, a new question sat as close to the previous answer's
+       footer as two paragraphs did to each other. */
+    --conversation-turn-break: 1.75rem;
     /* Gap between top-level turn blocks (prose ↔ tools ↔ thinking) — enough air
        that scaffolding reads as separate from the reply, not crammed into it. */
     --turn-block-gap: 1rem;

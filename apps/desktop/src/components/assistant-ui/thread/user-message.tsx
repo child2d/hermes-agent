@@ -49,7 +49,10 @@ export function HumanMessageContainer({
     // the transcript is pinned, so there is no sticky box to clip behind.
     <>
       <div
-        className="group/user-message -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-end gap-0 self-end overflow-visible px-4 pb-(--conversation-turn-gap) pt-1"
+        // pt = the turn boundary, not a nudge: a new question has to read as farther
+        // from the previous answer than that answer's own paragraphs are from
+        // each other, otherwise the transcript scrolls as one continuous block.
+        className="group/user-message -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-end gap-0 self-end overflow-visible px-4 pt-(--conversation-turn-break) pb-(--conversation-turn-gap)"
         data-message-id={messageId}
         data-role="user"
         data-slot="aui_user-message-root"
