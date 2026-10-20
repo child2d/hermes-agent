@@ -280,7 +280,7 @@ function ManageGatewaysLabel({ label }: { label: string }) {
 
 function ConnectionLabel({ connection }: { connection: DesktopRegistryConnection }) {
   return (
-    <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden" title={connectionTooltip(connection)}>
+    <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
       <ConnectionGlyph connection={connection} />
       <span className="truncate">{connection.label}</span>
     </span>

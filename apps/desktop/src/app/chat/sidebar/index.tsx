@@ -22,6 +22,7 @@ import {
   SidebarMenuItem
 } from '@/components/ui/sidebar'
 import {
+  QuietTooltips,
   Tooltip,
   TooltipContent,
   TooltipTrigger
@@ -1600,8 +1601,11 @@ export function ChatSidebar({
     )
 
   return (
-    <Sidebar
-      className={cn(
+    // Quiet tooltips: every sidebar row and header button already carries an
+    // aria-label, so the hover bubble only repeated it.
+    <QuietTooltips>
+      <Sidebar
+        className={cn(
         // Visibility is the layout tree's job (a hidden zone is display:none;
         // the narrow overlay renders the live instance) — the sidebar always
         // paints itself fully.
@@ -2139,7 +2143,8 @@ export function ChatSidebar({
       <ProjectDialog />
       {/* One mount for the whole app. The header of WorktreeDialog tells why. */}
       <WorktreeDialog />
-    </Sidebar>
+      </Sidebar>
+    </QuietTooltips>
   )
 }
 
