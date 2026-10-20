@@ -6,9 +6,10 @@
 # from HEAD, then runs the normal `npm run pack` (frontend + electron bundle,
 # then electron-builder --dir). No arguments.
 #
-#   cd apps/desktop && npm run pack:plankton
+#   cd apps/desktop && npm run pack:plankton          # unpacked .app (local install)
+#   cd apps/desktop && npm run pack:plankton -- --dmg # distributable .dmg (hand-off)
 #
-# Artifact: apps/desktop/release/mac-arm64/Plankton.app
+# Artifact: apps/desktop/release/mac-arm64/Plankton.app (.dmg next to it with --dmg)
 # See apps/desktop/ENTERPRISE.md ("Build / pack / distribution").
 set -euo pipefail
 cd "$(dirname "$0")/.." # apps/desktop
@@ -131,8 +132,31 @@ if [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
   OUTPUT_DIR="$PLANKTON_OUTPUT_DIR"
   echo "[plankton-pack] output redirected to: $OUTPUT_DIR"
 fi
+# --- artifact kind ------------------------------------------------------------
+# Default is the unpacked .app (`--dir`), which is what a local install swaps in.
+# `--dmg` builds the same unsigned bundling but emits the installer volume a
+# colleague can drag from; it is the only form worth hand-off (an .app copied
+# around loses its quarantine story and is not a single file).
+TARGET="${1:-app}"
+case "$TARGET" in
+  app|--app|"") PACK_KIND=app ;;
+  --dmg|dmg) PACK_KIND=dmg ;;
+  *)
+    echo "[plankton-pack] ERROR: unknown argument '$TARGET' (expected --dmg)." >&2
+    exit 1
+    ;;
+esac
+echo "[plankton-pack] kind=$PACK_KIND"
+
 echo "[plankton-pack] start  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-if [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
+if [ "$PACK_KIND" = dmg ]; then
+  npm run build
+  if [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
+    npm run builder -- --mac dmg --publish never -c.directories.output="$OUTPUT_DIR"
+  else
+    npm run builder -- --mac dmg --publish never
+  fi
+elif [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
   npm run build
   npm run builder -- --dir --publish never -c.directories.output="$OUTPUT_DIR"
 else
@@ -146,4 +170,8 @@ if [ -n "$APP_PATH" ]; then
   echo "[plankton-pack] artifact: $(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 else
   echo "[plankton-pack] artifact dir: $(pwd)/$OUTPUT_DIR (no .app found)"
+fi
+DMG_PATH="$(find "$OUTPUT_DIR" -maxdepth 1 -name '*.dmg' 2>/dev/null | head -1)"
+if [ -n "$DMG_PATH" ]; then
+  echo "[plankton-pack] dmg: $(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
 fi
