@@ -128,6 +128,33 @@ def _coerce_message_text(content: Any, *, image_urls: bool = True) -> str:
     return "" if content is None else str(content)
 
 
+# `_build_image_ref_message` prefixes the *model* payload with these two lines so the
+# agent can call `vision_analyze` itself. `_build_persist_message_with_image_refs`
+# keeps them out of storage — but a row replay (`_session_row_replay_pending`, i.e. a
+# re-flush of the live run messages into the session store) writes the model text back,
+# so the turn comes back as a path dump instead of the image. Presentation-only heal:
+# the stored row is untouched, the transcript renders the attachment again.
+_IMAGE_REF_HINT_RE = re.compile(
+    r"\[The user attached an image: [^\]\n]*\]\n"
+    r"\[Examine it with the vision_analyze tool using image_url: ([^\]\n]+)\]"
+)
+
+
+def _heal_image_ref_hints(text: str) -> str:
+    """Model-only attachment preamble -> `@image:<path>` refs (caption first, refs last,
+    same shape `_build_persist_message_with_image_refs` writes)."""
+    if "[The user attached an image:" not in text:
+        return text
+    paths = [m.group(1).strip() for m in _IMAGE_REF_HINT_RE.finditer(text)]
+    if not paths:
+        return text
+    from agent.context_references import format_reference_value
+
+    body = _IMAGE_REF_HINT_RE.sub("", text).strip()
+    refs = "\n".join(f"@image:{format_reference_value(p)}" for p in paths)
+    return f"{body}\n{refs}" if body else refs
+
+
 _IMAGE_HINT_RE = re.compile(r"\[Image attached at: ([^\n\]]+)\]")
 _IMAGE_DATA_RE = re.compile(r"data:image/[^;,]+;base64,([A-Za-z0-9+/=]+)\Z")
 _IMAGE_REF_RE = re.compile(r"@image:(`[^`\n]+`|\"[^\"\n]+\"|'[^'\n]+'|\S+)\Z")
@@ -306,6 +333,7 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
             continue
         if role == "user":
             content_text = _DISCORD_TRIGGERING_NOTE_RE.sub(r"\1", content_text)
+            content_text = _heal_image_ref_hints(content_text)
         if role == "assistant" and m.get("tool_calls"):
             for tc in m["tool_calls"]:
                 fn, tc_id = tc.get("function", {}), tc.get("id", "")

@@ -21600,6 +21600,49 @@ def test_build_persist_message_with_image_refs_appends_existing_paths(monkeypatc
 
 
 
+def test_heal_image_ref_hints_restores_directive_form():
+    """A replayed turn carries the *model* preamble; the transcript must get the
+    ``@image:`` directive back (caption first, refs last) so the attachment
+    renders as an image instead of a path dump."""
+    raw = (
+        "[The user attached an image: cat.png]\n"
+        "[Examine it with the vision_analyze tool using image_url: /tmp/dir with space/cat.png]\n\n"
+        "为什么要这样"
+    )
+
+    assert server._heal_image_ref_hints(raw) == "为什么要这样\n@image:`/tmp/dir with space/cat.png`"
+
+
+def test_heal_image_ref_hints_is_a_noop_without_the_preamble():
+    assert server._heal_image_ref_hints("no images here") == "no images here"
+    assert server._heal_image_ref_hints("") == ""
+
+
+def test_heal_image_ref_hints_handles_several_attachments():
+    raw = (
+        "[The user attached an image: a.png]\n"
+        "[Examine it with the vision_analyze tool using image_url: /tmp/a.png]\n"
+        "[The user attached an image: b.png]\n"
+        "[Examine it with the vision_analyze tool using image_url: /tmp/b.png]\n\nlook"
+    )
+
+    assert server._heal_image_ref_hints(raw) == "look\n@image:/tmp/a.png\n@image:/tmp/b.png"
+
+
+def test_history_to_messages_heals_replayed_image_preamble():
+    history = [
+        {
+            "role": "user",
+            "content": (
+                "[The user attached an image: shot.png]\n"
+                "[Examine it with the vision_analyze tool using image_url: /tmp/shot.png]\n\n看看"
+            ),
+        }
+    ]
+
+    assert server._history_to_messages(history)[0]["text"] == "看看\n@image:/tmp/shot.png"
+
+
 def test_build_persist_message_with_image_refs_skips_missing_paths(monkeypatch, tmp_path):
     """Only paths that still exist are persisted; a missing file must not
     inject a dangling @image ref into the transcript."""
