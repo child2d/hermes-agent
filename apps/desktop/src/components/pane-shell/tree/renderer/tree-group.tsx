@@ -578,17 +578,17 @@ export function TreeGroup({
       }}
       ref={ref}
       style={
-        // A strip that keeps the rail pads ITSELF up under the titlebar (the
-        // rail's own `pt-[calc(var(--titlebar-height)…)]`), so the zone must not
-        // pad a second time — that is what keeps a glyph from moving a pixel
-        // when the list folds.
-        collapsedRail
-          ? undefined
-          : wcOverlap
-            ? { paddingTop: wcOverlap.y + wcOverlap.height }
-            : topEdge && verticalCollapse
-              ? { paddingTop: TITLEBAR_HEIGHT }
-              : undefined
+        // The titlebar offset comes from HERE, in both states. The rail's own
+        // `pt-[calc(var(--titlebar-height)+0.375rem)]` cannot supply it: the
+        // contrib shell pins `--titlebar-height` to 0px (controller.tsx), so
+        // that padding is only the 0.375rem gap. Padding a collapsed rail's
+        // zone with nothing therefore dropped the whole 38px and the icon
+        // column jumped up under the traffic lights the moment the list folded.
+        wcOverlap
+          ? { paddingTop: wcOverlap.y + wcOverlap.height }
+          : topEdge && verticalCollapse
+            ? { paddingTop: TITLEBAR_HEIGHT }
+            : undefined
       }
     >
       {wcOverlap && (
