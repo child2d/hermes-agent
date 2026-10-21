@@ -550,7 +550,15 @@ export function TreeGroup({
 
   // A pane that keeps working chrome while collapsed (the sidebar's nav rail).
   // Single-pane zones only: a strip holding several tabs belongs to none of them.
-  const collapsedRail = shown.length === 1 ? paneChrome(paneFor(activeId)).collapsedRail : undefined
+  //
+  // Resolved against THIS zone's own pane, never the tree-wide activePane: once
+  // the user focuses a workspace page (capabilities, messaging, …) the active
+  // pane lives in another zone, `paneFor(activeId)` answers with THAT zone's
+  // chrome, and the collapsed sidebar lost its rail — falling back to a bare
+  // 28px tab strip. The rail is a property of the pane being collapsed, not of
+  // whatever happens to hold focus.
+  const railOwner = shown.includes(activeId) ? activeId : shown[0]
+  const collapsedRail = shown.length === 1 ? paneChrome(paneFor(railOwner)).collapsedRail : undefined
 
   return (
     <div
