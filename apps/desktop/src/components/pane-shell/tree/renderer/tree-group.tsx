@@ -569,11 +569,11 @@ export function TreeGroup({
 
   return (
     <div
-      // The zone's own surface is the window FRAME, not a field: it is what shows
-      // through a pane's rounded corner, so it has to be the same chrome the band
-      // and the rail wear (`--ui-editor-surface-background` is `transparent` under
-      // `data-hermes-glass`, which would put a 254 wedge in every notch).
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-frame"
+      // The zone's own surface is the window CHROME, not a field: it is what shows
+      // through a pane's rounded corner, so it has to be the same rung the band
+      // and the rail wear. `--ui-editor-surface-background` is `transparent` under
+      // `data-hermes-glass`, which would put a bright wedge in every notch.
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--ui-region-chrome)"
       data-tree-group={node.id}
       data-window-top={topEdge || undefined}
       // Advertises the visible tab strip so panes can drop their own
@@ -696,13 +696,12 @@ export function TreeGroup({
           bounds, strip refs, focus ownership and split geometry as the body. */}
       {(headerVisible || (topEdge && !verticalCollapse)) && (
         <div
-          // The band is window CHROME, the same surface as the rail beside it and
-          // in every skin: `--ui-sidebar-surface-background` is `transparent`
-          // under `data-hermes-glass`, and a transparent band shows the body's
-          // field there — a 254 strip over a 241 rail is a step at x=52 with no
-          // line that reads as a mistake (Codex's top row is one flat chrome band
-          // across the whole window).
-          className="relative flex min-w-0 shrink-0 bg-surface-frame"
+          // The band is window CHROME — the same rung as the rail beside it and
+          // the zone gutter below it (`--ui-region-chrome`, gray-200). It cannot
+          // be `--ui-sidebar-surface-background`: that is `transparent` under
+          // `data-hermes-glass`, and a transparent band shows the body's field
+          // there, which is a hard step at the rail's edge in the top row.
+          className="relative flex min-w-0 shrink-0 bg-(--ui-region-chrome)"
           data-panel-header=""
           style={
             headerBandHeight

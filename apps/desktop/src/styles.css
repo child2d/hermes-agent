@@ -434,16 +434,25 @@
     --ui-sash-hover-border: color-mix(in srgb, var(--ui-accent) 18%, var(--ui-stroke-tertiary));
     --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
     --ui-surface-background: var(--ui-bg-editor);
-    --ui-sidebar-surface-background: var(--dt-surface-frame);
+    --ui-sidebar-surface-background: var(--ui-region-chrome);
+    /* THE REGION LADDER — the window's three rungs, pinned to the neutral gray
+       scale instead of derived from the skin's seeds: the transcript reads on
+       `gray-50`, the session panel is a `gray-100` card on it, and the window
+       chrome (top band + rail + the gutter a pane's rounded corner shows) is
+       `gray-200`. Order is by luminance, chrome deepest — the shape Codex's
+       window has. Every painter of the three regions reads ONE of these, so the
+       ladder cannot drift per component.
+       Dark inverts the polarity (elevation gets LIGHTER, the usual dark-mode
+       rule): transcript gray-950 is the floor, panel gray-900, chrome gray-800. */
+    --ui-region-transcript: #f9fafb; /* gray-50 */
+    --ui-region-panel: #f3f4f6; /* gray-100 */
+    --ui-region-chrome: #e5e7eb; /* gray-200 */
     /* The session list's PANEL — the window's one inset region, beside the rail
-       (`nav-rail.tsx` RAIL_COLUMN is the other half of the shape). It is a rung
-       of its own, between the window chrome (`frame`, the ramp's darkest) and the
-       transcript: chrome < panel < transcript < top band, which is the ordering
-       Codex's window has and what makes four regions read instead of one field.
-       It must be PAINTED here rather than reusing a surface alias, because under
-       `data-hermes-glass` the sidebar/editor aliases are `transparent` — which is
-       exactly why the list and the rail used to be the same pixels. */
-    --ui-sidebar-panel-background: color-mix(in srgb, var(--dt-surface-transcript) 60%, var(--dt-surface-frame));
+       (`nav-rail.tsx` RAIL_COLUMN is the other half of the shape). It has to be a
+       PAINTED rung rather than a surface alias, because under `data-hermes-glass`
+       the sidebar/editor aliases are `transparent` — which is exactly why the
+       list and the rail used to be the same pixels. */
+    --ui-sidebar-panel-background: var(--ui-region-panel);
     /* The four surfaces the app paints are derived in ONE place —
        `surfaceRamp()` in themes/context.tsx writes `--dt-surface-*` from the
        theme seeds, per mode, as concrete values: `raised` (the composer card,
@@ -452,7 +461,7 @@
        to them here; components can also wear them as utilities
        (`bg-surface-transcript`) thanks to the `@theme inline` bridge. This block
        is only the pre-paint fallback, which is why it is flat. */
-    --ui-chat-surface-background: var(--dt-surface-transcript);
+    --ui-chat-surface-background: var(--ui-region-transcript);
     --ui-editor-surface-background: var(--ui-bg-chrome);
     /* The integrated terminal wears the transcript's background, not the
        editor's — it reads as part of the conversation surface. Its own token so
@@ -727,6 +736,12 @@
     --ui-diff-add-foreground: color-mix(in srgb, var(--ui-green) 62%, #fff);
     --ui-diff-remove-foreground: color-mix(in srgb, var(--ui-red) 62%, #fff);
 
+    /* Region ladder, dark: the polarity inverts — elevation gets LIGHTER — so the
+       transcript is the floor (gray-950), the panel a rung above (gray-900) and
+       the window chrome the lightest of the three (gray-800). */
+    --ui-region-transcript: #030712; /* gray-950 */
+    --ui-region-panel: #111827; /* gray-900 */
+    --ui-region-chrome: #1f2937; /* gray-800 */
     --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 12%, transparent);
     --composer-ring-strength: 1.3;
     --backdrop-invert-mul: 0;
@@ -792,7 +807,7 @@
        no floor. Translucency belongs to the chrome the user asked for it on
        (the sidebar's own token below, the body tint); the transcript is a
        reading surface, and it stays one in every mode. */
-    --ui-chat-surface-background: var(--dt-surface-transcript);
+    --ui-chat-surface-background: var(--ui-region-transcript);
     --ui-sidebar-surface-background: transparent;
     --ui-editor-surface-background: transparent;
     --ui-terminal-surface-background: var(--ui-bg-chrome);
