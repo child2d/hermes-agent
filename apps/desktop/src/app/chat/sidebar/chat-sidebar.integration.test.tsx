@@ -31,6 +31,7 @@ import { type AppView, ROUTES_AREA, SIDEBAR_NAV_AREA } from '../../routes'
 import { $gatewayGroupCollapsed } from './gateway-group-preferences'
 
 import { ChatSidebar } from './index'
+import { AppRail } from './nav-rail'
 
 const noop = () => {}
 
@@ -45,6 +46,7 @@ const renderSidebar = (pathname: string, currentView: AppView, onRetrySessions: 
   render(
     <MemoryRouter initialEntries={[pathname]}>
       <SidebarProvider>
+        <AppRail />
         <ChatSidebar
           currentView={currentView}
           onArchiveSession={noop}
@@ -67,9 +69,12 @@ const currentButtons = () =>
   screen.queryAllByRole('button').filter(button => button.classList.contains('bg-(--ui-control-active-background)'))
 
 const expectOnlyCurrent = (label: string | null) => {
-  const button = label ? screen.getByRole('button', { name: label }) : null
+  // Compare by accessible name, not by element identity: the active rail button
+  // and the one getByRole resolves are the same node, but their React props are
+  // compared structurally and drift whenever the component gains an attribute.
+  const active = currentButtons().map(button => button.getAttribute('aria-label'))
 
-  expect(currentButtons()).toEqual(button ? [button] : [])
+  expect(active).toEqual(label ? [label] : [])
 }
 
 const expectOnlySelectedSession = (title: string | null) => {
@@ -118,19 +123,20 @@ describe('ChatSidebar navigation activity', () => {
     noteActiveTreeGroup(null)
   })
 
-  it('keeps navigation and session activity coherent with the focused pane', () => {
+  it('keeps navigation on the route while session activity follows the focused pane', () => {
     renderSidebar('/kanban', 'extension')
     expectOnlyCurrent('Kanban')
     expectOnlySelectedSession(null)
 
+    // The rail is window chrome and names the ROUTE. A tile hit in real use
+    // navigates (which is what lights Home); poking the layout tree alone moves
+    // the selection without moving the URL, so the rail must NOT follow it.
     focus('tile-one-group')
-    // A tile hit is the chat view, so the rail's Home glyph lights up — chat is
-    // where the session list lives, and Home is now the way to name that state.
-    expectOnlyCurrent('Home')
+    expectOnlyCurrent('Kanban')
     expectOnlySelectedSession('Tile one')
 
     focus('tile-two-group')
-    expectOnlyCurrent('Home')
+    expectOnlyCurrent('Kanban')
     expectOnlySelectedSession('Tile two')
 
     focus(null)
@@ -142,7 +148,7 @@ describe('ChatSidebar navigation activity', () => {
       $removedSessionIds.set(new Set(['tile-two']))
       $sessions.set([sessionRows[0]])
     })
-    expectOnlyCurrent('Home')
+    expectOnlyCurrent('Kanban')
     expectOnlySelectedSession(null)
 
     act(() => {
@@ -163,7 +169,7 @@ describe('ChatSidebar navigation activity', () => {
       expectOnlySelectedSession(null)
 
       focus('tile-one-group')
-      expectOnlyCurrent('Home')
+      expectOnlyCurrent(label)
       expectOnlySelectedSession('Tile one')
     }
 
@@ -178,7 +184,9 @@ describe('ChatSidebar navigation activity', () => {
     focus('workspace-group')
     renderSidebar('/kanban', 'extension')
     expect(screen.queryByRole('button', { name: 'Kanban' })).toBeNull()
-    expectOnlyCurrent(null)
+    // With the contribution disposed, /kanban is an unknown path and
+    // appViewForPath falls back to 'chat' — so Home is the honest active item.
+    expectOnlyCurrent('Home')
     expectOnlySelectedSession(null)
   })
 

@@ -5,7 +5,7 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 import { registerBaymaxPage } from '@/app/baymax/register'
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
-import { CollapsedSidebarRail } from '@/app/chat/sidebar/nav-rail'
+import { AppRail } from '@/app/chat/sidebar/nav-rail'
 import { NO_PROJECT_ID, sessionBucketId } from '@/app/chat/sidebar/projects/workspace-groups'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
@@ -220,9 +220,9 @@ registry.registerMany([
       hideOnly: true,
       tabTitle: () => <LocalizedTabTitle select={t => t.sidebar.sessions} />,
       tabTitleText: () => translateNow('sidebar.sessions'),
-      // Setup / messaging / bots stay reachable while the list is collapsed:
-      // the rail is its own surface, not part of what the list shows.
-      collapsedRail: () => <CollapsedSidebarRail />,
+      // The rail is window chrome (AppRail), so collapsing this pane hides it
+      // completely: no strip, no restore tab, no track width to reserve.
+      railInShell: true,
       width: `${SIDEBAR_DEFAULT_WIDTH}px`,
       minWidth: `${SIDEBAR_DEFAULT_WIDTH}px`,
       maxWidth: `${SIDEBAR_MAX_WIDTH}px`
@@ -883,7 +883,12 @@ export function ContribController() {
           data-contrib-shell=""
           style={{ '--titlebar-height': '0px' } as CSSProperties}
         >
-          <LayoutTreeRoot titlebar />
+          {/* The toolbar lives OUTSIDE the pane tree on purpose: its geometry is
+              the window's, so folding the session list cannot shift an icon. */}
+          <div className="flex min-h-0 min-w-0 flex-1">
+            <AppRail />
+            <LayoutTreeRoot titlebar />
+          </div>
 
           {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
           <SessionTileCloseConfirm />

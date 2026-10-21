@@ -112,6 +112,11 @@ interface PaneChrome extends PaneSizing {
    *  collapsing the list must not take it away. Rendered for a single-pane
    *  zone only (a multi-pane strip belongs to none of them). */
   collapsedRail?: () => React.ReactNode
+  /** The pane's working chrome is painted by the APP SHELL instead (the nav
+   *  rail), so a collapsed pane of this kind must take no space at all: the
+   *  toolbar is already on screen and a strip beside it would be a second,
+   *  empty column. */
+  railInShell?: boolean
   /** Mint another tab of THIS pane's kind — the strip's "+" while this pane is
    *  active. A Browser tab makes another Browser tab; a pane that is one of a
    *  kind (a file peek) leaves it absent and the strip falls back to the chat
@@ -214,6 +219,11 @@ export const MINIMIZED_TRACK = '1.75rem'
  *  moment the list folds. */
 export const MINIMIZED_RAIL_TRACK = '3.25rem'
 
+/** …and a pane whose chrome the app shell paints takes NO width when it folds:
+ *  the toolbar is already there, so a strip would only be a second empty
+ *  column. */
+export const MINIMIZED_HIDDEN_TRACK = '0px'
+
 /**
  * The strip thickness for a minimized zone. Only a SINGLE-pane zone can widen:
  * a strip holding several tabs belongs to none of them, so it stays a tab rail.
@@ -224,6 +234,10 @@ export function minimizedTrackFor(node: LayoutNode, ctx: TrackContext): string {
   }
 
   const chrome = ctx.paneFor(node.panes[0])?.data as PaneChrome | undefined
+
+  if (chrome?.railInShell) {
+    return MINIMIZED_HIDDEN_TRACK
+  }
 
   return chrome?.collapsedRail ? MINIMIZED_RAIL_TRACK : MINIMIZED_TRACK
 }

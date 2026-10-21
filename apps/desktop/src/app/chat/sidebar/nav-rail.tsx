@@ -1,6 +1,7 @@
 import { Blocks, Bot, ClipboardList, FolderOpen, House, MessagesSquare, SquareKanban, Timer } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 
+import { TITLEBAR_HEIGHT } from '@/app/shell/titlebar'
 import type { SidebarNavItem } from '@/app/types'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -178,5 +179,64 @@ export function CollapsedSidebarRail() {
         )
       })}
     </nav>
+  )
+}
+
+/**
+ * The window-level toolbar: the rail, hoisted OUT of the pane tree.
+ *
+ * Inside the sidebar pane the same bar had two homes — the expanded rail, and a
+ * copy re-painted inside a collapsed zone — so its geometry was computed twice
+ * and drifted every time (4px off the track, then the whole titlebar offset,
+ * then 10px). Here it is a child of the app shell: the window decides where it
+ * sits, folding the session list cannot move it, and `collapsedRail` no longer
+ * has to paint anything.
+ */
+export function AppRail() {
+  const { t } = useI18n()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const items = sidebarRailItems(useSidebarNavItems())
+
+  if (items.length === 0) {
+    return null
+  }
+
+  return (
+    <div
+      className="flex w-13 shrink-0 flex-col bg-(--ui-sidebar-surface-background) max-[47.5rem]:hidden"
+      // The titlebar floats OVER the tree, so the rail starts below it. RAIL_SHELL's
+      // own padding then contributes only the 0.375rem gap, because
+      // --titlebar-height is 0 inside the contrib shell.
+      style={{ paddingTop: TITLEBAR_HEIGHT }}
+    >
+      <nav aria-label="Rail" className={RAIL_SHELL} data-slot="sidebar-nav-rail">
+        {items.map(item => {
+          const active =
+            item.route === NEW_CHAT_ROUTE
+              ? appViewForPath(pathname) === 'chat'
+              : Boolean(item.route) && pathname === item.route
+
+          const { Icon, svg } = railIcon(item)
+
+          return (
+            <button
+              aria-current={active ? 'page' : undefined}
+              aria-label={t.sidebar.nav[item.id] ?? item.label}
+              className={cn(RAIL_BUTTON, active && RAIL_BUTTON_ACTIVE)}
+              key={item.id}
+              onClick={() => {
+                if (item.route) {
+                  navigateToWorkspacePage(navigate, item.route)
+                }
+              }}
+              type="button"
+            >
+              <Icon className={RAIL_GLYPH} size={RAIL_GLYPH_PX} {...(svg ? { strokeWidth: RAIL_STROKE } : {})} />
+            </button>
+          )
+        })}
+      </nav>
+    </div>
   )
 }

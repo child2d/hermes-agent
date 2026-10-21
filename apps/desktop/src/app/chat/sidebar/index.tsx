@@ -154,7 +154,6 @@ import { SidebarFilterMenu } from './filter-menu'
 import { buildGatewaySessionGroups, scopeGatewaySessionGroups, useGatewaySessionGroups } from './gateway-group-model'
 import { SidebarLoadMoreRow } from './load-more-row'
 import { sidebarRailItems, sidebarRowItems, useSidebarNavItems } from './nav-model'
-import { SidebarNavRail } from './nav-rail'
 import { orderByIds, reconcileOrderIds, resolveManualSessionOrderIds, sameIds } from './order'
 import { filterSessionsByProfileScope } from './profile-scope'
 import { ProfileRail } from './profile-switcher'
@@ -1547,15 +1546,9 @@ export function ChatSidebar({
       data-tip-region=""
       data-tour="sessions-sidebar"
     >
-      {/* Rail + list share the pane: the rail is a fixed 44px strip on the
-          window's left edge, the list keeps the resizable remainder. */}
+      {/* The rail is window chrome (nav-rail.tsx AppRail): it is NOT part of this
+          pane, so this surface is the session list only. */}
       <div className="flex h-full min-h-0 w-full">
-        <SidebarNavRail
-          isActive={isNavActive}
-          items={navRailItems}
-          labelFor={item => s.nav[item.id] ?? item.label}
-          onNavigate={onNavigate}
-        />
         <SidebarContent className="min-w-0 gap-0 overflow-hidden bg-transparent px-2.5">
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">

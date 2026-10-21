@@ -558,7 +558,14 @@ export function TreeGroup({
   // 28px tab strip. The rail is a property of the pane being collapsed, not of
   // whatever happens to hold focus.
   const railOwner = shown.includes(activeId) ? activeId : shown[0]
-  const collapsedRail = shown.length === 1 ? paneChrome(paneFor(railOwner)).collapsedRail : undefined
+  const ownerChrome = shown.length === 1 ? paneChrome(paneFor(railOwner)) : {}
+  const collapsedRail = ownerChrome.collapsedRail
+
+  // The toolbar for this pane is window chrome (AppRail), so a collapsed pane
+  // renders NOTHING: the rail is already on screen and the track is 0px.
+  if (verticalCollapse && ownerChrome.railInShell) {
+    return null
+  }
 
   return (
     <div
