@@ -28,7 +28,8 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
     label: '',
     icon: props => <Codicon name="home" {...props} />,
     codicon: 'home',
-    route: NEW_CHAT_ROUTE
+    route: NEW_CHAT_ROUTE,
+    keybindActionId: 'nav.home'
   },
   {
     id: 'new-session',

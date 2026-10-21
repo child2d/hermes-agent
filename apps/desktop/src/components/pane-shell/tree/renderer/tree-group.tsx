@@ -613,6 +613,25 @@ export function TreeGroup({
                 it instead. Padding is the rail's own (the zone adds none for this
                 case) — that is what makes the two states pixel-identical. */}
             {collapsedRail?.()}
+            {collapsedRail ? (
+              // The rail already fills the strip, so a vertical restore tab
+              // would read as a stray block of text under the glyphs (it is a
+              // 52px-wide writing-mode:vertical-rl cell). Keep the way back as
+              // an icon-sized control in the same column instead.
+              <button
+                aria-label={t.zones.restore}
+                className="mx-auto mt-1 grid size-7 shrink-0 place-items-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
+                data-slot="rail-restore"
+                onClick={event => {
+                  event.stopPropagation()
+                  restoreTreePane(activeId)
+                }}
+                title={t.zones.restore}
+                type="button"
+              >
+                <Codicon name={railSide === 'right' ? 'chevron-left' : 'chevron-right'} size="0.875rem" />
+              </button>
+            ) : (
             <div
               className="flex min-h-0 flex-col overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               role="tablist"
@@ -641,6 +660,7 @@ export function TreeGroup({
                 )
               })}
             </div>
+            )}
           </div>
         </ZoneMenu>
       )}

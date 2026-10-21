@@ -299,6 +299,7 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
       toggleCommandPalette()
     },
     'nav.commandCenter': deps.toggleCommandCenter,
+    'nav.home': () => navigateToWorkspacePage(navigate, NEW_CHAT_ROUTE),
     'nav.settings': () => navigate(SETTINGS_ROUTE),
     'nav.profiles': () => navigate(PROFILES_ROUTE),
     'nav.capabilities': () => navigateToWorkspacePage(navigate, CAPABILITIES_ROUTE),
