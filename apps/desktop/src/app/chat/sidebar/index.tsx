@@ -1549,10 +1549,11 @@ export function ChatSidebar({
       {/* The rail is window chrome (nav-rail.tsx AppRail): it is NOT part of this
           pane, so this surface is the session list only. It is also the window's
           inset PANEL — rounded where it meets the top band, painted one rung
-          above the chrome (`--ui-sidebar-panel-background`) — so the window reads
-          as regions (rail / list / transcript) instead of one flat field. The tree
-          still owns the seams; this paints no border of its own. */}
-      <div className="flex h-full min-h-0 w-full rounded-tl-lg bg-(--ui-sidebar-panel-background)">
+          above the chrome (`--ui-sidebar-panel-background`) and RECESSED by
+          `--shadow-panel`'s inset walls on its left and top edges — so the window
+          reads as regions (rail / list / transcript) instead of one flat field.
+          The tree still owns the seams; this paints no border of its own. */}
+      <div className="flex h-full min-h-0 w-full rounded-tl-lg bg-(--ui-sidebar-panel-background) [box-shadow:var(--shadow-panel)]">
         <SidebarContent className="min-w-0 gap-0 overflow-hidden bg-transparent px-2.5">
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
