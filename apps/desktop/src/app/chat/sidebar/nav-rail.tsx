@@ -73,13 +73,13 @@ const RAIL_COLUMN =
  *  the full height while the glyphs still start below the top band. */
 const RAIL_SHELL = 'flex flex-col items-center gap-1.5 px-2 pb-2'
 
-/** The shade the session panel throws onto this rail. It cannot be a shadow on
- *  the panel itself: a zone clips at its own edges (`overflow-hidden` in
- *  tree-group.tsx), so the panel's left cast would be cut off at the seam. Painted
- *  here instead — same falloff, other side of the seam. Starts at the top band
- *  (nothing casts above the panel there) and runs to the window bottom. */
+/** The shade the session panel throws onto this rail — ①+② in styles.css. It
+ *  cannot be a shadow on the panel itself: a zone clips at its own edges
+ *  (`overflow-hidden` in tree-group.tsx), so the panel's left cast would be cut
+ *  off at the seam. Painted here instead — same falloff, other side of the seam.
+ *  Starts at the top band (nothing casts there) and runs to the window bottom. */
 const RAIL_PANEL_CAST =
-  'pointer-events-none absolute right-0 bottom-0 w-2 bg-linear-to-l from-(--ui-panel-cast) to-transparent top-[var(--pane-titleband-height,2.75rem)]'
+  'pointer-events-none absolute right-0 bottom-0 w-1.5 bg-linear-to-l from-(--ui-panel-cast) to-transparent top-[var(--pane-titleband-height,2.75rem)]'
 
 /** The rail's top offset: it starts BELOW the window's top band, which is
  *  `TITLEBAR_HEIGHT` + the zone header's own 10px of air (`headerBandHeight` in
