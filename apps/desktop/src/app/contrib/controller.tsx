@@ -45,7 +45,7 @@ import { Slot } from '@/contrib/react/slot'
 import { registry } from '@/contrib/registry'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
 import { LocalizedTabTitle, translateNow } from '@/i18n'
-import { NEW_SESSION_TITLE, sessionTitle as storedSessionTitle } from '@/lib/chat-runtime'
+import { newSessionTitle, sessionTitle as storedSessionTitle } from '@/lib/chat-runtime'
 import {
   Download,
   FileText,
@@ -233,7 +233,7 @@ registry.registerMany([
     id: 'workspace',
     area: 'panes',
     // Live-retitled to the loaded session by syncWorkspaceTitle below.
-    title: NEW_SESSION_TITLE,
+    title: newSessionTitle(),
     data: {
       placement: 'main',
       minWidth: '22vw',
@@ -524,7 +524,7 @@ const syncWorkspaceTitle = () => {
   // Every loaded slice, not just recents: a telegram/discord/cron conversation
   // is listed ONLY in $messagingSessions / $cronSessions (recents excludes
   // those sources), so a recents-only scan missed the row and fell through to
-  // the NEW_SESSION_TITLE placeholder — a loaded gateway chat titled
+  // the new-session placeholder — a loaded gateway chat titled
   // "New session" in the tab while its sidebar row read correctly.
   const stored = selected ? ownerLookupSessionRows().find(s => sessionMatchesStoredId(s, selected)) : null
 
@@ -536,7 +536,7 @@ const syncWorkspaceTitle = () => {
     // A bot chat reads as its BOT: every canonical Bot Chat is stored under
     // the same name, which told two open bots apart by nothing (#99152).
     title: workspaceOwnerTitle(
-      stored ? storedSessionTitle(stored) : NEW_SESSION_TITLE,
+      stored ? storedSessionTitle(stored) : newSessionTitle(),
       selected ? $botChatScopes.get()[selected] : undefined
     ),
     data: {

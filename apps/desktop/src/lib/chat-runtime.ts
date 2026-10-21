@@ -5,6 +5,7 @@ import { SLASH_COMMAND_RE } from '@hermes/shared'
 import type { QuickModelOption } from '@/app/chat/composer/types'
 import type { ClientSessionState } from '@/app/types'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
+import { translateNow } from '@/i18n'
 import { type ChatMessage, type ChatMessagePart, chatMessageText, textPart } from '@/lib/chat-messages'
 import { foldPersonalityName } from '@/lib/personalities'
 import type { ComposerAttachment } from '@/store/composer'
@@ -67,8 +68,12 @@ export function sessionTitle(session: SessionInfo): string {
 }
 
 /** What a session is called before it has been sent — and before its composer
- *  has been typed into, which is the only thing that can name it earlier. */
-export const NEW_SESSION_TITLE = 'New session'
+ *  has been typed into, which is the only thing that can name it earlier.
+ *  Resolved through the catalog at READ time: this name paints a header, a
+ *  pane tab and a drag payload, none of which resolve it at import. */
+export function newSessionTitle(): string {
+  return translateNow('sidebar.newSessionTitle')
+}
 
 export function coerceGatewayText(value: unknown): string {
   if (typeof value === 'string') {

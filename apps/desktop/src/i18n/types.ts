@@ -3120,6 +3120,7 @@ export interface Translations {
       back: string
     }
     newSessionIn: (label: string) => string
+    newSessionTitle: string
     showMoreIn: (count: number, label: string) => string
     loading: string
     loadMore: string

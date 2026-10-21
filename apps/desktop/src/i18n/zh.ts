@@ -3720,6 +3720,7 @@ export const zh = defineLocale({
       back: '全部项目'
     },
     newSessionIn: label => `在 ${label} 中新建会话`,
+    newSessionTitle: '新会话',
     showMoreIn: (count, label) => `在 ${label} 中再显示 ${count} 个`,
     loading: '加载中…',
     loadMore: '加载更多',

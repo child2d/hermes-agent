@@ -34,7 +34,7 @@ function row(overrides: Partial<SessionInfo> = {}): SessionInfo {
  *  The sidebar fetch splits its rows into three source-scoped slices, and
  *  recents EXCLUDES every messaging/cron source — so a telegram tab's row is
  *  only ever in `$messagingSessions`. `tileStoredRow` searched recents alone,
- *  missed it, and `tileTitle` fell through to NEW_SESSION_TITLE. No amount of
+ *  missed it, and `tileTitle` fell through to the draft placeholder. No amount of
  *  activity could fix it: the row is never eligible for recents. */
 describe('tileStoredRow resolves across every sidebar slice', () => {
   afterEach(() => {

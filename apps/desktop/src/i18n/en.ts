@@ -3703,6 +3703,7 @@ export const en: Translations = {
       back: 'All projects'
     },
     newSessionIn: label => `New session in ${label}`,
+    newSessionTitle: 'New session',
     showMoreIn: (count, label) => `Show ${count} more in ${label}`,
     loading: 'Loading…',
     loadMore: 'Load more',
