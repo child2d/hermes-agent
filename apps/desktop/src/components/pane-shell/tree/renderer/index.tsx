@@ -87,12 +87,13 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
           this window-level strip: a shadow on the band itself would be painted
           over by the pane's opaque content below it, and an inset on that content
           would reach one pane at a time. Painted above the tree, below the
-          titlebar's fixed clusters (z-70). 4px, not a card shadow — at this scale
-          the line is what reads. */}
+          titlebar's fixed clusters (z-70). 2px, not a card shadow — Codex's own
+          handoff is a single dark row, and at this scale anything wider reads as a
+          smudge rather than an edge. */}
       {titlebar && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 z-20 h-1 bg-linear-to-b from-(--ui-band-cast) to-transparent"
+          className="pointer-events-none absolute inset-x-0 z-20 h-0.5 bg-linear-to-b from-(--ui-band-cast) to-transparent"
           style={{ top: 'var(--pane-titleband-height, 2.75rem)' }}
         />
       )}
