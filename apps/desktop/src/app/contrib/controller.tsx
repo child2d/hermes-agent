@@ -5,6 +5,7 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 import { registerBaymaxPage } from '@/app/baymax/register'
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
+import { ChannelsPane, CronJobsPane, ListPaneSync } from '@/app/chat/sidebar/list-panes'
 import { AppRail } from '@/app/chat/sidebar/nav-rail'
 import { NO_PROJECT_ID, sessionBucketId } from '@/app/chat/sidebar/projects/workspace-groups'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
@@ -283,6 +284,41 @@ registry.registerMany([
       tabTitleText: () => translateNow('sidebar.files')
     },
     render: () => idle(<FilesPane />)
+  },
+  // A zone's LIST slot, part 2: the rail switches what sits beside the tool's
+  // page (see chat/sidebar/list-panes.tsx). Both wear the session list's surface
+  // and are `hideOnly` — the rail shows and hides them, there is no close gesture.
+  {
+    id: 'channels',
+    area: 'panes',
+    title: translateNow('sidebar.messaging'),
+    data: {
+      placement: 'left',
+      collapsible: true,
+      dock: { pane: 'workspace', pos: 'left' },
+      hideOnly: true,
+      railInShell: true,
+      width: `${SIDEBAR_DEFAULT_WIDTH}px`,
+      minWidth: `${SIDEBAR_DEFAULT_WIDTH}px`,
+      maxWidth: `${SIDEBAR_MAX_WIDTH}px`
+    },
+    render: () => <ChannelsPane />
+  },
+  {
+    id: 'cron-jobs',
+    area: 'panes',
+    title: translateNow('sidebar.cronJobs'),
+    data: {
+      placement: 'left',
+      collapsible: true,
+      dock: { pane: 'workspace', pos: 'left' },
+      hideOnly: true,
+      railInShell: true,
+      width: `${SIDEBAR_DEFAULT_WIDTH}px`,
+      minWidth: `${SIDEBAR_DEFAULT_WIDTH}px`,
+      maxWidth: `${SIDEBAR_MAX_WIDTH}px`
+    },
+    render: () => <CronJobsPane />
   },
   {
     id: 'review',
@@ -892,6 +928,9 @@ export function ContribController() {
           <AppTopBar />
           <div className="flex min-h-0 min-w-0 flex-1">
             <AppRail />
+            {/* A zone's list slot follows the rail: chat keeps the session list,
+                消息平台 swaps in the channels, 定时任务 the job roster. */}
+            <ListPaneSync />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <LayoutTreeRoot titlebar />
 
