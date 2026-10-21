@@ -73,6 +73,14 @@ const RAIL_COLUMN =
  *  the full height while the glyphs still start below the top band. */
 const RAIL_SHELL = 'flex flex-col items-center gap-1.5 px-2 pb-2'
 
+/** The shade the session panel throws onto this rail. It cannot be a shadow on
+ *  the panel itself: a zone clips at its own edges (`overflow-hidden` in
+ *  tree-group.tsx), so the panel's left cast would be cut off at the seam. Painted
+ *  here instead — same falloff, other side of the seam. Starts at the top band
+ *  (nothing casts above the panel there) and runs to the window bottom. */
+const RAIL_PANEL_CAST =
+  'pointer-events-none absolute right-0 bottom-0 w-2 bg-linear-to-l from-(--ui-panel-cast) to-transparent top-[var(--pane-titleband-height,2.75rem)]'
+
 /** The rail's top offset: it starts BELOW the window's top band, which is
  *  `TITLEBAR_HEIGHT` + the zone header's own 10px of air (`headerBandHeight` in
  *  tree-group.tsx, published as `--pane-titleband-height`; the fallback is that
@@ -122,7 +130,8 @@ export function AppRail() {
   }
 
   return (
-    <div className={RAIL_COLUMN} data-slot="app-rail">
+    <div className={cn(RAIL_COLUMN, 'relative')} data-slot="app-rail">
+      <div aria-hidden="true" className={RAIL_PANEL_CAST} />
       <nav aria-label="Rail" className={cn(RAIL_SHELL, RAIL_TOP_PAD)} data-slot="sidebar-nav-rail">
         {items.map(item => {
           // Rail items are page-backed by construction (new session stays in the

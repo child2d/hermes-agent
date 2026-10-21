@@ -218,20 +218,20 @@
   --shadow-composer:
     0 0.0625rem 0.125rem color-mix(in srgb, #000 6%, transparent),
     0 0.25rem 0.75rem -0.25rem color-mix(in srgb, #000 7%, transparent);
-  /* The session list's panel is RECESSED into the chrome, not raised above it
-     (nav-rail.tsx RAIL_COLUMN + `--ui-sidebar-panel-background` are the other
-     halves of that shape). Its left and top edges are the well's walls, so the
-     depth cue is an INSET shadow on those two edges — an outer one cannot do the
-     job: the zone clips at the panel's own edge (`overflow-hidden` in
-     tree-group.tsx), and it would paint the shadow over the top band's row at
-     full window height instead of only where the panel is. One edge each: the
-     classic `inset 8px 0 8px -8px` recipe, so the other three sides stay clean.
+  /* The session list's panel is RAISED above the window chrome and casts UP onto
+     the top band (`nav-rail.tsx` RAIL_COLUMN + `--ui-sidebar-panel-background`
+     are the other halves of that shape). Its LEFT cast cannot ride on this: the
+     zone clips at the panel's own edge (`overflow-hidden` in tree-group.tsx), so
+     the chrome-side shade there is painted by the rail (`--ui-panel-cast`,
+     RAIL_COLUMN's overlay). Only the top edge has room to spill, so this is a
+     tight top cast, not a four-sided card shadow.
      Read it as `[box-shadow:var(--shadow-panel)]`, NOT through a `shadow-panel`
      utility: Tailwind inlines a theme shadow's values into the utility, so the
      `.dark` override below would never reach it. */
-  --shadow-panel:
-    inset 0.5rem 0 0.5rem -0.5rem color-mix(in srgb, #000 6%, transparent),
-    inset 0 0.375rem 0.5rem -0.5rem color-mix(in srgb, #000 9%, transparent);
+  --shadow-panel: 0 -0.0625rem 0.375rem -0.0625rem color-mix(in srgb, #000 10%, transparent);
+  /* What the panel throws onto the chrome beside it — the rail's right-edge
+     overlay reads it as a gradient (and gets stronger in dark, below). */
+  --ui-panel-cast: color-mix(in srgb, #000 7%, transparent);
 }
 
 @layer base {
@@ -731,12 +731,12 @@
     --shadow-composer:
       0 0.0625rem 0.125rem color-mix(in srgb, #000 32%, transparent),
       0 0.25rem 0.875rem -0.25rem color-mix(in srgb, #000 34%, transparent);
-    /* Same reason, and then some: the well's walls sit between two near-black
-       surfaces (chrome #0d0d0e, panel a rung above it), so the inset needs
-       roughly triple the alpha to register as an edge at all. */
-    --shadow-panel:
-      inset 0.5rem 0 0.5rem -0.5rem color-mix(in srgb, #000 26%, transparent),
-      inset 0 0.375rem 0.5rem -0.5rem color-mix(in srgb, #000 34%, transparent);
+    /* Same reason, and then some: the panel and the chrome it shades are both
+       near-black here (#0d0d0e chrome, a rung above for the panel), so both the
+       top cast and the rail's edge shade need roughly triple the alpha to
+       register at all. */
+    --shadow-panel: 0 -0.0625rem 0.375rem -0.0625rem color-mix(in srgb, #000 34%, transparent);
+    --ui-panel-cast: color-mix(in srgb, #000 30%, transparent);
     /* Dark mode: a dark card needs a stronger black inset to show the recess. */
     --dt-input-inset: inset 0 1px 1px color-mix(in srgb, #000 38%, transparent);
     --ui-tab-hover-darken: 6%;
