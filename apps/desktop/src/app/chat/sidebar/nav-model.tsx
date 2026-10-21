@@ -11,6 +11,7 @@ import {
   CAPABILITIES_ROUTE,
   CRON_ROUTE,
   MESSAGING_ROUTE,
+  NEW_CHAT_ROUTE,
   SIDEBAR_NAV_AREA,
   type SidebarNavContribution
 } from '../../routes'
@@ -19,6 +20,16 @@ import type { SidebarNavItem } from '../../types'
 // A row's `tier` is the one mode it belongs to (Simple keeps the setup rows,
 // Advanced adds the readouts); the list filters once, nothing is passed down.
 export const SIDEBAR_NAV: SidebarNavItem[] = [
+  // Home is the way BACK from a setup page to the conversation: the rail is the
+  // only chrome that survives leaving chat, so chat needs its own glyph there.
+  // Active state is the chat VIEW, not this route — see `isNavActive`.
+  {
+    id: 'home',
+    label: '',
+    icon: props => <Codicon name="home" {...props} />,
+    codicon: 'home',
+    route: NEW_CHAT_ROUTE
+  },
   {
     id: 'new-session',
     label: '',

@@ -124,11 +124,13 @@ describe('ChatSidebar navigation activity', () => {
     expectOnlySelectedSession(null)
 
     focus('tile-one-group')
-    expectOnlyCurrent(null)
+    // A tile hit is the chat view, so the rail's Home glyph lights up — chat is
+    // where the session list lives, and Home is now the way to name that state.
+    expectOnlyCurrent('Home')
     expectOnlySelectedSession('Tile one')
 
     focus('tile-two-group')
-    expectOnlyCurrent(null)
+    expectOnlyCurrent('Home')
     expectOnlySelectedSession('Tile two')
 
     focus(null)
@@ -140,7 +142,7 @@ describe('ChatSidebar navigation activity', () => {
       $removedSessionIds.set(new Set(['tile-two']))
       $sessions.set([sessionRows[0]])
     })
-    expectOnlyCurrent(null)
+    expectOnlyCurrent('Home')
     expectOnlySelectedSession(null)
 
     act(() => {
@@ -161,7 +163,7 @@ describe('ChatSidebar navigation activity', () => {
       expectOnlySelectedSession(null)
 
       focus('tile-one-group')
-      expectOnlyCurrent(null)
+      expectOnlyCurrent('Home')
       expectOnlySelectedSession('Tile one')
     }
 

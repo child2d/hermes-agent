@@ -1,11 +1,11 @@
-import { Blocks, Bot, ClipboardList, FolderOpen, MessagesSquare, SquareKanban, Timer } from 'lucide-react'
+import { Blocks, Bot, ClipboardList, FolderOpen, House, MessagesSquare, SquareKanban, Timer } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 
 import type { SidebarNavItem } from '@/app/types'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-import { navigateToWorkspacePage } from '../../routes'
+import { appViewForPath, navigateToWorkspacePage, NEW_CHAT_ROUTE } from '../../routes'
 
 import { sidebarRailItems, useSidebarNavItems } from './nav-model'
 
@@ -32,6 +32,7 @@ import { sidebarRailItems, useSidebarNavItems } from './nav-model'
  *  ids; no entry → the item keeps the icon it was given, so an unknown codicon
  *  still renders instead of leaving a hole. */
 const RAIL_ICONS: Record<string, SidebarNavItem['icon']> = {
+  home: House, // 首页（回到对话）
   'symbol-misc': Blocks, // 技能与工具
   comment: MessagesSquare, // 消息平台
   files: FolderOpen, // 产物
@@ -146,8 +147,13 @@ export function CollapsedSidebarRail() {
     <nav aria-label="Rail" className={RAIL_SHELL} data-slot="sidebar-nav-rail-collapsed">
       {items.map(item => {
         // Rail items are page-backed by construction (new session stays in the
-        // list), so the path IS the active state — no view lookup needed here.
-        const active = Boolean(item.route) && pathname === item.route
+        // list). Home is the exception: it stands for the CHAT view, which is a
+        // route FAMILY (`/` plus `/session/:id`), not one path.
+        const active =
+          item.route === NEW_CHAT_ROUTE
+            ? appViewForPath(pathname) === 'chat'
+            : Boolean(item.route) && pathname === item.route
+
         const { Icon, svg } = railIcon(item)
 
         return (

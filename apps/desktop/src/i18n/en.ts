@@ -3583,6 +3583,7 @@ export const en: Translations = {
     },
     profileRail: 'Profile rail',
     nav: {
+      home: 'Home',
       'new-session': 'New session',
       capabilities: 'Capabilities',
       messaging: 'Messaging',

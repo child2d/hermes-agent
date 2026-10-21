@@ -46,6 +46,16 @@ export function LegacySessionRedirect() {
   return <Navigate replace to={sessionId ? sessionRoute(sessionId) : NEW_CHAT_ROUTE} />
 }
 
+/** Which views bring a sidebar of their own.
+ *
+ *  The sidebar is not "the session list" — it is a per-view panel. Chat's is
+ *  the session list; a tool that wants its own (a capabilities tree, a cron
+ *  list, …) joins this set and gets a branch in `SidebarSurface`.
+ *
+ *  Views NOT in the set fold the sidebar pane down to its rail, which stays on
+ *  screen because the rail is the only way back to chat. */
+export const VIEWS_WITH_SIDEBAR: ReadonlySet<string> = new Set(['chat'])
+
 export const SidebarSurface = memo(function SidebarSurface({
   actions,
   currentView
@@ -54,6 +64,12 @@ export const SidebarSurface = memo(function SidebarSurface({
   currentView: ComponentProps<typeof ChatSidebar>['currentView']
 }) {
   const latestActions = useMemo(() => latestSidebarActions(actions), [actions])
+
+  // A view without a sidebar of its own has nothing to paint here — the pane is
+  // already folded to its rail by the wiring layer.
+  if (!VIEWS_WITH_SIDEBAR.has(currentView)) {
+    return null
+  }
 
   return <ChatSidebar currentView={currentView} {...latestActions} />
 })

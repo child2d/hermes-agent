@@ -24,7 +24,8 @@ import { GatewayConnectingOverlay } from '@/components/gateway-connecting-overla
 import { NotificationStack } from '@/components/notifications'
 import { DesktopOnboardingOverlay } from '@/components/onboarding'
 import { OnboardingChatGate } from '@/components/onboarding-chat/gate'
-import { $newSessionTabAction, registerPaneCloser } from '@/components/pane-shell/tree/store'
+import { findGroupOfPane } from '@/components/pane-shell/tree/model'
+import { $layoutTree, $newSessionTabAction, registerPaneCloser, setTreeGroupMinimized } from '@/components/pane-shell/tree/store'
 import {
   $workspaceMode,
   $workspaceNewSessionTarget,
@@ -172,9 +173,15 @@ import { useOnboardingHandoff } from './onboarding-handoff'
 import { useOnboardingKickoff } from './onboarding-kickoff'
 import { $restartPreviewServer, useTitlebarToolContributions } from './panes'
 import { type AmbientGatewayRequest, createSessionRpcDispatcher } from './session-rpc-dispatcher'
-import { ChatRoutesSurface, SidebarSurface, StatusbarSurface, TerminalSurface } from './surfaces'
+import { ChatRoutesSurface, SidebarSurface, StatusbarSurface, TerminalSurface, VIEWS_WITH_SIDEBAR } from './surfaces'
 import type { WiringActions, WiringApi } from './types'
 import { POOL_LIMITS_SETTINGS_ROUTE } from './wiring-routing'
+
+/** Set while the sidebar is folded because the current view brings no sidebar
+ *  of its own (see VIEWS_WITH_SIDEBAR). Module-scope, not a ref: it is not
+ *  reactive state — just a note-to-self so returning to chat undoes OUR fold and
+ *  leaves a fold the user made by hand alone. */
+let sidebarFoldedByRoute = false
 
 // Overlay views the controller mounts over the shell — lazy, load on demand.
 // The workspace-route full-page views (skills/messaging/artifacts) are the
@@ -1243,6 +1250,34 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // surface's own atom subscriptions. A wiring tick that doesn't touch a
   // node's keys leaves its element reference intact, so `WiredPane` (memoized)
   // bails on that pane subtree — panes render independently of one another.
+  // The sidebar is a per-view panel, not "the session list": only the views in
+  // VIEWS_WITH_SIDEBAR bring one. Leaving chat for a tool without a sidebar of
+  // its own folds the pane down to its rail — which stays, because the rail is
+  // the way back — and returning reopens it. Only a fold THIS effect made is
+  // undone, so a sidebar the user collapsed by hand stays collapsed.
+  useEffect(() => {
+    const tree = $layoutTree.get()
+    const group = tree ? findGroupOfPane(tree, 'sessions') : null
+
+    if (!group) {
+      return
+    }
+
+    if (!VIEWS_WITH_SIDEBAR.has(currentView)) {
+      if (!group.minimized) {
+        setTreeGroupMinimized(group.id, true)
+        sidebarFoldedByRoute = true
+      }
+
+      return
+    }
+
+    if (sidebarFoldedByRoute) {
+      setTreeGroupMinimized(group.id, false)
+      sidebarFoldedByRoute = false
+    }
+  }, [currentView])
+
   const sidebarNode = useMemo(
     () => <SidebarSurface actions={actions} currentView={currentView} />,
     [actions, currentView]

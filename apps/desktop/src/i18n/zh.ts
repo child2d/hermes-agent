@@ -3611,6 +3611,7 @@ export const zh = defineLocale({
       actions: '分组操作'
     },
     nav: {
+      home: '首页',
       'new-session': '新建会话',
       capabilities: '技能与工具',
       messaging: '消息平台',

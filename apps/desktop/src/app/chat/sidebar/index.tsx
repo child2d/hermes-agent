@@ -1522,11 +1522,13 @@ export function ChatSidebar({
   const isNavActive = (item: SidebarNavItem) =>
     item.id === 'new-session'
       ? false
-      : (item.id === 'capabilities' && currentView === 'capabilities') ||
-        (item.id === 'messaging' && currentView === 'messaging') ||
-        (item.id === 'artifacts' && currentView === 'artifacts') ||
-        (item.id === 'cron' && currentView === 'cron') ||
-        (currentView === 'extension' && Boolean(item.route) && pathname === item.route)
+      : item.id === 'home'
+        ? currentView === 'chat'
+        : (item.id === 'capabilities' && currentView === 'capabilities') ||
+          (item.id === 'messaging' && currentView === 'messaging') ||
+          (item.id === 'artifacts' && currentView === 'artifacts') ||
+          (item.id === 'cron' && currentView === 'cron') ||
+          (currentView === 'extension' && Boolean(item.route) && pathname === item.route)
 
   return (
     // Quiet tooltips: every sidebar row and header button already carries an
