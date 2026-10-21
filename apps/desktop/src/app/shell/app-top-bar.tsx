@@ -31,20 +31,20 @@ export function AppTopBar({ children }: { children?: React.ReactNode }) {
   const [row, setRow] = useState<HTMLDivElement | null>(null)
 
   return (
-    <div
-      className="relative flex h-(--app-band-height,2.75rem) shrink-0 items-stretch bg-(--ui-region-chrome)"
-      data-slot="app-top-bar"
-    >
-      {/* The band row: window-wide, and the left cluster lives over it (the
-          traffic lights are its first 74px on macOS). Bands are absolutely
-          placed inside it at their zone's own x/width. */}
+    <BandRowContext.Provider value={row}>
       <div
-        className="relative flex min-w-0 flex-1 items-stretch [-webkit-app-region:drag]"
-        data-slot="app-band-row"
-        ref={setRow}
-      />
-      <BandRowContext.Provider value={row}>{children}</BandRowContext.Provider>
-    </div>
+        className="relative flex shrink-0 items-stretch bg-(--ui-region-chrome)"
+        data-slot="app-top-bar"
+        style={{ height: `var(${BAND_HEIGHT_VAR}, ${APP_BAND_FALLBACK_HEIGHT}px)` }}
+      >
+        <div
+          className="relative flex min-w-0 flex-1 items-stretch [-webkit-app-region:drag]"
+          data-slot="app-band-row"
+          ref={setRow}
+        />
+      </div>
+      {children}
+    </BandRowContext.Provider>
   )
 }
 
@@ -56,14 +56,16 @@ export function AppTopBar({ children }: { children?: React.ReactNode }) {
  */
 export function BandSlot({
   box,
-  children
+  children,
+  enabled = true
 }: {
   box: null | { left: number; width: number }
   children: React.ReactNode
+  enabled?: boolean
 }) {
   const row = useBandRowTarget()
 
-  if (!row) {
+  if (!enabled || !row) {
     // No bar: the band stays in the zone's own flow. Every window that does not
     // run the app shell (HUD, browser popout) and every isolated render takes
     // this path, so a zone's band is never silently missing.
@@ -91,11 +93,19 @@ export const BAND_HEIGHT_VAR = '--app-band-height'
 /** Height of the window's top row when no zone claimed it: one titlebar band. */
 export const APP_BAND_FALLBACK_HEIGHT = TITLEBAR_HEIGHT + 10
 
-export function publishBandHeight(height: number | undefined): void {
+const bandHeights = new Map<string, number>()
+
+export function publishBandHeight(height: number | undefined, owner: string): void {
   const root = document.documentElement
 
   if (height) {
-    root.style.setProperty(BAND_HEIGHT_VAR, `${height}px`)
+    bandHeights.set(owner, height)
+  } else {
+    bandHeights.delete(owner)
+  }
+
+  if (bandHeights.size) {
+    root.style.setProperty(BAND_HEIGHT_VAR, `${Math.max(...bandHeights.values())}px`)
   } else {
     root.style.removeProperty(BAND_HEIGHT_VAR)
   }
@@ -126,9 +136,7 @@ export function useBandBox(
       const rect = el.getBoundingClientRect()
 
       setBox(prev =>
-        prev && prev.left === rect.left && prev.width === rect.width
-          ? prev
-          : { left: rect.left, width: rect.width }
+        prev && prev.left === rect.left && prev.width === rect.width ? prev : { left: rect.left, width: rect.width }
       )
     }
 

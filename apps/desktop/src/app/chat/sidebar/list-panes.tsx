@@ -1,58 +1,27 @@
 import { useStore } from '@nanostores/react'
-import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
-import { replacePaneInTree } from '@/components/pane-shell/tree/store'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { $cronJobs } from '@/store/cron'
 
-import { CRON_ROUTE, MESSAGING_ROUTE, NEW_CHAT_ROUTE, SETTINGS_ROUTE } from '../../routes'
+import { CRON_ROUTE, MESSAGING_ROUTE, SETTINGS_ROUTE } from '../../routes'
 
 import { ConnectionSwitcher } from './connection-switcher'
 
-/**
- * A zone's LIST slot — the column A zone shows on the left.
- *
- * The rail is A zone's top-level switch, and it switches BOTH halves: chat shows
- * the session list beside the conversation, 消息平台 shows the channels beside its
- * page, 定时任务 shows the jobs beside theirs. That is one slot swapping its pane,
- * not a second sidebar: the slot lives wherever the user dragged it, so the swap
- * replaces the pane IN PLACE (`replacePaneInTree`).
- *
- * A pane that declares itself here is a LIST, so it is `hideOnly` (no close
- * gesture — the rail is what shows and hides it) and takes the standard sidebar
- * width.
- */
-export const LIST_PANES = ['sessions', 'channels', 'cron-jobs'] as const
-
-/** Which list the window's current surface wants. Routes without an entry keep
- *  the session list: a tool page that owns its own list is a product decision
- *  (which pane becomes its list), not something to infer from the URL. */
-const LIST_PANE_FOR_ROUTE: Record<string, string> = {
-  [CRON_ROUTE]: 'cron-jobs',
-  [MESSAGING_ROUTE]: 'channels'
+/** One standing list pane owns the column. Routes change its content, never
+ * the layout tree: registering each list as a pane lets automatic adoption
+ * create extra columns, and renaming those panes duplicates the session list. */
+const LIST_FOR_ROUTE: Record<string, React.ComponentType> = {
+  [CRON_ROUTE]: CronJobsPane,
+  [MESSAGING_ROUTE]: ChannelsPane
 }
 
-/** Push the active route's list into the tree, when it is not the one showing. */
-export function showListPane(paneId: string): boolean {
-  const others = LIST_PANES.filter(candidate => candidate !== paneId)
-
-  return replacePaneInTree(others, paneId)
-}
-
-/** Mounted once by the shell: keeps A zone's list slot in step with the rail. */
-export function ListPaneSync() {
+export function WorkspaceListPane({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation()
-  const paneId = LIST_PANE_FOR_ROUTE[pathname] ?? (pathname === NEW_CHAT_ROUTE ? 'sessions' : undefined)
+  const List = LIST_FOR_ROUTE[pathname]
 
-  useEffect(() => {
-    if (paneId) {
-      showListPane(paneId)
-    }
-  }, [paneId])
-
-  return null
+  return List ? <List /> : <>{children}</>
 }
 
 /** Shared shell for a list pane: the panel surface the session list wears, so a
@@ -117,9 +86,7 @@ export function CronJobsPane() {
                 <span className="min-w-0 flex-1 truncate text-(--ui-text-primary)">
                   {job.name ?? job.prompt ?? job.id}
                 </span>
-                <span className="shrink-0 text-2xs text-(--ui-text-quaternary)">
-                  {job.schedule_display ?? ''}
-                </span>
+                <span className="shrink-0 text-2xs text-(--ui-text-quaternary)">{job.schedule_display ?? ''}</span>
               </button>
             </li>
           ))}

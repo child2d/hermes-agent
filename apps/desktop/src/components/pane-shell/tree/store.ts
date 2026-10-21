@@ -539,9 +539,10 @@ function tabTargetGroup(eligible: (group: GroupNode) => boolean): GroupNode | nu
 }
 
 const treeGroupOfEvent = (event: Event): null | string => {
-  const el = event.target instanceof HTMLElement ? event.target : null
+  const el = event.target instanceof Element ? event.target : null
+  const owner = el?.closest<HTMLElement>('[data-zone-band], [data-tree-group]')
 
-  return el?.closest<HTMLElement>('[data-tree-group]')?.dataset.treeGroup ?? null
+  return owner?.dataset.zoneBand ?? owner?.dataset.treeGroup ?? null
 }
 
 /** Install the zone trackers (call once from the tree root). Records the
@@ -920,48 +921,6 @@ export function cycleTreeTabInFocusedZone(direction: 1 | -1): null | string {
   // and a zone the user deliberately set to `never` must not be argued with by
   // a keystroke that was only asked to change tabs.
   return nextId
-}
-
-/**
- * Show `to` where one of `from` currently sits — A zone's LIST slot.
- *
- * The rail switches what A zone shows on the left (chat → the session list,
- * 消息平台 → channels, 定时任务 → job list), and that slot is one pane the user may
- * have moved anywhere. Replacing it IN PLACE keeps the zone where they put it;
- * a dismissal + re-dock would move the column and drop the size they dragged.
- */
-export function replacePaneInTree(from: readonly string[], to: string): boolean {
-  const tree = $layoutTree.get()
-
-  if (!tree || from.includes(to)) {
-    return false
-  }
-
-  const walk = (node: LayoutNode): LayoutNode => {
-    if (node.type === 'group') {
-      if (!node.panes.some(paneId => from.includes(paneId))) {
-        return node
-      }
-
-      const panes = node.panes.map(paneId => (from.includes(paneId) ? to : paneId))
-
-      return { ...node, active: from.includes(node.active) ? to : node.active, panes }
-    }
-
-    const children = node.children.map(walk)
-
-    return children.some((child, index) => child !== node.children[index]) ? { ...node, children } : node
-  }
-
-  const next = walk(tree)
-
-  if (next === tree) {
-    return false
-  }
-
-  commit(next)
-
-  return true
 }
 
 /** Remove a pane from the tree WITHOUT a dismissal record — for surfaces

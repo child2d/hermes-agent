@@ -13,7 +13,7 @@ import { useStore } from '@nanostores/react'
 import { type CSSProperties, Fragment, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 
 import { ShellMenuItems } from '@/app/context-menu/shell-menu-items'
-import { BandSlot, publishBandHeight, useBandBox } from '@/app/shell/app-top-bar'
+import { BandSlot, publishBandHeight, useBandBox, useBandRowTarget } from '@/app/shell/app-top-bar'
 import { TITLEBAR_DRAG_HANDLE_WIDTH, TITLEBAR_HEIGHT } from '@/app/shell/titlebar'
 import { ActionsContextMenu, type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
 import { Codicon } from '@/components/ui/codicon'
@@ -468,6 +468,8 @@ export function TreeGroup({
   // The band's REAL height: the traffic-light row, plus the strip's own row when
   // the tabs have to drop below the window controls. The window's top bar reads
   // this (`--app-band-height`) so that case grows the whole row.
+  const bandRow = useBandRowTarget()
+  const portaledBand = Boolean(topEdge && bandRow)
   const bandHeight = headerBandHeight ? headerBandHeight + (tabsBelowControls && headerVisible ? 28 : 0) : undefined
 
   useEffect(() => {
@@ -488,10 +490,10 @@ export function TreeGroup({
       return
     }
 
-    publishBandHeight(bandHeight)
+    publishBandHeight(bandHeight, node.id)
 
-    return () => publishBandHeight(undefined)
-  }, [bandHeight, topEdge])
+    return () => publishBandHeight(undefined, node.id)
+  }, [bandHeight, node.id, topEdge])
 
   // A zone on the window's top edge hands its band to the window's top bar
   // (app-top-bar.tsx): the row belongs to the window, so the rail below it starts
@@ -643,11 +645,7 @@ export function TreeGroup({
               // both doubles the seam and costs the rail 1px of its 52px
               // track, which shows up as the icon column being squeezed on the
               // right the moment the list folds.
-              collapsedRail
-                ? ''
-                : railSide === 'right'
-                  ? PANE_TAB_STRIP_LINE_LEFT
-                  : PANE_TAB_STRIP_LINE_RIGHT
+              collapsedRail ? '' : railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
             )}
             onClick={() => restoreTreePane(activeId)}
             title={t.zones.restore}
@@ -676,297 +674,296 @@ export function TreeGroup({
                 <Codicon name={railSide === 'right' ? 'chevron-left' : 'chevron-right'} size="0.875rem" />
               </button>
             ) : (
-            <div
-              className="flex min-h-0 flex-col overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              role="tablist"
-            >
-              {shown.map(paneId => {
-                const closeable = closeableTab(paneId)
+              <div
+                className="flex min-h-0 flex-col overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                role="tablist"
+              >
+                {shown.map(paneId => {
+                  const closeable = closeableTab(paneId)
 
-                return (
-                  <PaneTab
-                    // Match the horizontal minimized strip: no tab is "active"
-                    // while collapsed (there's no content surface to merge into).
-                    aria-selected={paneId === activeId}
-                    data-tree-tab={paneId}
-                    key={paneId}
-                    onClick={event => {
-                      event.stopPropagation()
-                      restoreTreePane(paneId)
-                    }}
-                    onClose={closeable ? () => closeTab(paneId) : undefined}
-                    role="tab"
-                    side={railSide}
-                    vertical
-                  >
-                    <PaneTabLabel>{tabLabel(paneId)}</PaneTabLabel>
-                  </PaneTab>
-                )
-              })}
-            </div>
+                  return (
+                    <PaneTab
+                      // Match the horizontal minimized strip: no tab is "active"
+                      // while collapsed (there's no content surface to merge into).
+                      aria-selected={paneId === activeId}
+                      data-tree-tab={paneId}
+                      key={paneId}
+                      onClick={event => {
+                        event.stopPropagation()
+                        restoreTreePane(paneId)
+                      }}
+                      onClose={closeable ? () => closeTab(paneId) : undefined}
+                      role="tab"
+                      side={railSide}
+                      vertical
+                    >
+                      <PaneTabLabel>{tabLabel(paneId)}</PaneTabLabel>
+                    </PaneTab>
+                  )
+                })}
+              </div>
             )}
           </div>
         </ZoneMenu>
       )}
 
-      {/* Keep the header INSIDE its zone: titlebar drops use the same panel
-          bounds, strip refs, focus ownership and split geometry as the body. */}
+      {/* Top-edge bands mount in the window row; other strips stay in their
+          zone. Both retain this zone's strip refs and focus ownership. */}
       {(headerVisible || (topEdge && !verticalCollapse)) && (
-        <BandSlot box={topEdge ? bandBox : null}>
-        <div
-          // The band is window CHROME — the same rung as the rail beside it and
-          // the zone gutter below it (`--ui-region-chrome`, gray-200). It cannot
-          // be `--ui-sidebar-surface-background`: that is `transparent` under
-          // `data-hermes-glass`, and a transparent band shows the body's field
-          // there, which is a hard step at the rail's edge in the top row.
-          className={cn(
-            'relative flex min-w-0 bg-(--ui-region-chrome)',
-            // In the window's bar the band fills its zone's slot; standing alone
-            // (a zone that is not on the top edge) it sizes to its content.
-            topEdge ? 'flex-1' : 'shrink-0'
-          )}
-          data-panel-header=""
-          style={bandHeight ? { height: bandHeight } : undefined}
-        >
-          {topEdge && (
-            <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-left, 100%)' }} />
-          )}
-          {pageHeader && headerVisible ? (
-            <div
-              className={cn(
-                'flex min-w-0 flex-1 items-stretch overflow-hidden',
-                tabsBelowControls && 'absolute inset-x-0 bottom-0 h-7'
-              )}
-              data-panel-page-header=""
-            >
-              <PaneTab active>{pageHeader()}</PaneTab>
-            </div>
-          ) : headerVisible ? (
-            <ZoneMenu {...zoneMenu}>
-              <PaneTabStrip
-                className={cn('flex-1', tabsBelowControls && 'absolute inset-x-0 bottom-0')}
-                // data-zone-tabstrip: a drop over here STACKS (drag-session reads it).
-                data-zone-tabstrip={node.id}
-                listRef={tabsRef}
-                onPointerDown={event => {
-                  // Native titlebar gaps move the window; tabs keep their own drag.
-                  if (!tabsInTitlebar) {
-                    startPaneDrag(
-                      activeId,
-                      event,
-                      node.minimized ? () => restoreTreePane(activeId) : undefined,
-                      undefined,
-                      tabText(activeId)
-                    )
-                  }
-                }}
-                ref={stripRef}
-                style={{ cursor: 'grab', WebkitAppRegion: dragging ? 'no-drag' : undefined } as CSSProperties}
-                titlebar={tabsInTitlebar}
-                trailing={
-                  <>
-                    {minimizable && (
-                      <button
-                        aria-label={node.minimized ? t.zones.restore : minimizeLabel}
-                        className="mx-1 grid size-5 shrink-0 place-items-center self-center [-webkit-app-region:no-drag] rounded-md text-(--ui-text-tertiary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:opacity-100 group-hover/pane-header:opacity-100"
-                        onClick={toggleCollapse}
-                        onPointerDown={e => e.stopPropagation()}
-                        type="button"
-                      >
-                        <Codicon name={node.minimized ? 'chevron-up' : 'chevron-down'} size="0.75rem" />
-                      </button>
-                    )}
-                    <StripDropCaret groupId={node.id} stripRef={stripRef} />
-                  </>
-                }
+        <BandSlot box={bandBox} enabled={Boolean(topEdge)}>
+          <div
+            // The band is window CHROME — the same rung as the rail beside it and
+            // the zone gutter below it (`--ui-region-chrome`, gray-200). It cannot
+            // be `--ui-sidebar-surface-background`: that is `transparent` under
+            // `data-hermes-glass`, and a transparent band shows the body's field
+            // there, which is a hard step at the rail's edge in the top row.
+            className={cn(
+              'relative flex min-w-0 bg-(--ui-region-chrome)',
+              // In the window's bar the band fills its zone's slot; standing alone
+              // (a zone that is not on the top edge) it sizes to its content.
+              portaledBand ? 'flex-1' : 'shrink-0'
+            )}
+            data-panel-header=""
+            data-zone-band={node.id}
+            style={bandHeight ? { height: bandHeight } : undefined}
+          >
+            {topEdge && (
+              <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-left, 100%)' }} />
+            )}
+            {pageHeader && headerVisible ? (
+              <div
+                className={cn(
+                  'flex min-w-0 flex-1 items-stretch overflow-hidden',
+                  tabsBelowControls && 'absolute inset-x-0 bottom-0 h-7'
+                )}
+                data-panel-page-header=""
               >
-                {shown.map((paneId, index) => {
-                  const isActive = paneId === activeId && !node.minimized
-                  const chrome = paneChrome(paneFor(paneId))
-                  const closeable = closeableTab(paneId)
-                  const title = tabText(paneId)
-                  const isSelected = tabSelection?.groupId === node.id && tabSelection.ids.has(paneId)
+                <PaneTab active>{pageHeader()}</PaneTab>
+              </div>
+            ) : headerVisible ? (
+              <ZoneMenu {...zoneMenu}>
+                <PaneTabStrip
+                  className={cn('flex-1', tabsBelowControls && 'absolute inset-x-0 bottom-0')}
+                  // data-zone-tabstrip: a drop over here STACKS (drag-session reads it).
+                  data-zone-tabstrip={node.id}
+                  listRef={tabsRef}
+                  onPointerDown={event => {
+                    // Native titlebar gaps move the window; tabs keep their own drag.
+                    if (!tabsInTitlebar) {
+                      startPaneDrag(
+                        activeId,
+                        event,
+                        node.minimized ? () => restoreTreePane(activeId) : undefined,
+                        undefined,
+                        tabText(activeId)
+                      )
+                    }
+                  }}
+                  ref={stripRef}
+                  style={{ cursor: 'grab', WebkitAppRegion: dragging ? 'no-drag' : undefined } as CSSProperties}
+                  titlebar={tabsInTitlebar}
+                  trailing={
+                    <>
+                      {minimizable && (
+                        <button
+                          aria-label={node.minimized ? t.zones.restore : minimizeLabel}
+                          className="mx-1 grid size-5 shrink-0 place-items-center self-center [-webkit-app-region:no-drag] rounded-md text-(--ui-text-tertiary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:opacity-100 group-hover/pane-header:opacity-100"
+                          onClick={toggleCollapse}
+                          onPointerDown={e => e.stopPropagation()}
+                          type="button"
+                        >
+                          <Codicon name={node.minimized ? 'chevron-up' : 'chevron-down'} size="0.75rem" />
+                        </button>
+                      )}
+                      <StripDropCaret groupId={node.id} stripRef={stripRef} />
+                    </>
+                  }
+                >
+                  {shown.map((paneId, index) => {
+                    const isActive = paneId === activeId && !node.minimized
+                    const chrome = paneChrome(paneFor(paneId))
+                    const closeable = closeableTab(paneId)
+                    const title = tabText(paneId)
+                    const isSelected = tabSelection?.groupId === node.id && tabSelection.ids.has(paneId)
 
-                  const tab = (
-                    <PaneTab
-                      active={isActive}
-                      aria-selected={isActive}
-                      closeIcon={<Codicon name="close" size="0.6875rem" />}
-                      closeLabel={t.common.close}
-                      data-tree-tab={paneId}
-                      key={paneId}
-                      onClose={closeable ? () => closeTab(paneId) : undefined}
-                      onPointerDown={e => {
-                        // Chrome's tab-selection grammar, ahead of activate/drag:
-                        // Shift-click ranges from the anchor, ⌥-click (Ctrl-click
-                        // off-Mac) toggles. Neither activates nor starts a drag —
-                        // the press IS the selection edit. ⌘-click stays close
-                        // (PaneTab claims it first) and ⌃-click stays the macOS
-                        // context menu.
-                        if (e.button === 0 && e.shiftKey) {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          selectTabRange(node.id, shown, paneId, activeId)
+                    const tab = (
+                      <PaneTab
+                        active={isActive}
+                        aria-selected={isActive}
+                        closeIcon={<Codicon name="close" size="0.6875rem" />}
+                        closeLabel={t.common.close}
+                        data-tree-tab={paneId}
+                        key={paneId}
+                        onClose={closeable ? () => closeTab(paneId) : undefined}
+                        onPointerDown={e => {
+                          // Chrome's tab-selection grammar, ahead of activate/drag:
+                          // Shift-click ranges from the anchor, ⌥-click (Ctrl-click
+                          // off-Mac) toggles. Neither activates nor starts a drag —
+                          // the press IS the selection edit. ⌘-click stays close
+                          // (PaneTab claims it first) and ⌃-click stays the macOS
+                          // context menu.
+                          if (e.button === 0 && e.shiftKey) {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            selectTabRange(node.id, shown, paneId, activeId)
 
-                          return
-                        }
-
-                        if (isToggleSelectClick(e)) {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          toggleTabSelected(node.id, paneId, activeId)
-
-                          return
-                        }
-
-                        // Tabs ACTIVATE (restoring a collapsed group). Minimize
-                        // lives on the chevron — overloading the active tab made
-                        // double-click a minimize/restore/hide lottery. A plain
-                        // click also collapses any multi-tab selection back to the
-                        // one tab (Chrome semantics).
-                        const onTap = () => {
-                          clearTabSelection()
-
-                          if (node.minimized) {
-                            restoreTreePane(paneId)
+                            return
                           }
 
-                          activateTreePane(node.id, paneId)
-                        }
+                          if (isToggleSelectClick(e)) {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            toggleTabSelected(node.id, paneId, activeId)
 
-                        // Claim the press so the STRIP's own pane-drag handler
-                        // (parent onPointerDown) can't also fire. startPaneDrag
-                        // does this internally; the session drag (shared with
-                        // sidebar rows) doesn't, so do it here for both paths.
-                        if (e.button === 0) {
-                          e.preventDefault()
-                          e.stopPropagation()
-                        }
+                            return
+                          }
 
-                        // Dragging a SELECTED tab carries the whole selection as
-                        // one block through the generic pane move — a multi-tab
-                        // drag outranks the pane's own tab drag (the session drop
-                        // language is single-session).
-                        const dragSelection = selectionFor(node.id, shown, paneId)
+                          // Tabs ACTIVATE (restoring a collapsed group). Minimize
+                          // lives on the chevron — overloading the active tab made
+                          // double-click a minimize/restore/hide lottery. A plain
+                          // click also collapses any multi-tab selection back to the
+                          // one tab (Chrome semantics).
+                          const onTap = () => {
+                            clearTabSelection()
 
-                        if (dragSelection) {
-                          startPaneDrag(
-                            paneId,
-                            e,
-                            onTap,
-                            stripRef.current ? { groupId: node.id, strip: stripRef.current } : undefined,
-                            t.zones.tabCount(dragSelection.length),
-                            dragSelection
-                          )
+                            if (node.minimized) {
+                              restoreTreePane(paneId)
+                            }
 
-                          return
-                        }
+                            activateTreePane(node.id, paneId)
+                          }
 
-                        // A pane may own its tab drag (a session tab speaks the
-                        // session drop language — link/stack/split); `false` defers
-                        // to the generic pane move (the workspace tab on a fresh
-                        // draft has no session to link).
-                        if (!chrome.tabDrag?.(e, onTap)) {
-                          startPaneDrag(
-                            paneId,
-                            e,
-                            onTap,
-                            stripRef.current ? { groupId: node.id, strip: stripRef.current } : undefined,
-                            title
-                          )
-                        }
-                      }}
-                      role="tab"
-                      selected={isSelected}
-                      style={{ cursor: 'grab' }}
-                    >
-                      {chrome.tabLead ? (
-                        <span className="ml-2 -mr-1 flex shrink-0 items-center">
-                          <TabKeyHint groupId={node.id} slot={index + 1}>
-                            {chrome.tabLead()}
-                          </TabKeyHint>
-                        </span>
-                      ) : null}
-                      <PaneTabLabel>{tabLabel(paneId)}</PaneTabLabel>
-                    </PaneTab>
-                  )
+                          // Claim the press so the STRIP's own pane-drag handler
+                          // (parent onPointerDown) can't also fire. startPaneDrag
+                          // does this internally; the session drag (shared with
+                          // sidebar rows) doesn't, so do it here for both paths.
+                          if (e.button === 0) {
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }
 
-                  // A pane may wrap ITS tab in a domain menu (session verbs on a
-                  // tile tab); the wrapper needs the key since it's the root.
-                  return <Fragment key={paneId}>{chrome.tabWrap ? chrome.tabWrap(tab) : tab}</Fragment>
-                })}
+                          // Dragging a SELECTED tab carries the whole selection as
+                          // one block through the generic pane move — a multi-tab
+                          // drag outranks the pane's own tab drag (the session drop
+                          // language is single-session).
+                          const dragSelection = selectionFor(node.id, shown, paneId)
 
-                {/* Plain "+" after the last tab — it mints another tab of the kind
+                          if (dragSelection) {
+                            startPaneDrag(
+                              paneId,
+                              e,
+                              onTap,
+                              stripRef.current ? { groupId: node.id, strip: stripRef.current } : undefined,
+                              t.zones.tabCount(dragSelection.length),
+                              dragSelection
+                            )
+
+                            return
+                          }
+
+                          // A pane may own its tab drag (a session tab speaks the
+                          // session drop language — link/stack/split); `false` defers
+                          // to the generic pane move (the workspace tab on a fresh
+                          // draft has no session to link).
+                          if (!chrome.tabDrag?.(e, onTap)) {
+                            startPaneDrag(
+                              paneId,
+                              e,
+                              onTap,
+                              stripRef.current ? { groupId: node.id, strip: stripRef.current } : undefined,
+                              title
+                            )
+                          }
+                        }}
+                        role="tab"
+                        selected={isSelected}
+                        style={{ cursor: 'grab' }}
+                      >
+                        {chrome.tabLead ? (
+                          <span className="ml-2 -mr-1 flex shrink-0 items-center">
+                            <TabKeyHint groupId={node.id} slot={index + 1}>
+                              {chrome.tabLead()}
+                            </TabKeyHint>
+                          </span>
+                        ) : null}
+                        <PaneTabLabel>{tabLabel(paneId)}</PaneTabLabel>
+                      </PaneTab>
+                    )
+
+                    // A pane may wrap ITS tab in a domain menu (session verbs on a
+                    // tile tab); the wrapper needs the key since it's the root.
+                    return <Fragment key={paneId}>{chrome.tabWrap ? chrome.tabWrap(tab) : tab}</Fragment>
+                  })}
+
+                  {/* Plain "+" after the last tab — it mints another tab of the kind
                 you are LOOKING AT, so a Browser strip makes another Browser
                 and a chat strip makes another session (mirrors ⌘T, via the
                 app-registered action). The pointerdown focuses this zone
                 first, so the tab lands in THIS strip. Hidden when the active
                 pane is one of a kind and the zone holds no session tabs. */}
-                {newTab && !node.minimized && (
-                  <span
-                    className="flex shrink-0 items-center [-webkit-app-region:no-drag]"
-                    // The action docks into the FOCUSED chat zone; clicking a
-                    // background strip's "+" must make THAT zone the focused one
-                    // first, or the tab opens in whichever zone was last clicked.
-                    // (pointerdown's own focus tracking would land after the click
-                    // handler reads the anchor.)
-                    onPointerDownCapture={() => noteActiveTreeGroup(node.id)}
-                  >
-                    <PaneStripGlyph
-                      icon={<Codicon name="add" size="0.8125rem" />}
-                      label={newTab.label}
-                      onSelect={newTab.onSelect}
-                    />
-                  </span>
-                )}
-              </PaneTabStrip>
-            </ZoneMenu>
-          ) : titleOnly ? (
-            // The whole title of a single-session window: status dot + name,
-            // no pill, no ✕, no "+". `[-webkit-app-region:drag]` keeps the
-            // band a window handle, which is what the strip's empty right side
-            // was doing before.
-            <div
-              // Measured off the Codex window (2x screenshot, halved): a 44px
-              // band whose every glyph centers on y≈22, the title starting
-              // 15px from the pane edge with its own leading glyph, at ~14px.
-              // The conversation column's 64px gutter is deliberately NOT the
-              // reference here — the title belongs to the pane chrome, not to
-              // the transcript.
-              className="flex min-w-0 flex-1 items-center gap-2 self-stretch pr-3 pl-4 [-webkit-app-region:drag]"
-              data-panel-title-band=""
-            >
-              {paneChrome(paneFor(activeId)).titleLead ? (
-                <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).titleLead?.()}</span>
-              ) : null}
-              <span className="m-0 min-w-0 truncate text-sm font-medium text-foreground">
-                {tabLabel(activeId)}
-              </span>
-            </div>
-          ) : null}
-          {/* Tabs sharing the titlebar band are all `no-drag` and the strip's
+                  {newTab && !node.minimized && (
+                    <span
+                      className="flex shrink-0 items-center [-webkit-app-region:no-drag]"
+                      // The action docks into the FOCUSED chat zone; clicking a
+                      // background strip's "+" must make THAT zone the focused one
+                      // first, or the tab opens in whichever zone was last clicked.
+                      // (pointerdown's own focus tracking would land after the click
+                      // handler reads the anchor.)
+                      onPointerDownCapture={() => noteActiveTreeGroup(node.id)}
+                    >
+                      <PaneStripGlyph
+                        icon={<Codicon name="add" size="0.8125rem" />}
+                        label={newTab.label}
+                        onSelect={newTab.onSelect}
+                      />
+                    </span>
+                  )}
+                </PaneTabStrip>
+              </ZoneMenu>
+            ) : titleOnly ? (
+              // The whole title of a single-session window: status dot + name,
+              // no pill, no ✕, no "+". `[-webkit-app-region:drag]` keeps the
+              // band a window handle, which is what the strip's empty right side
+              // was doing before.
+              <div
+                // Measured off the Codex window (2x screenshot, halved): a 44px
+                // band whose every glyph centers on y≈22, the title starting
+                // 15px from the pane edge with its own leading glyph, at ~14px.
+                // The conversation column's 64px gutter is deliberately NOT the
+                // reference here — the title belongs to the pane chrome, not to
+                // the transcript.
+                className="flex min-w-0 flex-1 items-center gap-2 self-stretch pr-3 pl-4 [-webkit-app-region:drag]"
+                data-panel-title-band=""
+              >
+                {paneChrome(paneFor(activeId)).titleLead ? (
+                  <span className="flex shrink-0 items-center">{paneChrome(paneFor(activeId)).titleLead?.()}</span>
+                ) : null}
+                <span className="m-0 min-w-0 truncate text-sm font-medium text-foreground">{tabLabel(activeId)}</span>
+              </div>
+            ) : null}
+            {/* Tabs sharing the titlebar band are all `no-drag` and the strip's
               list scrolls, so a crowded strip can cover every draggable pixel
               (#112964). Keep one fixed handle OUTSIDE the list. When the tabs
               drop below the controls the band above them is free — the handle
               stays flexible and the whole row moves the window. */}
-          {topEdge && (
-            <div
-              aria-hidden="true"
-              className={cn(
-                'self-start [-webkit-app-region:drag]',
-                headerVisible && tabsInTitlebar ? 'shrink-0' : 'min-w-0 flex-1'
-              )}
-              data-window-drag-handle=""
-              style={{
-                height: headerBandHeight ?? TITLEBAR_HEIGHT,
-                width: headerVisible && tabsInTitlebar ? TITLEBAR_DRAG_HANDLE_WIDTH : undefined
-              }}
-            />
-          )}
-          {topEdge && (
-            <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-right, 0px)' }} />
-          )}
-        </div>
+            {topEdge && (
+              <div
+                aria-hidden="true"
+                className={cn(
+                  'self-start [-webkit-app-region:drag]',
+                  headerVisible && tabsInTitlebar ? 'shrink-0' : 'min-w-0 flex-1'
+                )}
+                data-window-drag-handle=""
+                style={{
+                  height: headerBandHeight ?? TITLEBAR_HEIGHT,
+                  width: headerVisible && tabsInTitlebar ? TITLEBAR_DRAG_HANDLE_WIDTH : undefined
+                }}
+              />
+            )}
+            {topEdge && (
+              <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-right, 0px)' }} />
+            )}
+          </div>
         </BandSlot>
       )}
 
@@ -1076,11 +1073,13 @@ export function TreeGroup({
             className="absolute inset-x-0 bottom-0 z-50 flex cursor-grab items-center justify-center outline-1 -outline-offset-2 outline-dashed backdrop-blur-[2px]"
             onPointerDown={e => startPaneDrag(activeId, e, undefined, undefined, tabText(activeId))}
             style={{
-              top: topEdge
-                ? (headerBandHeight ?? TITLEBAR_HEIGHT) + (tabsBelowControls && headerVisible ? 28 : 0)
-                : headerVisible
-                  ? 28
-                  : 0,
+              top: portaledBand
+                ? 0
+                : topEdge
+                  ? (headerBandHeight ?? TITLEBAR_HEIGHT) + (tabsBelowControls && headerVisible ? 28 : 0)
+                  : headerVisible
+                    ? 28
+                    : 0,
               background:
                 'color-mix(in srgb, var(--ui-accent) 6%, color-mix(in srgb, var(--ui-bg-chrome) 55%, transparent))',
               outlineColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)'

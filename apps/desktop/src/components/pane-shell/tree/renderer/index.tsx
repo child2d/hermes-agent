@@ -23,6 +23,8 @@
 import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect } from 'react'
 
+import { useBandRowTarget } from '@/app/shell/app-top-bar'
+
 import { useLayoutEditHotkey } from '../../edit-mode'
 import { publishWorkspaceGeometry } from '../../geometry'
 import { $layoutTree, trackActiveTreeGroup } from '../store'
@@ -37,6 +39,7 @@ import { TreeNode } from './tree-node'
 
 export function LayoutTreeRoot({ children, titlebar = false }: { children?: ReactNode; titlebar?: boolean }) {
   const tree = useStore($layoutTree)
+  const bandRow = useBandRowTarget()
 
   useLayoutEditHotkey(true)
   useTabKeyHints()
@@ -94,7 +97,7 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 z-20 h-0.5 bg-linear-to-b from-(--ui-band-cast) to-transparent"
-          style={{ top: 'var(--pane-titleband-height, 2.75rem)' }}
+          style={{ top: bandRow ? 0 : 'var(--pane-titleband-height, 2.75rem)' }}
         />
       )}
       {tree && (

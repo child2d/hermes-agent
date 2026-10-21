@@ -607,14 +607,47 @@ export function setSplitWeights(root: LayoutNode, splitId: string, weights: numb
  * by the layout's own repair paths, not by anyone choosing to see a strip.
  */
 export function migratePersistedTree(node: LayoutNode): LayoutNode {
-  if (node.type === 'group') {
-    const { headerHidden, ...rest } = node as GroupNode & { headerHidden?: unknown }
+  // The first route-list implementation registered three independent panes,
+  // then renamed all of them to sessions. Repair saved duplicate columns at
+  // load, retaining the original sessions zone (including its width, collapse
+  // and other tabs). An alias-only saved tree keeps its first list zone.
+  const listIds = new Set(['sessions', 'channels', 'cron-jobs'])
+
+  const listOwner =
+    findGroupOfPane(node, 'sessions')?.id ??
+    findGroupOfPane(node, 'channels')?.id ??
+    findGroupOfPane(node, 'cron-jobs')?.id
+
+  let listKept = false
+
+  const walk = (current: LayoutNode): LayoutNode => {
+    if (current.type === 'split') {
+      return { ...current, children: current.children.map(walk) }
+    }
+
+    const { headerHidden, ...rest } = current as GroupNode & { headerHidden?: unknown }
     const tabStrip = rest.tabStrip === 'always' || rest.tabStrip === 'never' ? rest.tabStrip : undefined
 
-    return headerHidden === undefined && rest.tabStrip === tabStrip ? node : { ...rest, tabStrip }
+    const panes = current.panes.flatMap(id => {
+      if (!listIds.has(id)) {
+        return [id]
+      }
+
+      if (current.id !== listOwner || listKept) {
+        return []
+      }
+
+      listKept = true
+
+      return ['sessions']
+    })
+
+    const active = listIds.has(current.active) && panes.includes('sessions') ? 'sessions' : current.active
+
+    return { ...rest, active, panes, tabStrip }
   }
 
-  return { ...node, children: node.children.map(migratePersistedTree) }
+  return walk(node)
 }
 
 export function isLayoutNode(value: unknown): value is LayoutNode {
