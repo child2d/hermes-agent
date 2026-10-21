@@ -602,8 +602,16 @@ export function TreeGroup({
               // A pane that keeps working chrome while collapsed (the sidebar's
               // nav rail) needs the width of a glyph column, not a tab's.
               collapsedRail ? 'w-13 min-w-13' : 'w-7 min-w-7',
-              // Strip line faces the content the zone collapsed away from.
-              railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
+              // Strip line faces the content the zone collapsed away from — but
+              // a collapsed rail draws its OWN border-r (RAIL_SHELL). Keeping
+              // both doubles the seam and costs the rail 1px of its 52px
+              // track, which shows up as the icon column being squeezed on the
+              // right the moment the list folds.
+              collapsedRail
+                ? ''
+                : railSide === 'right'
+                  ? PANE_TAB_STRIP_LINE_LEFT
+                  : PANE_TAB_STRIP_LINE_RIGHT
             )}
             onClick={() => restoreTreePane(activeId)}
             title={t.zones.restore}
