@@ -884,20 +884,25 @@ export function ContribController() {
           style={{ '--titlebar-height': '0px' } as CSSProperties}
         >
           {/* The toolbar lives OUTSIDE the pane tree on purpose: its geometry is
-              the window's, so folding the session list cannot shift an icon. */}
+              the window's, so folding the session list cannot shift an icon. It
+              also owns the window's FULL height — the statusbar sits in the
+              content column beside it, not under it, so the rail is one column
+              from the top band to the window's bottom edge. */}
           <div className="flex min-h-0 min-w-0 flex-1">
             <AppRail />
-            <LayoutTreeRoot titlebar />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <LayoutTreeRoot titlebar />
+
+              {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
+              <SessionTileCloseConfirm />
+
+              {/* The REAL statusbar (model pill, command center, agents, …) with
+                  statusBar.left/right contributions merged in. Unmounted — not
+                  just hidden — while toggled off, so its 15s status poll and the
+                  per-turn readouts stop with it. */}
+              {statusbarVisible && <WiredPane part="statusbar" />}
+            </div>
           </div>
-
-          {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
-          <SessionTileCloseConfirm />
-
-          {/* The REAL statusbar (model pill, command center, agents, …) with
-              statusBar.left/right contributions merged in. Unmounted — not
-              just hidden — while toggled off, so its 15s status poll and the
-              per-turn readouts stop with it. */}
-          {statusbarVisible && <WiredPane part="statusbar" />}
         </div>
       </ContribWiring>
     </SidebarProvider>

@@ -417,6 +417,15 @@
     --ui-sash-hover-background: color-mix(in srgb, var(--ui-accent) 6%, transparent);
     --ui-surface-background: var(--ui-bg-editor);
     --ui-sidebar-surface-background: var(--dt-surface-frame);
+    /* The session list's PANEL — the window's one inset region, beside the rail
+       (`nav-rail.tsx` RAIL_COLUMN is the other half of the shape). It is a rung
+       of its own, between the window chrome (`frame`, the ramp's darkest) and the
+       transcript: chrome < panel < transcript < top band, which is the ordering
+       Codex's window has and what makes four regions read instead of one field.
+       It must be PAINTED here rather than reusing a surface alias, because under
+       `data-hermes-glass` the sidebar/editor aliases are `transparent` — which is
+       exactly why the list and the rail used to be the same pixels. */
+    --ui-sidebar-panel-background: color-mix(in srgb, var(--dt-surface-transcript) 60%, var(--dt-surface-frame));
     /* The four surfaces the app paints are derived in ONE place —
        `surfaceRamp()` in themes/context.tsx writes `--dt-surface-*` from the
        theme seeds, per mode, as concrete values: `raised` (the composer card,

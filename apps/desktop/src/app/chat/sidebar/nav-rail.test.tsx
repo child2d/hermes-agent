@@ -1,16 +1,26 @@
+// @vitest-environment jsdom
 import { render } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { MemoryRouter } from 'react-router'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SidebarNavItem } from '@/app/types'
 import { Codicon } from '@/components/ui/codicon'
+import { I18nProvider } from '@/i18n'
 
-import { SidebarNavRail } from './nav-rail'
+import { AppRail } from './nav-rail'
 
-// The rail draws the app's own icon family (lucide SVGs) at 18px, resolved from
+// The rail draws the app's own icon family (lucide SVGs) at 20px, resolved from
 // the codicon NAME its nav model carries — the list's row keeps its codicon.
 // Locked here: a rail icon must be an SVG sized in px (a Codicon is a FONT glyph,
 // whose size is font-size and ignores a `size-*` box), and an unmapped name must
 // degrade to the item's own icon instead of leaving a hole.
+const railItems = vi.hoisted(() => ({ current: [] as SidebarNavItem[] }))
+
+vi.mock('./nav-model', () => ({
+  sidebarRailItems: (items: SidebarNavItem[]) => items,
+  useSidebarNavItems: () => railItems.current
+}))
+
 const navItem = (over: Partial<SidebarNavItem> & { codicon: string }): SidebarNavItem => ({
   // The row's icon IS the codicon the model names — the rail then chooses.
   icon: props => <Codicon name={over.codicon} {...props} />,
@@ -19,14 +29,23 @@ const navItem = (over: Partial<SidebarNavItem> & { codicon: string }): SidebarNa
   ...over
 })
 
-const renderRail = (items: SidebarNavItem[]) =>
+const renderRail = () =>
   render(
-    <SidebarNavRail isActive={() => false} items={items} labelFor={item => item.label} onNavigate={() => undefined} />
+    <MemoryRouter initialEntries={['/']}>
+      <I18nProvider configClient={null} initialLocale="en">
+        <AppRail />
+      </I18nProvider>
+    </MemoryRouter>
   )
 
-describe('SidebarNavRail', () => {
+describe('AppRail', () => {
+  beforeEach(() => {
+    railItems.current = []
+  })
+
   it('draws a lucide SVG at 20px, with the rail line weight', () => {
-    const { container } = renderRail([navItem({ codicon: 'symbol-misc' })])
+    railItems.current = [navItem({ codicon: 'symbol-misc' })]
+    const { container } = renderRail()
 
     const svg = container.querySelector('svg')
 
@@ -38,7 +57,8 @@ describe('SidebarNavRail', () => {
   })
 
   it("keeps the item's own icon when the name has no lucide equivalent", () => {
-    const { container } = renderRail([navItem({ codicon: 'some-unknown-codicon' })])
+    railItems.current = [navItem({ codicon: 'some-unknown-codicon' })]
+    const { container } = renderRail()
 
     const glyph = container.querySelector<HTMLElement>('.codicon')
 
@@ -46,8 +66,15 @@ describe('SidebarNavRail', () => {
   })
 
   it('names the button even though the rail draws no label', () => {
-    const { getByRole } = renderRail([navItem({ codicon: 'comment' })])
+    railItems.current = [navItem({ codicon: 'comment' })]
+    const { getByRole } = renderRail()
 
     expect(getByRole('button', { name: 'Capabilities' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('renders nothing when the nav model is empty', () => {
+    const { container } = renderRail()
+
+    expect(container.querySelector('[data-slot="app-rail"]')).toBeNull()
   })
 })
