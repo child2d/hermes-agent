@@ -13,6 +13,7 @@ import { useStore } from '@nanostores/react'
 import { type CSSProperties, Fragment, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 
 import { ShellMenuItems } from '@/app/context-menu/shell-menu-items'
+import { BandSlot, publishBandHeight, useBandBox } from '@/app/shell/app-top-bar'
 import { TITLEBAR_DRAG_HANDLE_WIDTH, TITLEBAR_HEIGHT } from '@/app/shell/titlebar'
 import { ActionsContextMenu, type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
 import { Codicon } from '@/components/ui/codicon'
@@ -464,6 +465,11 @@ export function TreeGroup({
   // in the window's top band. A lone session makes that band 10px taller, so the
   // live height is published for them to read — otherwise every control in the
   // row sits 5px high against the band it visually belongs to.
+  // The band's REAL height: the traffic-light row, plus the strip's own row when
+  // the tabs have to drop below the window controls. The window's top bar reads
+  // this (`--app-band-height`) so that case grows the whole row.
+  const bandHeight = headerBandHeight ? headerBandHeight + (tabsBelowControls && headerVisible ? 28 : 0) : undefined
+
   useEffect(() => {
     if (!headerBandHeight) {
       return
@@ -476,6 +482,22 @@ export function TreeGroup({
       root.style.removeProperty('--pane-titleband-height')
     }
   }, [headerBandHeight])
+
+  useEffect(() => {
+    if (!topEdge) {
+      return
+    }
+
+    publishBandHeight(bandHeight)
+
+    return () => publishBandHeight(undefined)
+  }, [bandHeight, topEdge])
+
+  // A zone on the window's top edge hands its band to the window's top bar
+  // (app-top-bar.tsx): the row belongs to the window, so the rail below it starts
+  // under the chrome instead of beside it. The band keeps being THIS zone's
+  // element — only where it mounts changes.
+  const bandBox = useBandBox(ref, Boolean(topEdge) && !verticalCollapse)
 
   // Keep the activated tab — and, on the last one, the trailing "+" — inside
   // the strip's scroll window. Opening a tab past the right edge otherwise
@@ -589,17 +611,12 @@ export function TreeGroup({
       }}
       ref={ref}
       style={
-        // The titlebar offset comes from HERE, in both states. The rail's own
-        // `pt-[calc(var(--titlebar-height)+0.375rem)]` cannot supply it: the
-        // contrib shell pins `--titlebar-height` to 0px (controller.tsx), so
-        // that padding is only the 0.375rem gap. Padding a collapsed rail's
-        // zone with nothing therefore dropped the whole 38px and the icon
-        // column jumped up under the traffic lights the moment the list folded.
-        wcOverlap
-          ? { paddingTop: wcOverlap.y + wcOverlap.height }
-          : topEdge && verticalCollapse
-            ? { paddingTop: TITLEBAR_HEIGHT }
-            : undefined
+        // No titlebar offset here any more: the window's top bar is a row of the
+        // SHELL (app-top-bar.tsx), so a zone on the top edge starts below it by
+        // construction — the collapsed strip included. What is left is the
+        // native window-controls overlap (Windows/Linux), which the bar cannot
+        // reserve for because it is the window's own row.
+        wcOverlap ? { paddingTop: wcOverlap.y + wcOverlap.height } : undefined
       }
     >
       {wcOverlap && (
@@ -695,19 +712,21 @@ export function TreeGroup({
       {/* Keep the header INSIDE its zone: titlebar drops use the same panel
           bounds, strip refs, focus ownership and split geometry as the body. */}
       {(headerVisible || (topEdge && !verticalCollapse)) && (
+        <BandSlot box={topEdge ? bandBox : null}>
         <div
           // The band is window CHROME — the same rung as the rail beside it and
           // the zone gutter below it (`--ui-region-chrome`, gray-200). It cannot
           // be `--ui-sidebar-surface-background`: that is `transparent` under
           // `data-hermes-glass`, and a transparent band shows the body's field
           // there, which is a hard step at the rail's edge in the top row.
-          className="relative flex min-w-0 shrink-0 bg-(--ui-region-chrome)"
+          className={cn(
+            'relative flex min-w-0 bg-(--ui-region-chrome)',
+            // In the window's bar the band fills its zone's slot; standing alone
+            // (a zone that is not on the top edge) it sizes to its content.
+            topEdge ? 'flex-1' : 'shrink-0'
+          )}
           data-panel-header=""
-          style={
-            headerBandHeight
-              ? { height: headerBandHeight + (tabsBelowControls && headerVisible ? 28 : 0) }
-              : undefined
-          }
+          style={bandHeight ? { height: bandHeight } : undefined}
         >
           {topEdge && (
             <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-left, 100%)' }} />
@@ -948,6 +967,7 @@ export function TreeGroup({
             <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-right, 0px)' }} />
           )}
         </div>
+        </BandSlot>
       )}
 
       {/* Body: the zone's pane content — the active pane and bounded hot-hidden

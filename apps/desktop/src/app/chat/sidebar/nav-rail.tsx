@@ -79,14 +79,12 @@ const RAIL_SHELL = 'flex flex-col items-center gap-1.5 px-2 pb-2'
  *  off at the seam. Painted here instead — same falloff, other side of the seam.
  *  Starts at the top band (nothing casts there) and runs to the window bottom. */
 const RAIL_PANEL_CAST =
-  'pointer-events-none absolute right-0 bottom-0 w-1.5 bg-linear-to-l from-(--ui-panel-cast) to-transparent top-[var(--pane-titleband-height,2.75rem)]'
+  'pointer-events-none absolute inset-y-0 right-0 w-1.5 bg-linear-to-l from-(--ui-panel-cast) to-transparent'
 
-/** The rail's top offset: it starts BELOW the window's top band, which is
- *  `TITLEBAR_HEIGHT` + the zone header's own 10px of air (`headerBandHeight` in
- *  tree-group.tsx, published as `--pane-titleband-height`; the fallback is that
- *  same 44px). `--titlebar-height` cannot supply it — the contrib shell pins it
- *  to 0px — and an offset built on it parks the first icon inside the band. */
-const RAIL_TOP_PAD = 'pt-[calc(var(--pane-titleband-height,2.75rem)+0.375rem)]'
+/** The rail's top offset: the window's top bar is a row of its OWN above this
+ *  column (app-top-bar.tsx), so the rail starts under the chrome and only needs
+ *  the icon rhythm's own gap — no titlebar offset to reproduce. */
+const RAIL_TOP_PAD = 'pt-1.5'
 
 /** One nav button — a 20px icon in a 32px box, 9.5px of air on both sides once
  *  the rail's width and hairline are counted. The rail is icon-only, so the icon

@@ -8,6 +8,7 @@ import { SessionStatusDot } from '@/app/chat/session-status-dot'
 import { AppRail } from '@/app/chat/sidebar/nav-rail'
 import { NO_PROJECT_ID, sessionBucketId } from '@/app/chat/sidebar/projects/workspace-groups'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
+import { AppTopBar } from '@/app/shell/app-top-bar'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { AskDirective } from '@/components/assistant-ui/ask-directive'
 import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
@@ -883,11 +884,12 @@ export function ContribController() {
           data-contrib-shell=""
           style={{ '--titlebar-height': '0px' } as CSSProperties}
         >
-          {/* The toolbar lives OUTSIDE the pane tree on purpose: its geometry is
-              the window's, so folding the session list cannot shift an icon. It
-              also owns the window's FULL height — the statusbar sits in the
-              content column beside it, not under it, so the rail is one column
-              from the top band to the window's bottom edge. */}
+          {/* L1: the window's top bar — ONE element across the whole window, above
+              the rail as well as above the panes. Zones hand their bands to it
+              (app-top-bar.tsx) instead of drawing the row themselves.
+              L2: everything under it splits rail | A zone; A zone holds the pane
+              tree and the statusbar. */}
+          <AppTopBar />
           <div className="flex min-h-0 min-w-0 flex-1">
             <AppRail />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
