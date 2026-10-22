@@ -777,7 +777,7 @@ export function TreeSplit({
             // folding to its rail) animates its track instead of snapping. Only
             // the basis moves — a sash drag writes basis per frame, so the drag
             // turns this transition off inline (see the styleSnapshots gate).
-            className="relative flex min-h-0 min-w-0 transition-[flex-basis] duration-200 ease-out"
+            className="relative flex min-h-0 min-w-0 transition-[flex-basis] duration-150 ease-[cubic-bezier(0.32,0.72,0,1)]"
             key={child.id}
             style={
               collapsed
