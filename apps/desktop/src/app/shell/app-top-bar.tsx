@@ -78,7 +78,11 @@ export function BandSlot({
   }
 
   return createPortal(
-    <div className="absolute inset-y-0 flex items-stretch" style={{ left: box.left, width: box.width }}>
+    // `overflow-hidden` is the zone's own clip, restored: a band carries window-level
+    // spacers (`--panel-titlebar-left/right`), so its content can be ~28px wider than
+    // the zone's slot. Inside a zone the zone clipped it; mounted in this row it would
+    // spill into the neighbouring slot.
+    <div className="absolute inset-y-0 flex items-stretch overflow-hidden" style={{ left: box.left, width: box.width }}>
       {children}
     </div>,
     row

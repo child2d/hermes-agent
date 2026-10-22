@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { Codicon } from '@/components/ui/codicon'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { $cronJobs } from '@/store/cron'
 
@@ -21,15 +22,26 @@ export function WorkspaceListPane({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation()
   const List = LIST_FOR_ROUTE[pathname]
 
-  return List ? <List /> : <>{children}</>
-}
-
-/** Shared shell for a list pane: the panel surface the session list wears, so a
- *  swapped-in list does not change the column's colour. */
-function ListPane({ children, title }: { children: React.ReactNode; title: string }) {
+  // The column's pad and its surface live HERE — on the standing wrapper — so the
+  // chat route (which renders `children`, the real session list) and a swapped-in
+  // list (channels / cron jobs) are the same column: same colour, same rounded
+  // corner. On either of the two content components it would be lost on the other.
   return (
     <div
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-(--ui-sidebar-panel-background)"
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-tl-lg bg-(--ui-sidebar-panel-background)"
+      data-slot="list-column"
+    >
+      {List ? <List /> : children}
+    </div>
+  )
+}
+
+/** A swapped-in list's own layout: header + scroll body. The colour and the
+ *  rounded corner belong to the standing wrapper above (see `WorkspaceListPane`). */
+export function ListPane({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <div
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden"
       data-slot="list-pane"
     >
       <div className="flex h-9 shrink-0 items-center px-3.5 text-2xs font-medium tracking-wide text-(--ui-text-tertiary) uppercase">
@@ -44,10 +56,11 @@ function ListPane({ children, title }: { children: React.ReactNode; title: strin
  *  the statusbar's own switcher already owns. Clicking the tool's page is what
  *  opens a channel's settings — this column is the way in, not a second editor. */
 export function ChannelsPane() {
+  const { t } = useI18n()
   const navigate = useNavigate()
 
   return (
-    <ListPane title="渠道">
+    <ListPane title={t.sidebar.nav.messaging}>
       <ConnectionSwitcher compact onConnect={() => navigate(`${SETTINGS_ROUTE}?tab=connections`)} />
     </ListPane>
   )
@@ -57,14 +70,13 @@ export function ChannelsPane() {
  *  and the row opens the job's surface (the cron page owns the editors and the
  *  run history), so this column stays a roster rather than a second console. */
 export function CronJobsPane() {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const jobs = useStore($cronJobs)
 
   return (
-    <ListPane title="定时任务">
-      {jobs.length === 0 ? (
-        <p className="px-2 py-1 text-xs text-(--ui-text-tertiary)">还没有定时任务</p>
-      ) : (
+    <ListPane title={t.sidebar.cronJobs}>
+      {jobs.length === 0 ? null : (
         <ul className="flex flex-col gap-px">
           {jobs.map(job => (
             <li key={job.id}>
@@ -98,7 +110,7 @@ export function CronJobsPane() {
         type="button"
       >
         <Codicon name="chevron-right" size="0.75rem" />
-        打开定时任务
+        {t.sidebar.cronJobs}
       </button>
     </ListPane>
   )

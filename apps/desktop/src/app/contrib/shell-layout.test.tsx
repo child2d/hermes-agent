@@ -62,7 +62,9 @@ describe('the production shell composition', () => {
       expect(screen.getByTestId('channel-list').closest('[data-tree-group]')).toBe(listZone)
       expect(screen.queryByTestId('wired-sidebar')).toBeNull()
       fireEvent.click(screen.getByText('test jobs'))
-      expect(screen.getByText('还没有定时任务').closest('[data-tree-group]')).toBe(listZone)
+      // The job roster is asserted by its own slot, not by copy: the pane's
+      // empty state is a phrasing that changes.
+      expect(document.querySelector('[data-slot="list-pane"]')?.closest('[data-tree-group]')).toBe(listZone)
       fireEvent.click(screen.getByText('test history'))
       expect(screen.getAllByTestId('wired-sidebar')).toHaveLength(1)
       // The old implementation re-adopted absent list contributions whenever
