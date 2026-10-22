@@ -318,7 +318,14 @@ function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof us
   // Titlebar actions never show an active background — state reads from the
   // icon itself (e.g. the mute/unmute glyph). aria-pressed still carries it
   // for a11y.
-  const className = cn(titlebarButtonClass, 'bg-transparent select-none', tool.className)
+  // `no-drag` on every button, not just the cluster: a drag region wins hit
+  // testing over the DOM inside it, so a button that ends up under one (a band
+  // spacer, a strip) never receives the click at all.
+  const className = cn(
+    titlebarButtonClass,
+    'bg-transparent select-none [-webkit-app-region:no-drag]',
+    tool.className
+  )
 
   const tooltipLabel = tool.actionId ? (
     tool.title ?? tool.label
@@ -365,6 +372,8 @@ function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof us
           tool.onSelect?.(event)
         }}
         onPointerDown={event => event.stopPropagation()}
+        // Belt and braces against a drag region covering the cluster: clicks on
+        // a button inside one never arrive, so each button carves its own hole.
         size="icon-titlebar"
         type="button"
         variant="ghost"

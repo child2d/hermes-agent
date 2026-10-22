@@ -37,10 +37,22 @@ export function AppTopBar({ children }: { children?: React.ReactNode }) {
         data-slot="app-top-bar"
         style={{ height: `var(${BAND_HEIGHT_VAR}, ${APP_BAND_FALLBACK_HEIGHT}px)` }}
       >
+        <div className="relative flex min-w-0 flex-1 items-stretch" data-slot="app-band-row" ref={setRow} />
+        {/* Window-drag area as MARGINS, never as the row itself: a drag region
+            wins hit-testing over the DOM inside it (the codebase has been bitten
+            by this before — see the sidebar's no-drag carve-out and
+            browser-popout-shell.tsx, which builds its strips AROUND the titlebar
+            clusters for exactly this reason). A row-wide `drag` put the whole bar
+            — the tool buttons sitting over it included — inside the drag region,
+            and their clicks stopped arriving. The strips cover only what no
+            cluster occupies; bands bring their own drag patches. */}
         <div
-          className="relative flex min-w-0 flex-1 items-stretch [-webkit-app-region:drag]"
-          data-slot="app-band-row"
-          ref={setRow}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 w-(--titlebar-controls-left,0.75rem) [-webkit-app-region:drag]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-(--titlebar-tools-right,0.75rem) [-webkit-app-region:drag]"
         />
       </div>
       {children}
