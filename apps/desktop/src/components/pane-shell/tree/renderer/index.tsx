@@ -23,6 +23,8 @@
 import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect } from 'react'
 
+import { cn } from '@/lib/utils'
+
 import { useLayoutEditHotkey } from '../../edit-mode'
 import { publishWorkspaceGeometry } from '../../geometry'
 import { $layoutTree, trackActiveTreeGroup } from '../store'
@@ -48,7 +50,21 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
   useEffect(publishWorkspaceGeometry, [])
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1">
+    // THE CARD: the content area owns the geometry (radius + the left/top cast),
+    // and its children are just content inside it — so the top-left corner is
+    // the SAME corner whether the list column is showing or has folded and the
+    // chat spans the whole width. It has to be this box: it starts at the
+    // activity bar's right edge and the top bar's lower edge, exactly the two
+    // edges the cast lands on. `overflow-hidden` clips whatever pane is leftmost
+    // / topmost into the corner; the shadow is the box's own, so it is never
+    // clipped by that and needs no clip margin.
+    <div
+      className={cn(
+        'relative flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-tl-2xl',
+        '[box-shadow:-0.125rem_0_0.375rem_-0.125rem_var(--ui-panel-cast),0_-0.125rem_0.375rem_-0.125rem_var(--ui-band-cast)]'
+      )}
+      data-slot="content-card"
+    >
       {/* THE SEAM INVARIANT: boundaries are drawn by the tree (one sash
           hairline per seam) — content mounted in a zone must not paint its
           own edge chrome. App components (asides, the shadcn sidebar) carry
@@ -69,42 +85,12 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
           display: none;
         }
 
-        /* THE ZONE CAST: the top bar's handoff is cast by each TOP-ROW zone's own
-           box, not by one window-wide strip. A strip is a straight rectangle, so
-           it ran across the session panel's rounded corner — the notch and the
-           curve disagreed. A box-shadow belongs to its box and therefore follows
-           its border-radius (the panel's radius is applied below, where a list
-           column is what the zone holds). overflow:clip plus a clip margin keeps
-           the pane content clipped exactly as overflow:hidden did, while letting
-           this cast reach the bar above. */
-        [data-tree-group]:is([data-window-top], :has([data-slot='list-column'])) {
-          overflow: clip;
-          overflow-clip-margin: 0.5rem;
-        }
-        [data-tree-group][data-window-top]::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          z-index: 20;
-          pointer-events: none;
-          box-shadow: 0 -0.125rem 0.375rem -0.125rem var(--ui-band-cast);
-        }
-        /* The panel's RAIL-side half of the same cast. The rail used to paint it
-           as a straight strip down its own edge, which read as a hairline and
-           died at the panel's corner; cast by the panel's box it is the same
-           falloff and it bends into the corner, because the box does. */
-        [data-tree-group]:has([data-slot='list-column'])::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          z-index: 20;
-          pointer-events: none;
-          border-top-left-radius: calc(var(--radius-scalar) * 1.5rem);
-          box-shadow: -0.125rem 0 0.375rem -0.125rem var(--ui-panel-cast);
-        }
-        [data-tree-group][data-window-top]:has([data-slot='list-column'])::after {
-          border-top-left-radius: calc(var(--radius-scalar) * 1.5rem);
-        }
+        /* The content area's cast is the CARD's own box-shadow now (see the
+           root div below) — one box, so it follows the corner and stays put
+           when the list column folds and the chat takes the whole width. The
+           per-zone stencils this replaced are gone with it: a straight strip
+           ran across the rounded corner, and the per-zone version had to be
+           keyed on which pane happened to be leftmost. */
       `}</style>
       <KeepAlivePanes>
         {tree && (

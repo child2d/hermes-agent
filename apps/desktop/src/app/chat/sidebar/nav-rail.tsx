@@ -74,12 +74,10 @@ const RAIL_COLUMN =
  *  the full height while the glyphs still start below the top band. */
 const RAIL_SHELL = 'flex flex-col items-center gap-1.5 px-2 pb-2'
 
-/* The session panel's left shade used to be painted here as a straight 6px strip
- * down this rail's edge. Two problems: a strip of constant width reads as a
- * hairline rather than a cast, and it stopped dead at the panel's rounded corner.
- * The zone now casts it from the panel's own box (see THE ZONE CAST in
- * tree-group's renderer/index.tsx), so it bends with the corner, and the zone's
- * `overflow-clip-margin` is what lets it reach this rail at all. */
+/* The content area's left shade is not painted here: the card casts it from its
+ * own box (renderer/index.tsx, `data-slot="content-card"`), which is what makes
+ * it follow the rounded corner — a strip down this rail read as a hairline and
+ * died at the corner. */
 
 /** The rail's top offset: the window's top bar is a row of its OWN above this
  *  column (app-top-bar.tsx), so the rail starts under the chrome and only needs
