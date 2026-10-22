@@ -7,7 +7,14 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { type PointerEvent as ReactPointerEvent, useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useSyncExternalStore
+} from 'react'
 
 import { beginSashDrag, endSashDrag } from '@/components/pane-shell/geometry'
 import { useContributions } from '@/contrib/react/use-contributions'
@@ -687,6 +694,11 @@ export function TreeSplit({
     return {
       child,
       collapsed,
+      // The size the zone HAD while it was open. A folding zone keeps its
+      // content pinned to this (`--zone-fold-width`) and lets the shrinking
+      // wrapper clip it, so the fold is one clean slide instead of 200ms of the
+      // content re-wrapping its way down to zero.
+      foldTrack: minimized ? fixedTrackSize(child, axis, trackCtx) : null,
       minimized,
       minimizedTrack: minimized ? minimizedTrackFor(child, trackCtx) : null,
       narrowCollapsed,
@@ -755,7 +767,7 @@ export function TreeSplit({
       data-tree-split={node.id}
       ref={containerRef}
     >
-      {tracks.map(({ child, collapsed, minimized, minimizedTrack, narrowCollapsed, sizing, track }, i) => {
+      {tracks.map(({ child, collapsed, foldTrack, minimized, minimizedTrack, narrowCollapsed, sizing, track }, i) => {
         const partner = collapsed ? -1 : seamPartner(i)
         const absorbs = i === absorberIndex
 
@@ -771,7 +783,12 @@ export function TreeSplit({
               collapsed
                 ? { display: 'none' }
                 : minimized
-                  ? { flex: `0 0 ${horizontal ? minimizedTrack : 'auto'}` }
+                  ? ({
+                      flex: `0 0 ${horizontal ? minimizedTrack : 'auto'}`,
+                      // Clip what the pinned content outgrows — and publish the
+                      // width it should stay at (see foldTrack above).
+                      ...(horizontal ? { '--zone-fold-width': foldTrack ?? '100%', overflow: 'hidden' } : {})
+                    } as CSSProperties)
                   : {
                       // One flexbox formula for everything: a sized zone is
                       // grow-0 shrink-1 from its preferred basis (it yields

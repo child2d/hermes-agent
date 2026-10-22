@@ -608,7 +608,13 @@ export function TreeGroup({
       // through a pane's rounded corner, so it has to be the same rung the band
       // and the rail wear. `--ui-editor-surface-background` is `transparent` under
       // `data-hermes-glass`, which would put a bright wedge in every notch.
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--ui-region-chrome)"
+      className={cn(
+        'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--ui-region-chrome)',
+        // Folding: hold the width the zone had (published by the split) instead
+        // of following the shrinking track — the wrapper clips the difference, so
+        // the list slides out whole rather than re-wrapping on the way.
+        verticalCollapse && hidesInShell && 'w-(--zone-fold-width,100%) flex-none'
+      )}
       data-tree-group={node.id}
       data-window-top={topEdge || undefined}
       // Advertises the visible tab strip so panes can drop their own
