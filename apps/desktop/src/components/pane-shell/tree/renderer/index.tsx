@@ -23,8 +23,6 @@
 import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect } from 'react'
 
-import { useBandRowTarget } from '@/app/shell/app-top-bar'
-
 import { useLayoutEditHotkey } from '../../edit-mode'
 import { publishWorkspaceGeometry } from '../../geometry'
 import { $layoutTree, trackActiveTreeGroup } from '../store'
@@ -39,7 +37,6 @@ import { TreeNode } from './tree-node'
 
 export function LayoutTreeRoot({ children, titlebar = false }: { children?: ReactNode; titlebar?: boolean }) {
   const tree = useStore($layoutTree)
-  const bandRow = useBandRowTarget()
 
   useLayoutEditHotkey(true)
   useTabKeyHints()
@@ -71,6 +68,30 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
         [data-tree-group] header[class*="h-(--titlebar-height)"] {
           display: none;
         }
+
+        /* THE ZONE CAST: the top bar's handoff is cast by each TOP-ROW zone's own
+           box, not by one window-wide strip. A strip is a straight rectangle, so
+           it ran across the session panel's rounded corner — the notch and the
+           curve disagreed. A box-shadow belongs to its box and therefore follows
+           its border-radius (the panel's radius is applied below, where a list
+           column is what the zone holds). overflow:clip plus a clip margin keeps
+           the pane content clipped exactly as overflow:hidden did, while letting
+           this cast reach the bar above. */
+        [data-tree-group][data-window-top] {
+          overflow: clip;
+          overflow-clip-margin: 0.5rem;
+        }
+        [data-tree-group][data-window-top]::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          z-index: 20;
+          pointer-events: none;
+          box-shadow: 0 -0.125rem 0.375rem -0.125rem var(--ui-band-cast);
+        }
+        [data-tree-group][data-window-top]:has([data-slot='list-column'])::after {
+          border-top-left-radius: calc(var(--radius-scalar) * 1.5rem);
+        }
       `}</style>
       <KeepAlivePanes>
         {tree && (
@@ -85,21 +106,12 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
         )}
         {tree && <NarrowOverlays />}
       </KeepAlivePanes>
-      {/* The top bar's own lower edge, cast DOWN onto the regions below it (the
-          session panel and the transcript alike) — `--ui-band-cast`. It has to be
-          this window-level strip: a shadow on the band itself would be painted
-          over by the pane's opaque content below it, and an inset on that content
-          would reach one pane at a time. Painted above the tree, below the
-          titlebar's fixed clusters (z-70). 2px, not a card shadow — Codex's own
-          handoff is a single dark row, and at this scale anything wider reads as a
-          smudge rather than an edge. */}
-      {titlebar && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 z-20 h-0.5 bg-linear-to-b from-(--ui-band-cast) to-transparent"
-          style={{ top: bandRow ? 0 : 'var(--pane-titleband-height, 2.75rem)' }}
-        />
-      )}
+      {/* The top bar's lower edge is NOT drawn here any more. One window-wide
+          strip ran straight past the session panel's rounded corner instead of
+          bending with it (the strip crossed the corner's notch while the panel's
+          curve sat below it). Each top-row zone now casts it from its own box —
+          see the cast rule in the <style> above, which takes the panel's own
+          radius. Nothing else in this file depended on the strip. */}
       {tree && (
         <>
           {/* Non-tiling panes: fixed cards above the tree, outside every zone. */}
