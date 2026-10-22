@@ -225,21 +225,42 @@ export const MINIMIZED_RAIL_TRACK = '3.25rem'
 export const MINIMIZED_HIDDEN_TRACK = '0px'
 
 /**
+ * Does a zone fold to NOTHING when minimized? True when any of its panes lives
+ * on the WINDOW's rail (`railInShell`): that rail is already on screen, so the
+ * zone hides outright instead of leaving a 28px tab rail standing where the
+ * column was. Multi-tab zones count (the sessions list stacks Bots): every tab
+ * in such a zone is hide-only chrome with its own handles — the rail item, ⌘K,
+ * the zone menu — so no strip has to survive. ONE decision, shared with
+ * tree-group.tsx, which renders the nothing.
+ */
+export const foldsToRailInShell = (
+  ids: readonly string[],
+  chromeFor: (id: string) => PaneChrome | undefined
+): boolean => ids.some(id => chromeFor(id)?.railInShell)
+
+/**
  * The strip thickness for a minimized zone. Only a SINGLE-pane zone can widen:
  * a strip holding several tabs belongs to none of them, so it stays a tab rail.
  */
 export function minimizedTrackFor(node: LayoutNode, ctx: TrackContext): string {
-  if (node.type !== 'group' || node.panes.length !== 1) {
+  if (node.type !== 'group') {
     return MINIMIZED_TRACK
   }
 
-  const chrome = ctx.paneFor(node.panes[0])?.data as PaneChrome | undefined
+  const chromeFor = (id: string) => ctx.paneFor(id)?.data as PaneChrome | undefined
 
-  if (chrome?.railInShell) {
+  // A zone holding ANY rail-in-shell pane reserves no track: its rail is the
+  // window's (AppRail), so folding it leaves nothing behind — multi-tab zones
+  // included (the sessions list + Bots), mirroring tree-group.tsx's decision.
+  if (foldsToRailInShell(node.panes, chromeFor)) {
     return MINIMIZED_HIDDEN_TRACK
   }
 
-  return chrome?.collapsedRail ? MINIMIZED_RAIL_TRACK : MINIMIZED_TRACK
+  if (node.panes.length !== 1) {
+    return MINIMIZED_TRACK
+  }
+
+  return chromeFor(node.panes[0])?.collapsedRail ? MINIMIZED_RAIL_TRACK : MINIMIZED_TRACK
 }
 
 /**

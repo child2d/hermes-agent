@@ -90,7 +90,7 @@ import { PaneBody } from './pane-body'
 import { usePanelTitlebar } from './panel-titlebar'
 import { tabStripVisibleForZone } from './strip-visibility'
 import { useActiveTabVisible } from './tab-strip-scroll'
-import { paneChrome } from './track-model'
+import { foldsToRailInShell, paneChrome } from './track-model'
 
 /** Inset stroke for a vertical tab rail — the content-facing edge the active
  *  tab cuts. Pane-shell geometry, so it lives here rather than in the shared
@@ -587,7 +587,15 @@ export function TreeGroup({
 
   // The toolbar for this pane is window chrome (AppRail), so a collapsed pane
   // renders NOTHING: the rail is already on screen and the track is 0px.
-  if (verticalCollapse && ownerChrome.railInShell) {
+  //
+  // ANY pane declaring it, not just a lone one: the sessions list usually stacks
+  // tabs (Bots), and requiring a single pane left a 28px tab rail standing where
+  // the column had been — the titlebar's list toggle looked half-dead. Every tab
+  // in such a zone is hide-only chrome with its own handles (the rail item, ⌘K,
+  // the zone menu), so no strip has to survive to keep one reachable.
+  const hidesInShell = foldsToRailInShell(shown, id => paneChrome(paneFor(id)))
+
+  if (verticalCollapse && hidesInShell) {
     return null
   }
 
