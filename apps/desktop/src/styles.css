@@ -646,7 +646,14 @@
     --paragraph-gap: 0.875rem;
     --file-tree-row-height: 1.375rem;
 
-    --composer-width: 100%;
+    /* The conversation column's READING MEASURE, not a share of the pane. It was
+       `100%` — the column grew with its pane, so folding the list pane re-wrapped
+       every message on the way (the toggle read as "the list shrank", text and
+       all). Codex keeps the column at a fixed width and lets the GUTTERS take the
+       difference: measured on its window, the composer card is 735px inside a
+       1574px pane (centered, ~419px per side) — 46rem, and toggling its sidebar
+       moves the column, never the text. One knob if the measure wants tuning. */
+    --composer-width: min(100%, 60rem);
     /* The conversation column's inline gutter: messages, tool/file cards and the
        composer all sit on it. ONE number on purpose — in the reference design
        the composer's edge lines up with the assistant block's edge, so the
@@ -657,7 +664,16 @@
     /* The dock's width, cut from that gutter. Kept here so the real dock and the
        pre-hydration fallback bar can't drift apart; composer-root's 5px
        transparent grab padding is compensated separately, at the call sites. */
-    --composer-dock-width: min(var(--composer-width), calc(100% - var(--conversation-inline-gutter) * 2));
+    /* The dock is a CARD ON the column, so it takes the gutter off the column's
+       own measure — not off the pane. `min(cap, pane - gutter)` let the dock
+       grow with the pane (832 → 960 while the list pane folded at a 960px pane),
+       which re-laid-out the textarea and its control row on every frame of the
+       fold. Cutting the gutter out of the measure instead keeps the dock the same
+       width through the toggle: only the blank gutters move. */
+    --composer-dock-width: min(
+      calc(var(--composer-width) - var(--conversation-inline-gutter) * 2),
+      calc(100% - var(--conversation-inline-gutter) * 2)
+    );
     --composer-control-size: 1.5rem;
     --composer-control-primary-size: 1.625rem;
     --composer-control-gap: 0.25rem;

@@ -595,9 +595,12 @@ export function TreeGroup({
   // the zone menu), so no strip has to survive to keep one reachable.
   const hidesInShell = foldsToRailInShell(shown, id => paneChrome(paneFor(id)))
 
-  if (verticalCollapse && hidesInShell) {
-    return null
-  }
+  // NOT an early return any more: the zone keeps rendering so its content
+  // clips away WITH the track instead of vanishing a frame before the gap
+  // closes (the fold is animated — see the wrapper in tree-split.tsx). The
+  // track is 0px and the zone clips at its own edges, so nothing is left
+  // behind; the rail branch below is skipped for exactly that reason (a 28px
+  // absolute strip would still register its drag region).
 
   return (
     <div
@@ -605,7 +608,13 @@ export function TreeGroup({
       // through a pane's rounded corner, so it has to be the same rung the band
       // and the rail wear. `--ui-editor-surface-background` is `transparent` under
       // `data-hermes-glass`, which would put a bright wedge in every notch.
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--ui-region-chrome)"
+      className={cn(
+        'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--ui-region-chrome)',
+        // Folding: hold the width the zone had (published by the split) instead
+        // of following the shrinking track — the wrapper clips the difference, so
+        // the list slides out whole rather than re-wrapping on the way.
+        verticalCollapse && hidesInShell && 'w-(--zone-fold-width,100%) flex-none'
+      )}
       data-tree-group={node.id}
       data-window-top={topEdge || undefined}
       // Advertises the visible tab strip so panes can drop their own
@@ -640,7 +649,7 @@ export function TreeGroup({
       {/* Minimized in a ROW: a narrow vertical rail — same PaneTab shell as
           the horizontal strip, just `vertical`. Click a tab to restore +
           activate; click anywhere else on the rail to restore. */}
-      {verticalCollapse && (
+      {verticalCollapse && !hidesInShell && (
         <ZoneMenu {...zoneMenu}>
           <div
             className={cn(

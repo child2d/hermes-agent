@@ -7,7 +7,14 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { type PointerEvent as ReactPointerEvent, useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useSyncExternalStore
+} from 'react'
 
 import { beginSashDrag, endSashDrag } from '@/components/pane-shell/geometry'
 import { useContributions } from '@/contrib/react/use-contributions'
@@ -385,6 +392,14 @@ export function TreeSplit({
         el => [el, el.getAttribute('style')] as const
       )
 
+      // The wrappers carry a flex-basis transition (the list pane's fold). A drag
+      // writes basis per frame, so the transition must stand down for the
+      // gesture or every frame would glide toward the pointer. restoreStyles()
+      // below restores the captured style attribute, which removes this again.
+      styleSnapshots.forEach(([el]) => {
+        el.style.transition = 'none'
+      })
+
       const restoreStyles = () => {
         styleSnapshots.forEach(([el, style]) => {
           if (style === null) {
@@ -679,6 +694,11 @@ export function TreeSplit({
     return {
       child,
       collapsed,
+      // The size the zone HAD while it was open. A folding zone keeps its
+      // content pinned to this (`--zone-fold-width`) and lets the shrinking
+      // wrapper clip it, so the fold is one clean slide instead of 200ms of the
+      // content re-wrapping its way down to zero.
+      foldTrack: minimized ? fixedTrackSize(child, axis, trackCtx) : null,
       minimized,
       minimizedTrack: minimized ? minimizedTrackFor(child, trackCtx) : null,
       narrowCollapsed,
@@ -747,19 +767,39 @@ export function TreeSplit({
       data-tree-split={node.id}
       ref={containerRef}
     >
-      {tracks.map(({ child, collapsed, minimized, minimizedTrack, narrowCollapsed, sizing, track }, i) => {
+      {tracks.map(({ child, collapsed, foldTrack, minimized, minimizedTrack, narrowCollapsed, sizing, track }, i) => {
         const partner = collapsed ? -1 : seamPartner(i)
         const absorbs = i === absorberIndex
 
         return (
           <div
-            className="relative flex min-h-0 min-w-0"
+            // The fold's motion: a zone that leaves the row (the list pane
+            // folding to its rail) animates its track instead of snapping. Only
+            // the basis moves — a sash drag writes basis per frame, so the drag
+            // turns this transition off inline (see the styleSnapshots gate).
+            className="relative flex min-h-0 min-w-0 transition-[flex-basis,min-width] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]"
             key={child.id}
             style={
               collapsed
                 ? { display: 'none' }
                 : minimized
-                  ? { flex: `0 0 ${horizontal ? minimizedTrack : 'auto'}` }
+                  ? ({
+                      flex: `0 0 ${horizontal ? minimizedTrack : 'auto'}`,
+                      // Clip what the pinned content outgrows — and publish the
+                      // width it should stay at (see foldTrack above).
+                      ...(horizontal
+                        ? {
+                            '--zone-fold-width': foldTrack ?? '100%',
+                            // An explicit 0 rather than leaving it to the class's
+                            // min-w-0: the open direction interpolates min-width
+                            // back up with the basis, and `auto` is not
+                            // interpolable — which is what made restoring snap
+                            // while folding glided.
+                            minWidth: 0,
+                            overflow: 'hidden'
+                          }
+                        : {})
+                    } as CSSProperties)
                   : {
                       // One flexbox formula for everything: a sized zone is
                       // grow-0 shrink-1 from its preferred basis (it yields
