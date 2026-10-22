@@ -777,7 +777,7 @@ export function TreeSplit({
             // folding to its rail) animates its track instead of snapping. Only
             // the basis moves — a sash drag writes basis per frame, so the drag
             // turns this transition off inline (see the styleSnapshots gate).
-            className="relative flex min-h-0 min-w-0 transition-[flex-basis] duration-150 ease-[cubic-bezier(0.32,0.72,0,1)]"
+            className="relative flex min-h-0 min-w-0 transition-[flex-basis,min-width] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]"
             key={child.id}
             style={
               collapsed
@@ -787,7 +787,18 @@ export function TreeSplit({
                       flex: `0 0 ${horizontal ? minimizedTrack : 'auto'}`,
                       // Clip what the pinned content outgrows — and publish the
                       // width it should stay at (see foldTrack above).
-                      ...(horizontal ? { '--zone-fold-width': foldTrack ?? '100%', overflow: 'hidden' } : {})
+                      ...(horizontal
+                        ? {
+                            '--zone-fold-width': foldTrack ?? '100%',
+                            // An explicit 0 rather than leaving it to the class's
+                            // min-w-0: the open direction interpolates min-width
+                            // back up with the basis, and `auto` is not
+                            // interpolable — which is what made restoring snap
+                            // while folding glided.
+                            minWidth: 0,
+                            overflow: 'hidden'
+                          }
+                        : {})
                     } as CSSProperties)
                   : {
                       // One flexbox formula for everything: a sized zone is
