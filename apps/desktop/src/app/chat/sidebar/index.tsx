@@ -189,7 +189,6 @@ import { buildSessionByAnyId, resolvePinnedSessions } from './session-index'
 import { SidebarSessionsSection, VIRTUALIZE_THRESHOLD } from './sessions-section'
 import { CONTEXT_SPLIT_KIT, SplitSubmenu } from './split-submenu'
 import { useEnteredProjectSessions } from './use-entered-project-sessions'
-import { SidebarUserMenu } from './user-menu'
 
 // Non-session groups (messaging platforms) stay compact: show a few rows up
 // front, reveal more in larger steps on demand. Keeps a busy platform from
@@ -2073,8 +2072,8 @@ export function ChatSidebar({
           </div>
         )}
 
-        {/* The signed-in account, at the foot: enterprise builds only. */}
-        <SidebarUserMenu />
+        {/* The signed-in account lives on the RAIL's foot now (nav-rail.tsx): one
+            avatar in the window's corner instead of a second copy down here. */}
         </SidebarContent>
       </div>
       <ProjectDialog />

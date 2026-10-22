@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { appViewForPath, navigateToWorkspacePage, NEW_CHAT_ROUTE } from '../../routes'
 
 import { sidebarRailItems, useSidebarNavItems } from './nav-model'
+import { SidebarUserMenu } from './user-menu'
 
 /**
  * The left rail — the fork's take on Codex's activity bar.
@@ -160,6 +161,13 @@ export function AppRail() {
           )
         })}
       </nav>
+
+      {/* The account, at the rail's foot — the window's own corner, one avatar and
+          nothing else (the panel behind it carries the name). Outside the nav: the
+          nav is the tool list and scrolls nothing, while this is pinned down. */}
+      <div className="mt-auto flex w-full justify-center pb-2 pt-1">
+        <SidebarUserMenu />
+      </div>
     </div>
   )
 }
