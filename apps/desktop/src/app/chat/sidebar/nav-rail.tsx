@@ -74,13 +74,12 @@ const RAIL_COLUMN =
  *  the full height while the glyphs still start below the top band. */
 const RAIL_SHELL = 'flex flex-col items-center gap-1.5 px-2 pb-2'
 
-/** The shade the session panel throws onto this rail — ①+② in styles.css. It
- *  cannot be a shadow on the panel itself: a zone clips at its own edges
- *  (`overflow-hidden` in tree-group.tsx), so the panel's left cast would be cut
- *  off at the seam. Painted here instead — same falloff, other side of the seam.
- *  Starts at the top band (nothing casts there) and runs to the window bottom. */
-const RAIL_PANEL_CAST =
-  'pointer-events-none absolute inset-y-0 right-0 w-1.5 bg-linear-to-l from-(--ui-panel-cast) to-transparent'
+/* The session panel's left shade used to be painted here as a straight 6px strip
+ * down this rail's edge. Two problems: a strip of constant width reads as a
+ * hairline rather than a cast, and it stopped dead at the panel's rounded corner.
+ * The zone now casts it from the panel's own box (see THE ZONE CAST in
+ * tree-group's renderer/index.tsx), so it bends with the corner, and the zone's
+ * `overflow-clip-margin` is what lets it reach this rail at all. */
 
 /** The rail's top offset: the window's top bar is a row of its OWN above this
  *  column (app-top-bar.tsx), so the rail starts under the chrome and only needs
@@ -130,7 +129,6 @@ export function AppRail() {
 
   return (
     <div className={cn(RAIL_COLUMN, 'relative')} data-slot="app-rail">
-      <div aria-hidden="true" className={RAIL_PANEL_CAST} />
       <nav aria-label="Rail" className={cn(RAIL_SHELL, RAIL_TOP_PAD)} data-slot="sidebar-nav-rail">
         {items.map(item => {
           // Rail items are page-backed by construction (new session stays in the

@@ -77,7 +77,7 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
            column is what the zone holds). overflow:clip plus a clip margin keeps
            the pane content clipped exactly as overflow:hidden did, while letting
            this cast reach the bar above. */
-        [data-tree-group][data-window-top] {
+        [data-tree-group]:is([data-window-top], :has([data-slot='list-column'])) {
           overflow: clip;
           overflow-clip-margin: 0.5rem;
         }
@@ -88,6 +88,19 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
           z-index: 20;
           pointer-events: none;
           box-shadow: 0 -0.125rem 0.375rem -0.125rem var(--ui-band-cast);
+        }
+        /* The panel's RAIL-side half of the same cast. The rail used to paint it
+           as a straight strip down its own edge, which read as a hairline and
+           died at the panel's corner; cast by the panel's box it is the same
+           falloff and it bends into the corner, because the box does. */
+        [data-tree-group]:has([data-slot='list-column'])::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          z-index: 20;
+          pointer-events: none;
+          border-top-left-radius: calc(var(--radius-scalar) * 1.5rem);
+          box-shadow: -0.125rem 0 0.375rem -0.125rem var(--ui-panel-cast);
         }
         [data-tree-group][data-window-top]:has([data-slot='list-column'])::after {
           border-top-left-radius: calc(var(--radius-scalar) * 1.5rem);
