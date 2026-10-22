@@ -28,7 +28,11 @@ export function WorkspaceListPane({ children }: { children: React.ReactNode }) {
   // corner. On either of the two content components it would be lost on the other.
   return (
     <div
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-tl-2xl bg-(--ui-sidebar-panel-background)"
+      // No radius of its own: the CONTENT AREA is the card (renderer/index.tsx,
+      // `data-slot="content-card"`), and it clips this column into its corner.
+      // A radius here flipped to a square corner the moment the column folded
+      // and the chat took the full width.
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-(--ui-sidebar-panel-background)"
       data-slot="list-column"
     >
       {List ? <List /> : children}
