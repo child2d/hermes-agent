@@ -653,7 +653,7 @@
        difference: measured on its window, the composer card is 735px inside a
        1574px pane (centered, ~419px per side) — 46rem, and toggling its sidebar
        moves the column, never the text. One knob if the measure wants tuning. */
-    --composer-width: min(100%, 46rem);
+    --composer-width: min(100%, 60rem);
     /* The conversation column's inline gutter: messages, tool/file cards and the
        composer all sit on it. ONE number on purpose — in the reference design
        the composer's edge lines up with the assistant block's edge, so the
