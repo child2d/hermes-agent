@@ -28,7 +28,7 @@ export function WorkspaceListPane({ children }: { children: React.ReactNode }) {
   // corner. On either of the two content components it would be lost on the other.
   return (
     <div
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-tl-lg bg-(--ui-sidebar-panel-background)"
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-tl-xl bg-(--ui-sidebar-panel-background)"
       data-slot="list-column"
     >
       {List ? <List /> : children}
