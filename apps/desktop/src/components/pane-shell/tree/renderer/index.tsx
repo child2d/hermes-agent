@@ -85,6 +85,36 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
           display: none;
         }
 
+        /* THE FOLD (FLIP): the layout change commits in one frame and the motion
+           is pixels only — no flex-basis, so nothing below this split re-lays out
+           while it runs. The folding zone keeps the place it had and is clipped
+           away from the content side; its neighbours start at their old on-screen
+           place and slide home. --zone-fold-shift is the folded zone's width,
+           published by the split that runs the animation. */
+        @keyframes zone-fold-hide {
+          from { clip-path: inset(0 0 0 0); }
+          to { clip-path: inset(0 100% 0 0); }
+        }
+        @keyframes zone-fold-show {
+          from { clip-path: inset(0 100% 0 0); }
+          to { clip-path: inset(0 0 0 0); }
+        }
+        /* HALF the folded width, not all of it: a neighbour beside the folded
+           zone keeps its far edge and grows into the freed space, so its CONTENT
+           (centred, capped width) only travels half as far as that edge — and it
+           is the content a transform must reproduce. The neighbour's own fill
+           ends up 118px short for the length of the animation, which the clipped
+           zone above it hides; by the time that zone has been clipped away, the
+           fill has arrived. */
+        @keyframes zone-fold-neighbors {
+          from { transform: translateX(calc(var(--zone-fold-shift, 0px) / 2)); }
+          to { transform: none; }
+        }
+        @keyframes zone-unfold-neighbors {
+          from { transform: translateX(calc(var(--zone-fold-shift, 0px) / -2)); }
+          to { transform: none; }
+        }
+
         /* The content area's cast is the CARD's own box-shadow now (see the
            root div below) — one box, so it follows the corner and stays put
            when the list column folds and the chat takes the whole width. The
