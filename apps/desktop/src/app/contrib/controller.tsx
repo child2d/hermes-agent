@@ -897,7 +897,14 @@ export function ContribController() {
           <AppTopBar>
             <div className="flex min-h-0 min-w-0 flex-1">
               <AppRail />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {/* The surface the content card's corner shows THROUGH: the card
+                  clips its own children (the zones' chrome background included),
+                  so the notch between its square corner and its rounded one has
+                  to be backed one level up — otherwise glass mode's cleared shell
+                  painters leave the window material showing there, and the corner
+                  reads as a stray light wedge instead of chrome. Same rung as the
+                  band and the rail, for the same reason. */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--ui-region-chrome)">
                 <LayoutTreeRoot titlebar />
 
                 {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
