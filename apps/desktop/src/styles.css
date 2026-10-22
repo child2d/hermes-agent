@@ -664,7 +664,16 @@
     /* The dock's width, cut from that gutter. Kept here so the real dock and the
        pre-hydration fallback bar can't drift apart; composer-root's 5px
        transparent grab padding is compensated separately, at the call sites. */
-    --composer-dock-width: min(var(--composer-width), calc(100% - var(--conversation-inline-gutter) * 2));
+    /* The dock is a CARD ON the column, so it takes the gutter off the column's
+       own measure — not off the pane. `min(cap, pane - gutter)` let the dock
+       grow with the pane (832 → 960 while the list pane folded at a 960px pane),
+       which re-laid-out the textarea and its control row on every frame of the
+       fold. Cutting the gutter out of the measure instead keeps the dock the same
+       width through the toggle: only the blank gutters move. */
+    --composer-dock-width: min(
+      calc(var(--composer-width) - var(--conversation-inline-gutter) * 2),
+      calc(100% - var(--conversation-inline-gutter) * 2)
+    );
     --composer-control-size: 1.5rem;
     --composer-control-primary-size: 1.625rem;
     --composer-control-gap: 0.25rem;
