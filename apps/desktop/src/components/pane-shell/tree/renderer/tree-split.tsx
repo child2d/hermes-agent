@@ -697,11 +697,13 @@ export function TreeSplit({
     return {
       child,
       collapsed,
-      // The size the zone HAD while it was open. A folding zone keeps its
-      // content pinned to this (`--zone-fold-width`) and lets the shrinking
-      // wrapper clip it, so the fold is one clean slide instead of 200ms of the
-      // content re-wrapping its way down to zero.
-      foldTrack: minimized ? fixedTrackSize(child, axis, trackCtx) : null,
+      // The size the zone HAD while it was open — NOT what it is folding to, and
+      // NOT `fixedTrackSize(child)` on a minimized child: that answers with the
+      // minimized strip (0px for a rail-in-shell zone), which is the width being
+      // LEFT. Ask it as if the zone were open. A folding zone pins its content to
+      // this (`--zone-fold-width`) so it slides out whole instead of re-wrapping.
+      foldTrack:
+        minimized && child.type === 'group' ? fixedTrackSize({ ...child, minimized: false }, axis, trackCtx) : null,
       minimized,
       minimizedTrack: minimized ? minimizedTrackFor(child, trackCtx) : null,
       narrowCollapsed,
