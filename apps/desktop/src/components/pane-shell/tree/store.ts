@@ -539,9 +539,10 @@ function tabTargetGroup(eligible: (group: GroupNode) => boolean): GroupNode | nu
 }
 
 const treeGroupOfEvent = (event: Event): null | string => {
-  const el = event.target instanceof HTMLElement ? event.target : null
+  const el = event.target instanceof Element ? event.target : null
+  const owner = el?.closest<HTMLElement>('[data-zone-band], [data-tree-group]')
 
-  return el?.closest<HTMLElement>('[data-tree-group]')?.dataset.treeGroup ?? null
+  return owner?.dataset.zoneBand ?? owner?.dataset.treeGroup ?? null
 }
 
 /** Install the zone trackers (call once from the tree root). Records the

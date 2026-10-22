@@ -189,7 +189,6 @@ import { buildSessionByAnyId, resolvePinnedSessions } from './session-index'
 import { SidebarSessionsSection, VIRTUALIZE_THRESHOLD } from './sessions-section'
 import { CONTEXT_SPLIT_KIT, SplitSubmenu } from './split-submenu'
 import { useEnteredProjectSessions } from './use-entered-project-sessions'
-import { SidebarUserMenu } from './user-menu'
 
 // Non-session groups (messaging platforms) stay compact: show a few rows up
 // front, reveal more in larger steps on demand. Keeps a busy platform from
@@ -1555,11 +1554,10 @@ export function ChatSidebar({
           lower edge, `--ui-panel-cast` on the rail's), not as a shadow on this box:
           a zone clips at its own edges. The tree still owns the seams; this paints
           no border of its own. */}
-      {/* rounded-tl-lg, not `rounded-t`: the top-RIGHT corner sits on the pane
-          seam, and a notch there would show the zone's own (transparent) body —
-          a bright wedge between the dark chrome above and the transcript beside
-          it. Codex keeps that corner square for the same reason. */}
-      <div className="flex h-full min-h-0 w-full rounded-tl-lg bg-(--ui-sidebar-panel-background)">
+      {/* No radius here: the LIST COLUMN's pad lives on the standing pane
+          (`WorkspaceListPane`, list-panes.tsx), so a route that swaps the content
+          (channels / cron jobs) keeps the same corner. */}
+      <div className="flex h-full min-h-0 w-full">
         <SidebarContent className="min-w-0 gap-0 overflow-hidden bg-transparent px-2.5">
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
@@ -2074,8 +2072,8 @@ export function ChatSidebar({
           </div>
         )}
 
-        {/* The signed-in account, at the foot: enterprise builds only. */}
-        <SidebarUserMenu />
+        {/* The signed-in account lives on the RAIL's foot now (nav-rail.tsx): one
+            avatar in the window's corner instead of a second copy down here. */}
         </SidebarContent>
       </div>
       <ProjectDialog />

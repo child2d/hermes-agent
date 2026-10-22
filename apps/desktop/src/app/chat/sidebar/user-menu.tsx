@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router'
 
 import { usePlanktonSession } from '@/app/plankton-auth-gate'
 import { AvatarChip } from '@/components/ui/avatar-chip'
-import { Codicon } from '@/components/ui/codicon'
 import { menuItemClass, menuItemFocusClass, menuMotionClass, menuSurfaceClass } from '@/components/ui/menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -116,34 +115,31 @@ export function SidebarUserMenu(): ReactElement | null {
   }))
 
   return (
-    <div className="shrink-0 px-0.5 pb-1 pt-0.5">
-      <Popover onOpenChange={setOpen} open={open}>
-        <PopoverTrigger asChild>
-          <button
-            aria-expanded={open}
-            aria-label={name}
-            className={cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-(--ui-text-secondary)',
-              'transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground',
-              open && 'bg-(--ui-control-active-background) text-foreground'
-            )}
-            type="button"
-          >
-            <AvatarChip className="size-6 rounded-full text-2xs" name={name} />
-            <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
-            <Codicon
-              className={cn('text-(--ui-text-quaternary) transition-transform', open && 'rotate-180')}
-              name="chevron-up"
-              size="0.875rem"
-            />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className={cn(menuSurfaceClass, menuMotionClass, 'w-64')}
-          side="top"
-          sideOffset={6}
+    // The rail's foot: ONE avatar, no name and no chevron. The row that used to sit
+    // at the sidebar's bottom repeated the identity the panel already opens with,
+    // and the rail is where a window's account belongs. The trigger is a glyph box
+    // like the rail's other buttons.
+    <Popover onOpenChange={setOpen} open={open}>
+      <PopoverTrigger asChild>
+        <button
+          aria-expanded={open}
+          aria-label={name}
+          className={cn(
+            'grid size-8 shrink-0 place-items-center rounded-md transition-colors',
+            'hover:bg-(--ui-control-hover-background)',
+            open && 'bg-(--ui-control-active-background)'
+          )}
+          type="button"
         >
+          <AvatarChip className="size-6 rounded-full text-2xs" name={name} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className={cn(menuSurfaceClass, menuMotionClass, 'w-64')}
+        side="right"
+        sideOffset={8}
+      >
           <div className="flex items-center gap-2.5 px-2 py-1.5" data-testid="plankton-account-identity">
             <AvatarChip className="size-8 rounded-full text-sm" name={name} />
             <div className="min-w-0">
@@ -199,8 +195,7 @@ export function SidebarUserMenu(): ReactElement | null {
               {session.logoutError}
             </p>
           ) : null}
-        </PopoverContent>
-      </Popover>
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }

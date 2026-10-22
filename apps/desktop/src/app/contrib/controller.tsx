@@ -5,9 +5,11 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 import { registerBaymaxPage } from '@/app/baymax/register'
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
+import { WorkspaceListPane } from '@/app/chat/sidebar/list-panes'
 import { AppRail } from '@/app/chat/sidebar/nav-rail'
 import { NO_PROJECT_ID, sessionBucketId } from '@/app/chat/sidebar/projects/workspace-groups'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
+import { AppTopBar } from '@/app/shell/app-top-bar'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { AskDirective } from '@/components/assistant-ui/ask-directive'
 import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
@@ -227,7 +229,11 @@ registry.registerMany([
       minWidth: `${SIDEBAR_DEFAULT_WIDTH}px`,
       maxWidth: `${SIDEBAR_MAX_WIDTH}px`
     },
-    render: () => <WiredPane part="sidebar" />
+    render: () => (
+      <WorkspaceListPane>
+        <WiredPane part="sidebar" />
+      </WorkspaceListPane>
+    )
   },
   {
     id: 'workspace',
@@ -883,26 +889,28 @@ export function ContribController() {
           data-contrib-shell=""
           style={{ '--titlebar-height': '0px' } as CSSProperties}
         >
-          {/* The toolbar lives OUTSIDE the pane tree on purpose: its geometry is
-              the window's, so folding the session list cannot shift an icon. It
-              also owns the window's FULL height — the statusbar sits in the
-              content column beside it, not under it, so the rail is one column
-              from the top band to the window's bottom edge. */}
-          <div className="flex min-h-0 min-w-0 flex-1">
-            <AppRail />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <LayoutTreeRoot titlebar />
+          {/* L1: the window's top bar — ONE element across the whole window, above
+              the rail as well as above the panes. Zones hand their bands to it
+              (app-top-bar.tsx) instead of drawing the row themselves.
+              L2: everything under it splits rail | A zone; A zone holds the pane
+              tree and the statusbar. */}
+          <AppTopBar>
+            <div className="flex min-h-0 min-w-0 flex-1">
+              <AppRail />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <LayoutTreeRoot titlebar />
 
-              {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
-              <SessionTileCloseConfirm />
+                {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
+                <SessionTileCloseConfirm />
 
-              {/* The REAL statusbar (model pill, command center, agents, …) with
+                {/* The REAL statusbar (model pill, command center, agents, …) with
                   statusBar.left/right contributions merged in. Unmounted — not
                   just hidden — while toggled off, so its 15s status poll and the
                   per-turn readouts stop with it. */}
-              {statusbarVisible && <WiredPane part="statusbar" />}
+                {statusbarVisible && <WiredPane part="statusbar" />}
+              </div>
             </div>
-          </div>
+          </AppTopBar>
         </div>
       </ContribWiring>
     </SidebarProvider>

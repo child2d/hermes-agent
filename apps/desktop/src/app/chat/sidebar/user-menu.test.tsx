@@ -130,7 +130,16 @@ describe('SidebarUserMenu', () => {
 
     renderMenu()
 
-    expect(await screen.findByText('perry.chen@shaoke.com')).toBeTruthy()
+    // The trigger is an avatar and carries no text, so the fallback identity is
+    // asserted on its accessible name; the panel prints the address itself.
+    const trigger = await screen.findByRole('button', { name: 'perry.chen@shaoke.com' })
+
+    fireEvent.click(trigger)
+    // Shown twice in the panel (the name line falls back to the subject, and the
+    // address line echoes it), so this is a presence check, not a unique match.
+    expect(
+      within(screen.getByTestId('plankton-account-identity')).getAllByText('perry.chen@shaoke.com').length
+    ).toBeGreaterThan(0)
   })
 
   it('is absent when the enterprise gate is not active', (): void => {

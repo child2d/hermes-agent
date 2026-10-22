@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { appViewForPath, navigateToWorkspacePage, NEW_CHAT_ROUTE } from '../../routes'
 
 import { sidebarRailItems, useSidebarNavItems } from './nav-model'
+import { SidebarUserMenu } from './user-menu'
 
 /**
  * The left rail — the fork's take on Codex's activity bar.
@@ -67,26 +68,23 @@ function railIcon(item: SidebarNavItem) {
  * `tree-group.tsx` (the collapsed strip's `w-*`) and `track-model.ts`
  * (`MINIMIZED_RAIL_TRACK`). */
 const RAIL_COLUMN =
-  'flex w-13 shrink-0 flex-col border-r border-(--sidebar-edge-border) bg-(--ui-region-chrome) max-[47.5rem]:hidden'
+  'flex w-13 shrink-0 flex-col bg-(--ui-region-chrome) max-[47.5rem]:hidden'
 
 /** The icon column's own rhythm, a child of RAIL_COLUMN so the paint can cover
  *  the full height while the glyphs still start below the top band. */
 const RAIL_SHELL = 'flex flex-col items-center gap-1.5 px-2 pb-2'
 
-/** The shade the session panel throws onto this rail — ①+② in styles.css. It
- *  cannot be a shadow on the panel itself: a zone clips at its own edges
- *  (`overflow-hidden` in tree-group.tsx), so the panel's left cast would be cut
- *  off at the seam. Painted here instead — same falloff, other side of the seam.
- *  Starts at the top band (nothing casts there) and runs to the window bottom. */
-const RAIL_PANEL_CAST =
-  'pointer-events-none absolute right-0 bottom-0 w-1.5 bg-linear-to-l from-(--ui-panel-cast) to-transparent top-[var(--pane-titleband-height,2.75rem)]'
+/* The session panel's left shade used to be painted here as a straight 6px strip
+ * down this rail's edge. Two problems: a strip of constant width reads as a
+ * hairline rather than a cast, and it stopped dead at the panel's rounded corner.
+ * The zone now casts it from the panel's own box (see THE ZONE CAST in
+ * tree-group's renderer/index.tsx), so it bends with the corner, and the zone's
+ * `overflow-clip-margin` is what lets it reach this rail at all. */
 
-/** The rail's top offset: it starts BELOW the window's top band, which is
- *  `TITLEBAR_HEIGHT` + the zone header's own 10px of air (`headerBandHeight` in
- *  tree-group.tsx, published as `--pane-titleband-height`; the fallback is that
- *  same 44px). `--titlebar-height` cannot supply it — the contrib shell pins it
- *  to 0px — and an offset built on it parks the first icon inside the band. */
-const RAIL_TOP_PAD = 'pt-[calc(var(--pane-titleband-height,2.75rem)+0.375rem)]'
+/** The rail's top offset: the window's top bar is a row of its OWN above this
+ *  column (app-top-bar.tsx), so the rail starts under the chrome and only needs
+ *  the icon rhythm's own gap — no titlebar offset to reproduce. */
+const RAIL_TOP_PAD = 'pt-1.5'
 
 /** One nav button — a 20px icon in a 32px box, 9.5px of air on both sides once
  *  the rail's width and hairline are counted. The rail is icon-only, so the icon
@@ -131,7 +129,6 @@ export function AppRail() {
 
   return (
     <div className={cn(RAIL_COLUMN, 'relative')} data-slot="app-rail">
-      <div aria-hidden="true" className={RAIL_PANEL_CAST} />
       <nav aria-label="Rail" className={cn(RAIL_SHELL, RAIL_TOP_PAD)} data-slot="sidebar-nav-rail">
         {items.map(item => {
           // Rail items are page-backed by construction (new session stays in the
@@ -162,6 +159,17 @@ export function AppRail() {
           )
         })}
       </nav>
+
+      {/* The account, at the rail's foot — the window's own corner, one avatar and
+          nothing else (the panel behind it carries the name). Outside the nav: the
+          nav is the tool list and scrolls nothing, while this is pinned down.
+          Its bottom inset is the COMPOSER's gutter (`--composer-shell-pad-block-end`,
+          the composer shell's own `pb`), minus the 4px the 24px avatar leaves inside
+          its 32px box — so the circle's bottom lands on the card's bottom edge, at
+          every window size and however many rows the composer has grown. */}
+      <div className="mt-auto flex w-full justify-center pb-[max(0px,calc(var(--composer-shell-pad-block-end)-0.25rem))] pt-1">
+        <SidebarUserMenu />
+      </div>
     </div>
   )
 }
