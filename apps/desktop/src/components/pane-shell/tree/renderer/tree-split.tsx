@@ -11,8 +11,11 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   useCallback,
+  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore
 } from 'react'
 
@@ -694,11 +697,13 @@ export function TreeSplit({
     return {
       child,
       collapsed,
-      // The size the zone HAD while it was open. A folding zone keeps its
-      // content pinned to this (`--zone-fold-width`) and lets the shrinking
-      // wrapper clip it, so the fold is one clean slide instead of 200ms of the
-      // content re-wrapping its way down to zero.
-      foldTrack: minimized ? fixedTrackSize(child, axis, trackCtx) : null,
+      // The size the zone HAD while it was open — NOT what it is folding to, and
+      // NOT `fixedTrackSize(child)` on a minimized child: that answers with the
+      // minimized strip (0px for a rail-in-shell zone), which is the width being
+      // LEFT. Ask it as if the zone were open. A folding zone pins its content to
+      // this (`--zone-fold-width`) so it slides out whole instead of re-wrapping.
+      foldTrack:
+        minimized && child.type === 'group' ? fixedTrackSize({ ...child, minimized: false }, axis, trackCtx) : null,
       minimized,
       minimizedTrack: minimized ? minimizedTrackFor(child, trackCtx) : null,
       narrowCollapsed,
@@ -761,25 +766,119 @@ export function TreeSplit({
     return pos >= 0 && (pos + 0.5) / visibleOrder.length > 0.5 ? 'right' : 'left'
   }
 
+  // --------------------------------------------------------------- the fold's FLIP
+  // A rail-in-shell zone (the list pane) folding or unfolding changes the layout
+  // ONCE here, and the motion is transforms only — the folded zone's wrapper
+  // leaves the flow, keeps the place it had and is clipped away from the content
+  // side, while its neighbours start at their OLD on-screen place and slide home.
+  // The transition it replaced moved `flex-basis`, so every frame re-laid out this
+  // split, the pane tree below it, the band measurement and the geometry vars;
+  // a transform animates on the compositor and the layout happens once.
+  const [foldAnim, setFoldAnim] = useState<null | { dir: 'close' | 'open'; index: number; width: number }>(null)
+  const wasMinimized = useRef(new Map<string, boolean>())
+  const motionEnabled = useMotionEnabled()
+
+  useLayoutEffect(() => {
+    const previous = wasMinimized.current
+    const seen = new Map<string, boolean>()
+    let change: null | { dir: 'close' | 'open'; index: number; width: number } = null
+
+    tracks.forEach((track, index) => {
+      const was = previous.get(track.child.id)
+
+      seen.set(track.child.id, track.minimized)
+
+      // Only a horizontal fold, only for the zones that fold to NOTHING (the
+      // rail-in-shell list pane), and only when the width is a readable track:
+      // every other collapse keeps the plain transition.
+      if (change || !motionEnabled || !horizontal || was === undefined || was === track.minimized) {
+        return
+      }
+
+      const width = Number.parseFloat(track.minimized ? (track.foldTrack ?? '') : (track.track ?? ''))
+
+      if (!Number.isFinite(width) || width <= 0) {
+        return
+      }
+
+      change = { dir: track.minimized ? 'close' : 'open', index, width }
+    })
+
+    wasMinimized.current = seen
+
+    if (change) {
+      setFoldAnim(change)
+    }
+    // `tracks` is a fresh array per render and the guard above (a child that did
+    // not change its minimized flag) is what keeps this from looping; keying on
+    // the flag string instead would need the sizes too, since a fold and an
+    // unfold can land on consecutive renders.
+  }, [horizontal, motionEnabled, tracks])
+
+  useEffect(() => {
+    if (!foldAnim) {
+      return
+    }
+
+    // A timer, not `animationend`: the browser may never fire it (background
+    // window, reduced motion mid-flight) and the state must be torn down either
+    // way — leaving it on would keep a zone out of the flow.
+    const timer = setTimeout(() => setFoldAnim(null), FOLD_MOTION_MS + 40)
+
+    return () => clearTimeout(timer)
+  }, [foldAnim])
+
   return (
     <div
-      className={cn('flex min-h-0 min-w-0 flex-1', horizontal ? 'flex-row' : 'flex-col', anchorsEnd && 'justify-end')}
+      className={cn('relative flex min-h-0 min-w-0 flex-1', horizontal ? 'flex-row' : 'flex-col', anchorsEnd && 'justify-end')}
       data-tree-split={node.id}
       ref={containerRef}
+      // The folded zone's width, read by the keyframes (its neighbour's slide is
+      // exactly that far).
+      style={foldAnim ? ({ '--zone-fold-shift': `${foldAnim.width}px` } as CSSProperties) : undefined}
     >
       {tracks.map(({ child, collapsed, foldTrack, minimized, minimizedTrack, narrowCollapsed, sizing, track }, i) => {
         const partner = collapsed ? -1 : seamPartner(i)
         const absorbs = i === absorberIndex
+        const folding = foldAnim?.index === i
+        const sliding = foldAnim !== null && i > foldAnim.index
+
+        // The zone that is folding keeps its place: out of the flow at the width it
+        // had (or is reclaiming), clipped away from the content side. Its
+        // neighbours start at their OLD place and slide home — so nothing jumps on
+        // the frame the layout commits.
+        const motion: CSSProperties = folding
+          ? {
+              animation: `${foldAnim.dir === 'close' ? 'zone-fold-hide' : 'zone-fold-show'} ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both`,
+              height: '100%',
+              left: 0,
+              // The live zone is shown here; its boxes belong to the committed
+              // layout, so it must not answer clicks while it is a ghost.
+              pointerEvents: 'none',
+              position: 'absolute',
+              top: 0,
+              width: `${foldAnim.width}px`,
+              zIndex: 5
+            }
+          : sliding
+            ? {
+                animation: `${foldAnim.dir === 'close' ? 'zone-fold-neighbors' : 'zone-unfold-neighbors'} ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both`
+              }
+            : {}
 
         return (
           <div
-            // The fold's motion: a zone that leaves the row (the list pane
-            // folding to its rail) animates its track instead of snapping. Only
-            // the basis moves — a sash drag writes basis per frame, so the drag
-            // turns this transition off inline (see the styleSnapshots gate).
-            className="relative flex min-h-0 min-w-0 transition-[flex-basis,min-width] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]"
+            className={cn(
+              'relative flex min-h-0 min-w-0',
+              // The basis transition covers the folds the FLIP animation does not
+              // (a vertical fold, a sash-sized track) — and it MUST stand down
+              // while the animation runs, or the layout would glide under the
+              // transforms and double the motion.
+              !foldAnim && 'transition-[flex-basis,min-width] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]'
+            )}
             key={child.id}
-            style={
+            style={{
+              ...(
               collapsed
                 ? { display: 'none' }
                 : minimized
@@ -817,7 +916,9 @@ export function TreeSplit({
                       minHeight: (!horizontal && sizing?.minHeight) || 0,
                       maxHeight: horizontal || absorbs ? undefined : sizing?.maxHeight
                     }
-            }
+              ),
+              ...motion
+            }}
           >
             {partner >= 0 && (
               <Sash
@@ -842,6 +943,23 @@ export function TreeSplit({
         )
       })}
     </div>
+  )
+}
+
+/** The fold's motion, in ms — the FLIP animation and the tear-down timer share it. */
+const FOLD_MOTION_MS = 150
+
+/** The fold's easing, matched to the basis transition it replaces. */
+const FOLD_MOTION_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
+
+/** Motion off (the OS asked) → the fold commits with no animation at all. */
+function useMotionEnabled(): boolean {
+  return useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    []
   )
 }
 
