@@ -385,6 +385,14 @@ export function TreeSplit({
         el => [el, el.getAttribute('style')] as const
       )
 
+      // The wrappers carry a flex-basis transition (the list pane's fold). A drag
+      // writes basis per frame, so the transition must stand down for the
+      // gesture or every frame would glide toward the pointer. restoreStyles()
+      // below restores the captured style attribute, which removes this again.
+      styleSnapshots.forEach(([el]) => {
+        el.style.transition = 'none'
+      })
+
       const restoreStyles = () => {
         styleSnapshots.forEach(([el, style]) => {
           if (style === null) {
@@ -753,7 +761,11 @@ export function TreeSplit({
 
         return (
           <div
-            className="relative flex min-h-0 min-w-0"
+            // The fold's motion: a zone that leaves the row (the list pane
+            // folding to its rail) animates its track instead of snapping. Only
+            // the basis moves — a sash drag writes basis per frame, so the drag
+            // turns this transition off inline (see the styleSnapshots gate).
+            className="relative flex min-h-0 min-w-0 transition-[flex-basis] duration-200 ease-out"
             key={child.id}
             style={
               collapsed
