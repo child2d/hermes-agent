@@ -164,8 +164,12 @@ export function AppRail() {
 
       {/* The account, at the rail's foot — the window's own corner, one avatar and
           nothing else (the panel behind it carries the name). Outside the nav: the
-          nav is the tool list and scrolls nothing, while this is pinned down. */}
-      <div className="mt-auto flex w-full justify-center pb-2 pt-1">
+          nav is the tool list and scrolls nothing, while this is pinned down.
+          Its bottom inset is the COMPOSER's gutter (`--composer-shell-pad-block-end`,
+          the composer shell's own `pb`), minus the 4px the 24px avatar leaves inside
+          its 32px box — so the circle's bottom lands on the card's bottom edge, at
+          every window size and however many rows the composer has grown. */}
+      <div className="mt-auto flex w-full justify-center pb-[max(0px,calc(var(--composer-shell-pad-block-end)-0.25rem))] pt-1">
         <SidebarUserMenu />
       </div>
     </div>
