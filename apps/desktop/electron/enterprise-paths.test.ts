@@ -273,11 +273,11 @@ test('a malformed environment segment fails loudly instead of resolving somewher
 /** The home main.ts would use, plus whether an ambient personal root was discarded. */
 function startupHome(
   env: Record<string, string | undefined>,
-  options: { home?: string; platform?: NodeJS.Platform; enterprise?: boolean } = {}
-): { home: string; discarded: string | null; isolationIssue: string | null } {
+  options: { home?: string; platform?: NodeJS.Platform; enterprise?: boolean; homeDir?: string | null } = {}
+): { home: string; discarded: string | null; discardedReason: string | null; isolationIssue: string | null } {
   const home = options.home ?? '/Users/u'
   const platform = options.platform ?? 'darwin'
-  const identity = { enterprise: options.enterprise ?? true }
+  const identity = { enterprise: options.enterprise ?? true, homeDir: options.homeDir ?? null }
   const enterpriseDefault = enterpriseHermesHomeFor(identity, { home, platform, env })
   const requestedHome = resolveDesktopHermesHome({
     home,
@@ -297,7 +297,8 @@ function startupHome(
   })
   return {
     home: selection.home,
-    discarded: selection.discardedAmbientPersonalRoot,
+    discarded: selection.discardedAmbientRoot,
+    discardedReason: selection.discardedReason,
     isolationIssue: enterpriseHomeIsolationIssue(selection.home, { home, platform, env })
   }
 }
@@ -331,6 +332,61 @@ test('a home INSIDE the personal root is kept, so the isolation check fail-close
   assert.equal(got.discarded, null)
   assert.equal(got.home, '/Users/u/.hermes/enterprise')
   assert.ok(got.isolationIssue)
+})
+
+// --- one environment must never adopt another's state ------------------------
+// Reproduced for real: a dev build launched from a shell parented by the
+// production app inherits HERMES_HOME=<prod root>, and the explicit-override
+// branch used to win — the dev app booted on production state while its own
+// root sat empty.
+
+test('a dev build inheriting the PROD root falls back to its own root', () => {
+  const got = startupHome({ HERMES_HOME: '/Users/u/.plankton/engine/home' }, { homeDir: 'dev' })
+  assert.equal(got.home, '/Users/u/.plankton/dev/engine/home')
+  assert.equal(got.discarded, '/Users/u/.plankton/engine/home')
+  assert.equal(got.discardedReason, 'other-environment')
+  assert.equal(got.isolationIssue, null)
+})
+
+test('a prod build inheriting a per-environment root falls back to the historical root', () => {
+  for (const other of ['/Users/u/.plankton/dev/engine/home', '/Users/u/.plankton/test/engine/home']) {
+    const got = startupHome({ HERMES_HOME: other })
+    assert.equal(got.home, '/Users/u/.plankton/engine/home', `${other} must not redirect prod`)
+    assert.equal(got.discarded, other)
+    assert.equal(got.discardedReason, 'other-environment')
+  }
+})
+
+test('test and dev do not adopt each other either', () => {
+  const fromTest = startupHome({ HERMES_HOME: '/Users/u/.plankton/test/engine/home' }, { homeDir: 'dev' })
+  assert.equal(fromTest.home, '/Users/u/.plankton/dev/engine/home')
+  const fromDev = startupHome({ HERMES_HOME: '/Users/u/.plankton/dev/engine/home' }, { homeDir: 'test' })
+  assert.equal(fromDev.home, '/Users/u/.plankton/test/engine/home')
+})
+
+test('an ambient home that already IS this artifact own root is not treated as a redirect', () => {
+  const got = startupHome({ HERMES_HOME: '/Users/u/.plankton/dev/engine/home' }, { homeDir: 'dev' })
+  assert.equal(got.home, '/Users/u/.plankton/dev/engine/home')
+  assert.equal(got.discarded, null)
+  assert.equal(got.discardedReason, null)
+})
+
+test('homes OUTSIDE the product root stay honoured (deliberate overrides, sandboxes)', () => {
+  for (const candidate of ['/Users/u/plankton-verify/home', '/tmp/rehearsal/home', '/Users/u/.hermes-enterprise']) {
+    const got = startupHome({ HERMES_HOME: candidate }, { homeDir: 'dev' })
+    assert.equal(got.home, candidate, `${candidate} is a deliberate override`)
+    assert.equal(got.discarded, null)
+  }
+})
+
+test('windows: another environment root under %LOCALAPPDATA%\\plankton is discarded too', () => {
+  const env = {
+    LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local',
+    HERMES_HOME: 'C:\\Users\\u\\AppData\\Local\\plankton\\engine\\home'
+  }
+  const got = startupHome(env, { home: 'C:\\Users\\u', platform: 'win32', homeDir: 'dev' })
+  assert.equal(got.home, 'C:\\Users\\u\\AppData\\Local\\plankton\\dev\\engine\\home')
+  assert.equal(got.discardedReason, 'other-environment')
 })
 
 test('a profiles-rooted personal home normalizes to the personal root, so it is discarded', () => {

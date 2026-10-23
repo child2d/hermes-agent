@@ -1284,23 +1284,28 @@ const REQUESTED_HERMES_HOME: string = resolveDesktopHermesHome({
 // app itself) exports exactly that value, so a double-clicked artifact launched
 // from such a context inherits it with no variable the user chose to pass. It
 // cannot be an enterprise intent — discard it and use the enterprise default.
-// A home strictly INSIDE the personal root stays untouched so the isolation
-// check below fail-closes on it.
-const ENTERPRISE_HOME_SELECTION: { home: string; discardedAmbientPersonalRoot: string | null } =
-  enterpriseHomeSelection({
-    identity: PRODUCT_IDENTITY,
-    requestedHome: REQUESTED_HERMES_HOME,
-    enterpriseDefault: ENTERPRISE_HERMES_HOME_DEFAULT,
-    home: app.getPath('home'),
-    platform: process.platform
-  })
+// The SAME rule covers ANOTHER Plankton environment's root: a dev build started
+// from a shell the production app parented inherits the production home and used
+// to boot on it. A home strictly INSIDE the personal root stays untouched so the
+// isolation check below fail-closes on it.
+const ENTERPRISE_HOME_SELECTION = enterpriseHomeSelection({
+  identity: PRODUCT_IDENTITY,
+  requestedHome: REQUESTED_HERMES_HOME,
+  enterpriseDefault: ENTERPRISE_HERMES_HOME_DEFAULT,
+  home: app.getPath('home'),
+  platform: process.platform
+})
 
 const HERMES_HOME: string = ENTERPRISE_HOME_SELECTION.home
 
-if (ENTERPRISE_HOME_SELECTION.discardedAmbientPersonalRoot) {
+if (ENTERPRISE_HOME_SELECTION.discardedAmbientRoot) {
+  const why =
+    ENTERPRISE_HOME_SELECTION.discardedReason === 'other-environment'
+      ? 'it belongs to another Plankton environment, not this one'
+      : 'it is the personal Hermes root, not an enterprise home'
   console.log(
-    `[hermes] ignoring inherited HERMES_HOME=${ENTERPRISE_HOME_SELECTION.discardedAmbientPersonalRoot} ` +
-      `(it is the personal Hermes root, not an enterprise home); using ${HERMES_HOME}`
+    `[hermes] ignoring inherited HERMES_HOME=${ENTERPRISE_HOME_SELECTION.discardedAmbientRoot} ` +
+      `(${why}); using ${HERMES_HOME}`
   )
 }
 
@@ -1308,11 +1313,12 @@ if (ENTERPRISE_HOME_SELECTION.discardedAmbientPersonalRoot) {
 // helpers (backend-env storeFirstPath, bootstrap) that re-resolve it from
 // process.env — so the enterprise app never reaches for personal ~/.hermes.
 // Skip when the environment already set a legitimate one (override /
-// multi-instance); overwrite a discarded ambient personal root, or the spawned
-// backend would inherit it and open personal state anyway.
+// multi-instance); overwrite a DISCARDED ambient home (personal root or another
+// environment's root), or the spawned backend would inherit it and open that
+// state anyway.
 if (
   ENTERPRISE_HERMES_HOME_DEFAULT &&
-  (ENTERPRISE_HOME_SELECTION.discardedAmbientPersonalRoot || !process.env.HERMES_HOME)
+  (ENTERPRISE_HOME_SELECTION.discardedAmbientRoot || !process.env.HERMES_HOME)
 ) {
   process.env.HERMES_HOME = HERMES_HOME
 }
@@ -1333,7 +1339,14 @@ if (
 // Continuing would mean running against personal state — the red line — so the
 // app refuses to start rather than booting on the wrong home.
 if (PRODUCT_IDENTITY.enterprise) {
-  console.log(`[hermes] enterprise engine home: ${HERMES_HOME}`)
+  // Name the environment on the same line as the path: which home an artifact
+  // picked is the first thing to check when two environments are in play, and
+  // the path alone does not say whether prod's historical root or a per-env
+  // root was chosen.
+  console.log(
+    `[hermes] enterprise engine home: ${HERMES_HOME}` +
+      (PRODUCT_IDENTITY.env ? ` (env=${PRODUCT_IDENTITY.env})` : '')
+  )
 
   const isolationIssue = enterpriseHomeIsolationIssue(HERMES_HOME, {
     home: app.getPath('home'),

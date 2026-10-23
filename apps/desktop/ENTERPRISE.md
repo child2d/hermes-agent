@@ -184,6 +184,36 @@ and `main.ts` overwrites the inherited value in `process.env` so spawned
 children cannot re-inherit it. A home *strictly inside* the personal root is a
 deliberate override into personal state and is left alone for the check below.
 
+### The same hole BETWEEN environments (fixed in the same way)
+
+An environment reaches its state through `HERMES_HOME`, so one environment
+inheriting another's value is the same failure — only more likely, because this
+fork's own apps parent each other. Reproduced on 2026-10-23: `npm run
+dev:plankton` was started from a shell parented by the **production** app
+(which exports `HERMES_HOME=~/.plankton/engine/home`), and the dev build booted
+on the production root while its own `~/.plankton/dev/engine/home` sat empty —
+the app looked healthy and was writing production state.
+
+`enterpriseHomeSelection()` now also discards an inherited home that **is
+another environment's engine root**, matched by shape under the product root:
+`<product root>/engine/home` (the historical prod root) or
+`<product root>/<env>/engine/home`. Matching the shape — rather than membership
+in the environment table — leaves arbitrary scratch dirs under the product root
+honoured (the login-gate test's `~/.plankton/hermes-desktop-tests/<run>/engine-home`
+sandbox still works), while making cross-environment adoption impossible in
+either direction (dev on prod, prod on dev, test on dev …).
+
+Two log lines make the decision auditable on every launch:
+
+```
+[hermes] ignoring inherited HERMES_HOME=/…/.plankton/engine/home (it belongs to another Plankton environment, not this one); using /…/.plankton/dev/engine/home
+[hermes] enterprise engine home: /…/.plankton/dev/engine/home (env=dev)
+```
+
+The second one names the environment next to the path on purpose: when two
+environments are in play, "which root did this artifact pick" is the first
+question, and the path alone does not answer it.
+
 ### ⚠️ The isolation trap: `HERMES_HOME` must live OUTSIDE `~/.hermes`
 
 **Rule: an enterprise `HERMES_HOME` that sits inside the personal Hermes root

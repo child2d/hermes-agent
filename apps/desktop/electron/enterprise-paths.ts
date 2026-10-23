@@ -137,8 +137,62 @@ export function enterpriseHermesHomeFor(
  * a deliberate (or buggy) override into personal state: it is left untouched
  * so the fail-closed isolation check refuses to start.
  *
+ * ONE ENVIRONMENT MUST NEVER ADOPT ANOTHER'S STATE
+ * ------------------------------------------------
+ * The same hole exists between the fork's own environments, and it is not
+ * theoretical: a `plankton-dev` app launched from a shell that a PRODUCTION
+ * app parented (the agent runs inside the prod app, which exports
+ * `HERMES_HOME=~/.plankton/engine/home` to its children) inherits that value,
+ * the explicit-override branch wins, and the dev build boots on the
+ * production root — logged as `enterprise engine home: …/.plankton/engine/home`
+ * with no variable the user consciously passed. So an ambient home that lies
+ * inside the product root (`~/.plankton`, `%LOCALAPPDATA%\plankton`) but is NOT
+ * this artifact's own engine home is discarded too, and the artifact falls back
+ * to its own root. Homes OUTSIDE the product root (`~/plankton-verify/home`,
+ * a sandbox, a rehearsal dir) stay honoured: those are deliberate overrides.
+ *
  * Pure: every input is a parameter, so the decision is behavior-testable.
  */
+export type EnterpriseHomeDiscardReason = 'personal-root' | 'other-environment'
+
+/** The product root every environment's engine home lives under:
+ *  `~/.plankton` (POSIX) / `%LOCALAPPDATA%\plankton` (Windows). */
+export function enterpriseProductRoot(options: {
+  home: string
+  platform?: NodeJS.Platform
+  env?: NodeJS.ProcessEnv
+}): string {
+  const platform = options.platform ?? process.platform
+  const env = options.env ?? process.env
+  if (platform === 'win32') {
+    const base = (env.LOCALAPPDATA || '').trim() || path.win32.join(options.home, 'AppData', 'Local')
+    return path.win32.join(base, ENTERPRISE_WINDOWS_HOME_SEGMENTS[0])
+  }
+
+  return path.posix.join(options.home, ENTERPRISE_HOME_SEGMENTS[0])
+}
+
+/** True when `requested` is an engine root of the shape
+ *  `<productRoot>/engine/home` (the historical prod root) or
+ *  `<productRoot>/<env>/engine/home`. Both inputs must already be folded and
+ *  resolved. */
+function isEngineRootUnder(options: {
+  productRoot: string
+  requested: string
+  paths: typeof path.posix | typeof path.win32
+}): boolean {
+  const relative = options.paths.relative(options.productRoot, options.requested)
+  if (!relative || relative.startsWith('..')) {
+    return false
+  }
+  const parts = relative.split(options.paths.sep).filter(Boolean)
+  if (parts.length !== 2 && parts.length !== 3) {
+    return false
+  }
+
+  return parts.slice(-2).join('/') === 'engine/home'
+}
+
 export function enterpriseHomeSelection(options: {
   identity: EnterpriseIdentity | null | undefined
   requestedHome: string
@@ -146,10 +200,10 @@ export function enterpriseHomeSelection(options: {
   home: string
   platform?: NodeJS.Platform
   env?: NodeJS.ProcessEnv
-}): { home: string; discardedAmbientPersonalRoot: string | null } {
+}): { home: string; discardedAmbientRoot: string | null; discardedReason: EnterpriseHomeDiscardReason | null } {
   const enterpriseDefault = options.enterpriseDefault
   if (!options.identity?.enterprise || !enterpriseDefault) {
-    return { home: options.requestedHome, discardedAmbientPersonalRoot: null }
+    return { home: options.requestedHome, discardedAmbientRoot: null, discardedReason: null }
   }
 
   const platform = options.platform ?? process.platform
@@ -157,6 +211,14 @@ export function enterpriseHomeSelection(options: {
   const paths = platform === 'win32' ? path.win32 : path.posix
   const fold = (value: string): string => (platform === 'win32' ? value.toLowerCase() : value)
   const requested = fold(paths.resolve(options.requestedHome))
+  const keep = { home: options.requestedHome, discardedAmbientRoot: null, discardedReason: null }
+  const ownHome = fold(paths.resolve(enterpriseDefault))
+
+  // An ambient value that already IS this artifact's own home is not a
+  // redirect: nothing to discard.
+  if (requested === ownHome) {
+    return keep
+  }
 
   // Compare against the personal root for this run AND the unsuffixed one: a
   // `HERMES_DATA_DIR_SUFFIX` run moves the engine's personal root, but the
@@ -167,10 +229,19 @@ export function enterpriseHomeSelection(options: {
   ].map(fold)
 
   if (personalRoots.includes(requested)) {
-    return { home: enterpriseDefault, discardedAmbientPersonalRoot: options.requestedHome }
+    return { home: enterpriseDefault, discardedAmbientRoot: options.requestedHome, discardedReason: 'personal-root' }
   }
 
-  return { home: options.requestedHome, discardedAmbientPersonalRoot: null }
+  // Another environment's engine root (or the historical prod root inherited by
+  // a dev/test build) — see the header. Matched by SHAPE, so arbitrary scratch
+  // dirs under the product root (test sandboxes such as
+  // `~/.plankton/hermes-desktop-tests/<run>/engine-home`) stay honoured.
+  const productRoot = fold(paths.resolve(enterpriseProductRoot({ home: options.home, platform, env })))
+  if (isEngineRootUnder({ productRoot, requested, paths })) {
+    return { home: enterpriseDefault, discardedAmbientRoot: options.requestedHome, discardedReason: 'other-environment' }
+  }
+
+  return keep
 }
 
 /**
