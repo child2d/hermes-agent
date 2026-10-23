@@ -72,7 +72,10 @@ test('prod keeps the historical identity and data root verbatim', () => {
   assert.equal(prod.pascal, 'Plankton')
   assert.equal(prod.appIdBase, 'com.shaoke.plankton')
   // null = the historical `~/.plankton/engine/home`, so an existing install's
-  // sessions and config do not move when the split lands.
+  // sessions and config do not move when the split lands. TRANSITIONAL: the
+  // agreed target is the uniform `~/.plankton/prod/engine/home` (see the table
+  // header) — flipping it is this one cell plus a migration, held until dev and
+  // test are green end to end.
   assert.equal(prod.homeDir, null)
 
   const identity = identityFor('plankton')

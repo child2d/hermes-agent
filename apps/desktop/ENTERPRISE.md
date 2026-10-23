@@ -79,7 +79,7 @@ and launched side by side.
 
 | Environment | Variant (`HERMES_DESKTOP_VARIANT`) | App id / name | Desktop userData | Engine home |
 |---|---|---|---|---|
-| prod | `plankton` (historical) | `com.shaoke.plankton` / `Plankton` | `…/Application Support/Plankton` | `~/.plankton/engine/home` |
+| prod | `plankton` (historical) | `com.shaoke.plankton` / `Plankton` | `…/Application Support/Plankton` | `~/.plankton/engine/home` ⚠️ transitional |
 | test | `plankton-test` | `com.shaoke.plankton.test` / `Plankton Test` | `…/PlanktonTest` | `~/.plankton/test/engine/home` |
 | dev | `plankton-dev` | `com.shaoke.plankton.dev` / `Plankton Dev` | `…/PlanktonDev` | `~/.plankton/dev/engine/home` |
 
@@ -106,6 +106,31 @@ and launched side by side.
   fail-closed isolation check is unchanged and stays quiet).
 - A malformed `homeDir` (a path separator, `..`, `engine`, uppercase) is
   rejected loudly at startup rather than resolving somewhere else.
+
+#### ⚠️ Transitional: prod's root has no environment segment yet
+
+The uniform target is `~/.plankton/<env>/engine/home` for **all three**
+(prod = `~/.plankton/prod/engine/home`). prod is **deliberately still on the
+historical `~/.plankton/engine/home`**: that directory holds a live install's
+`config.yaml`, `.env`, `state.db` (+ `-wal`/`-shm`), `sessions/`, `skills/`,
+`plugins/`, `desktop-plugins/`, `bin/`, `cron/`, `memories/`, `installs/`,
+`lsp/` … — moving it is a migration, not a rename. The switch waits until the
+dev and test environments are green end to end.
+
+Flipping it is **one cell** in `plankton-envs.cjs` (`prod.homeDir: null` →
+`'prod'`) plus that migration:
+
+1. first-launch migration in the desktop boot path (before the seed, the desktop
+   log and the backend spawn): if `~/.plankton/engine/home` exists and
+   `~/.plankton/prod/engine/home` does not, move it atomically; if both exist,
+   refuse and log loudly rather than merging two states;
+2. rollback: the reverse move, so a bad release can go back;
+3. re-run the isolation check and the enterprise resource assertions against the
+   resulting root.
+
+`electron/enterprise-paths.test.ts` already pins the target path (and that it
+differs from the historical one), so the flip cannot land half-done and silently
+start prod on an empty home.
 
 ### Per-environment manifest (non-secret config that must travel with the build)
 

@@ -226,6 +226,34 @@ test('every environment root stays outside the personal root, so the gate stays 
   }
 })
 
+test('the uniform target shape resolves, but is NOT the live prod default yet', () => {
+  // prod's root carries no environment segment today: `~/.plankton/engine/home`
+  // is where an existing install's config/sessions live, so it stays put. The
+  // agreed TARGET is the uniform `~/.plankton/<env>/engine/home` for all three
+  // — flipping prod is one cell in plankton-envs.cjs (`homeDir: 'prod'`) plus a
+  // migration of the existing root, held until dev and test are green.
+  assert.equal(
+    enterpriseHermesHomeFor({ enterprise: true, env: 'prod', homeDir: 'prod' }, { home: '/Users/u', platform: 'darwin' }),
+    '/Users/u/.plankton/prod/engine/home'
+  )
+  assert.equal(
+    enterpriseHermesHomeFor({ enterprise: true, env: 'prod', homeDir: null }, { home: '/Users/u', platform: 'darwin' }),
+    '/Users/u/.plankton/engine/home'
+  )
+  // The two roots are distinct, and a half-landed switch would silently start
+  // prod on an EMPTY home instead of the migrated one. Pin that they differ.
+  assert.notEqual(
+    enterpriseHermesHomeFor({ enterprise: true, homeDir: 'prod' }, { home: '/Users/u', platform: 'darwin' }),
+    enterpriseHermesHomeFor({ enterprise: true, homeDir: null }, { home: '/Users/u', platform: 'darwin' })
+  )
+  // Every environment, uniform shape included, is still outside ~/.hermes.
+  for (const segment of ['prod', 'test', 'dev']) {
+    const home = enterpriseHermesHomeFor({ enterprise: true, homeDir: segment }, { home: '/Users/u', platform: 'darwin' })
+    assert.ok(home && !home.includes('.hermes'))
+    assert.equal(enterpriseHomeIsolationIssue(home as string, { home: '/Users/u', platform: 'darwin' }), null)
+  }
+})
+
 test('a malformed environment segment fails loudly instead of resolving somewhere else', () => {
   for (const bad of ['../escape', 'a/b', '.hidden', 'DEV', 'engine', 'dev/']) {
     assert.throws(

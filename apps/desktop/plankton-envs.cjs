@@ -19,6 +19,18 @@
 // (`~/.plankton/<homeDir>/engine/home`), so the engine's own `engine/home`
 // leaf stays intact in every environment.
 //
+// ⚠️ TRANSITIONAL ASYMMETRY. prod's root carries no environment segment while
+// dev/test do (`~/.plankton/test/…`, `~/.plankton/dev/…`). The agreed TARGET is
+// the uniform shape `~/.plankton/<env>/engine/home` for all three, i.e. prod's
+// entry becomes `homeDir: 'prod'`. It is deliberately NOT flipped yet: moving
+// prod means migrating an existing install's `~/.plankton/engine/home`
+// (config.yaml, .env, state.db + -wal/-shm, sessions, skills, plugins,
+// desktop-plugins, bin, cron, memories, installs, lsp …) and that switch is
+// held until dev and test are green end to end. Flipping it is ONE cell below
+// plus that migration; `electron/enterprise-paths.test.ts` already pins the
+// target path, so the switch cannot land half-done and silently start prod on
+// an empty home. See ENTERPRISE.md §2.
+//
 // Adding an environment = adding one entry here. Nothing else in JS re-lists
 // the family. `scripts/write_install_stamp.py` keeps its own tuple because
 // Python cannot require a .cjs; `plankton-envs.test.mjs` asserts the two agree.
@@ -36,6 +48,9 @@ const PLANKTON_ENVS = Object.freeze({
     kebab: 'plankton',
     pascal: 'Plankton',
     appIdBase: 'com.shaoke.plankton',
+    // TRANSITIONAL: null = the historical `~/.plankton/engine/home`. The target
+    // shape is uniform (`'prod'` → `~/.plankton/prod/engine/home`); see the
+    // table header above for why the flip waits for a migration.
     homeDir: null
   }),
   test: Object.freeze({
