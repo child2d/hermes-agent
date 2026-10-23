@@ -3,12 +3,20 @@ interface ProductIdentity {
   light: boolean
   /** True for a Store-submission build (Windows Store packaging identity). */
   store: boolean
-  /** True for the enterprise fork variant (`plankton`): own data roots + model
-   *  seed. False for every upstream variant. */
+  /** True for the enterprise fork variants (`plankton`, `plankton-test`,
+   *  `plankton-dev`): own data roots + model seed. False for every upstream
+   *  variant. */
   enterprise?: boolean
   /** True when this variant ships the `bundled` in-artifact runtime shape
-   *  under its own branding (enterprise fork). */
+   *  under its own branding (enterprise family). */
   bundledCarrier?: boolean
+  /** The environment this artifact IS: `prod` | `test` | `dev`. Baked at build
+   *  time; present only on the enterprise family (absent upstream). */
+  env?: string
+  /** The one segment the engine home inserts under the product root
+   *  (`~/.plankton/<homeDir>/engine/home`); `null` = the historical root
+   *  itself (`~/.plankton/engine/home`, the prod default). */
+  homeDir?: string | null
   /** Display name. e.g. "Hermes Light" */
   displayName: string
   /** OS-level app identity. e.g. "com.nousresearch.hermes-light" */

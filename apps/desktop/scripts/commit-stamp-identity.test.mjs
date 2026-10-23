@@ -17,6 +17,8 @@ test('desktop stamp uses the admitted checkout rather than the dispatch SHA', ()
     fs.mkdirSync(scripts, { recursive: true })
     for (const name of ['write-build-stamp.mjs', 'utils.mjs', 'bundle-env.mjs']) fs.copyFileSync(path.join(root, 'apps/desktop/scripts', name), path.join(scripts, name))
     fs.copyFileSync(path.join(root, 'apps/desktop/product-identity.cjs'), path.join(repo, 'apps/desktop/product-identity.cjs'))
+    // The identity module builds the Plankton family from this table.
+    fs.copyFileSync(path.join(root, 'apps/desktop/plankton-envs.cjs'), path.join(repo, 'apps/desktop/plankton-envs.cjs'))
     fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true })
     fs.copyFileSync(path.join(root, 'scripts/msix-shared.mjs'), path.join(repo, 'scripts/msix-shared.mjs'))
     fs.copyFileSync(path.join(root, 'scripts/release-content-types.json'), path.join(repo, 'scripts/release-content-types.json'))

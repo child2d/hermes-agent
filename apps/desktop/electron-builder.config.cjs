@@ -53,8 +53,17 @@ function mustStoreMsix(value) {
 // with the .appinstaller generator so the manifest and the App Installer can
 // never drift (see scripts/msix-shared.mjs).
 const { OUT_OF_STORE_PUBLISHER, channelBuildRequest, stageChannelManifest } = require('../../scripts/msix-shared.mjs')
+const { PLANKTON_VARIANTS, planktonEnvFor } = require('./plankton-envs.cjs')
 const { macIconResource } = require('./scripts/mac-icon.cjs')
 const channelRequest = channelBuildRequest()
+
+// The build variant this packaging run represents. The Plankton family has one
+// variant per environment (`plankton` = prod, `plankton-test`, `plankton-dev`;
+// see plankton-envs.cjs), and `planktonEnv` is non-null for exactly those —
+// it gates the enterprise resource set and selects the per-environment manifest
+// that ships beside the app.
+const buildVariant = process.env.HERMES_DESKTOP_VARIANT || ''
+const planktonEnv = planktonEnvFor(buildVariant)
 
 /** @typedef {import("app-builder-lib").Configuration} Configuration */
 
@@ -130,16 +139,25 @@ module.exports = {
       from: 'build/install-stamp.json',
       to: 'install-stamp.json'
     },
-    ...(['bundled', 'store', 'plankton'].includes(process.env.HERMES_DESKTOP_VARIANT || '')
+    ...(['bundled', 'store', ...PLANKTON_VARIANTS].includes(buildVariant)
       ? [{ from: 'build/agent-payload', to: 'agent-payload' }]
       : []),
     // Enterprise distribution: ship the upstream MIT license and a third-party
-    // notice beside the app. Gated to the enterprise variant so every upstream
+    // notice beside the app. Gated to the enterprise family so every upstream
     // artifact's Resources stay bit-for-bit unchanged. See ENTERPRISE.md §6.
-    ...((process.env.HERMES_DESKTOP_VARIANT || '') === 'plankton'
+    ...(planktonEnv
       ? [
           { from: '../../LICENSE', to: 'LICENSE' },
           { from: 'THIRD-PARTY-NOTICES.md', to: 'THIRD-PARTY-NOTICES.md' },
+          // The per-environment manifest: the NON-SECRET half of this
+          // environment's configuration (SSO client id + issuer, provider/model
+          // defaults, update feed, feature switches), committed in git under
+          // enterprise/envs/ and shipped as `enterprise/env.json` inside the
+          // artifact. It exists so a hand-off build carries its own environment
+          // description instead of depending on what the builder's machine had
+          // configured; secrets (client_secret, api keys) stay out of the
+          // artifact and are supplied per machine (see ENTERPRISE.md §2/§3).
+          { from: `enterprise/envs/${planktonEnv.env}.json`, to: 'enterprise/env.json' },
           // First-launch model seed (plankton only) — the build-machine file
           // written by scripts/plankton-pack.sh; it may carry the provider key,
           // so it lives under the gitignored build/ tree and never in git. The
@@ -242,7 +260,8 @@ module.exports = {
     icon: 'packaging/dmg-volume.icns',
     // Volume title follows the PACKAGING IDENTITY, not upstream: a Plankton
     // hand-off must not mount as "Hermes Agent Installer" (the drag target and
-    // the Finder sidebar would name the wrong product).
+    // the Finder sidebar would name the wrong product), and neither should a
+    // per-environment build mount as another environment's product.
     title: `${displayName} Installer`,
     // A prebuilt .tiff on purpose, not a PNG plus a @2x sibling: dmg-builder's
     // PNG path runs `tiffutil -cathidpicheck`, which on macOS 26 rewrites both

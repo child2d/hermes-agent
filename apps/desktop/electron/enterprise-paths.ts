@@ -12,10 +12,25 @@
 //   is `plankton`/`Plankton`); `engine/home` leaves room for sibling
 //   enterprise state later (cache, toolchain) without moving this one.
 //
-// Desktop userData (`~/Library/Application Support/Plankton` on macOS):
-//   Electron derives userData from the baked `appNamePascal`
-//   (applyDesktopIdentity pins it for enterprise builds), so it is already
-//   per-identity — no path literal is needed here.
+// ONE APP PER ENVIRONMENT
+// -----------------------
+// The enterprise fork ships three INDEPENDENT apps (dev / test / prod), and
+// each owns a root of its own so a development machine can never be the
+// environment someone else runs:
+//
+//   prod  ~/.plankton/engine/home          (historical — an existing install
+//                                           must not move)
+//   test  ~/.plankton/test/engine/home
+//   dev   ~/.plankton/dev/engine/home
+//
+// The environment comes from the ARTIFACT's baked identity (`identity.env` /
+// `identity.homeDir`, see plankton-envs.cjs + product-identity.cjs), never
+// from a variable in the environment the app is launched in: a build handed to
+// a colleague must not be redirectable by whatever `HERMES_*` values happen to
+// be in their shell. Desktop userData is already per-identity (Electron
+// derives it from the baked `appNamePascal`, which `applyDesktopIdentity` pins
+// — `Plankton`, `PlanktonTest`, `PlanktonDev`), so the three apps also get
+// separate single-instance locks and can run side by side.
 //
 // OVERRIDE
 // --------
@@ -27,22 +42,58 @@ import path from 'node:path'
 
 import { platformDefaultHermesHome } from './data-paths'
 
-/** Segments appended to $HOME on POSIX (macOS/Linux). */
+/** Segments appended to $HOME on POSIX (macOS/Linux). The prod default. */
 export const ENTERPRISE_HOME_SEGMENTS = ['.plankton', 'engine', 'home'] as const
 
-/** Segments appended to %LOCALAPPDATA% on Windows. Windows hides dot-dirs. */
+/** Segments appended to %LOCALAPPDATA% on Windows. Windows hides dot-dirs.
+ *  The prod default. */
 export const ENTERPRISE_WINDOWS_HOME_SEGMENTS = ['plankton', 'engine', 'home'] as const
+
+/** A single path segment and nothing else. The environment is baked at build
+ *  time, so a malformed value is a build bug: fail loudly here instead of
+ *  silently resolving somewhere outside the product root. */
+const HOME_DIR_SEGMENT = /^[a-z0-9][a-z0-9-]*$/
 
 /** The only identity shape this helper needs (kept structural so the module
  *  stays dependency-free and cheap to import from the pre-launch entry). */
 export interface EnterpriseIdentity {
   enterprise?: boolean
+  /** `dev` / `test` / `prod` — informational; the path keys on `homeDir`. */
+  env?: string
+  /** The single segment inserted under the product root. `null`/absent = the
+   *  historical prod root (`~/.plankton/engine/home`). */
+  homeDir?: string | null
+}
+
+/**
+ * The engine-home segments for this artifact's environment: the historical
+ * `.plankton/engine/home` for prod, `.plankton/<env>/engine/home` otherwise.
+ */
+export function enterpriseHomeSegments(
+  identity: EnterpriseIdentity | null | undefined,
+  platform: NodeJS.Platform = process.platform
+): string[] {
+  const base = platform === 'win32' ? [...ENTERPRISE_WINDOWS_HOME_SEGMENTS] : [...ENTERPRISE_HOME_SEGMENTS]
+  const segment = identity?.homeDir == null ? '' : String(identity.homeDir).trim()
+  if (!segment) {
+    return base
+  }
+  // 'engine' would produce `.plankton/engine/engine/home`, shadowing the prod
+  // root's own first segment — ambiguous by construction.
+  if (segment === base[1] || !HOME_DIR_SEGMENT.test(segment)) {
+    throw new Error(
+      `Invalid enterprise homeDir ${JSON.stringify(identity?.homeDir)}: expected one lowercase path segment, or null for the default root`
+    )
+  }
+
+  return [base[0], segment, ...base.slice(1)]
 }
 
 /**
  * The enterprise engine-home default for this machine, or `null` for any
  * non-enterprise identity (in which case upstream's platform default applies
- * unchanged).
+ * unchanged). Keys on the artifact's own environment: prod resolves to the
+ * historical `~/.plankton/engine/home`, dev/test to their own sibling roots.
  */
 export function enterpriseHermesHomeFor(
   identity: EnterpriseIdentity | null | undefined,
@@ -54,13 +105,14 @@ export function enterpriseHermesHomeFor(
 
   const platform = options.platform ?? process.platform
   const env = options.env ?? process.env
+  const segments = enterpriseHomeSegments(identity, platform)
 
   if (platform === 'win32') {
     const base = (env.LOCALAPPDATA || '').trim() || path.win32.join(options.home, 'AppData', 'Local')
-    return path.win32.join(base, ...ENTERPRISE_WINDOWS_HOME_SEGMENTS)
+    return path.win32.join(base, ...segments)
   }
 
-  return path.posix.join(options.home, ...ENTERPRISE_HOME_SEGMENTS)
+  return path.posix.join(options.home, ...segments)
 }
 
 /**

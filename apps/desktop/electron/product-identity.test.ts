@@ -332,6 +332,83 @@ test('the enterprise variant owns its identity and leaves upstream variants unto
   }
 })
 
+test('one independent app per environment: the three Plankton variants cannot collide', async (): Promise<void> => {
+  const expected = [
+    { variant: 'plankton', env: 'prod', appId: 'com.shaoke.plankton', pascal: 'Plankton', display: 'Plankton', homeDir: null },
+    {
+      variant: 'plankton-test',
+      env: 'test',
+      appId: 'com.shaoke.plankton.test',
+      pascal: 'PlanktonTest',
+      display: 'Plankton Test',
+      homeDir: 'test'
+    },
+    {
+      variant: 'plankton-dev',
+      env: 'dev',
+      appId: 'com.shaoke.plankton.dev',
+      pascal: 'PlanktonDev',
+      display: 'Plankton Dev',
+      homeDir: 'dev'
+    }
+  ] as const
+
+  for (const spec of expected) {
+    const identity: ProductIdentity = await identityForVariant(spec.variant)
+    assert.equal(identity.enterprise, true)
+    assert.equal(identity.bundledCarrier, true)
+    assert.equal(identity.env, spec.env, `${spec.variant} must bake its environment`)
+    assert.equal(identity.homeDir, spec.homeDir)
+    assert.equal(identity.appId, spec.appId)
+    assert.equal(identity.appNamePascal, spec.pascal)
+    assert.equal(identity.artifactNamePascal, spec.pascal)
+    assert.equal(identity.displayName, spec.display)
+    assert.equal(identity.iconBase, 'assets/plankton/icon')
+    // The runtime must never derive the environment from the shell it is
+    // launched in, so no build selector leaks into the identity.
+    assert.equal(identity.store, false)
+    assert.equal(identity.light, false)
+  }
+
+  // Upstream variants carry no environment at all (their artifacts and behavior
+  // stay bit-for-bit unchanged).
+  for (const variant of [undefined, 'bundled', 'light'] as const) {
+    const identity: ProductIdentity = await identityForVariant(variant)
+    assert.equal(identity.env, undefined, `variant ${String(variant)} must carry no env`)
+    assert.equal(identity.homeDir, undefined, `variant ${String(variant)} must carry no homeDir`)
+  }
+})
+
+test('each environment pins its own userData dir, so the three apps coexist', async (): Promise<void> => {
+  const runtime: { applyDesktopIdentity: typeof applyDesktopIdentity } = await import('./product-identity')
+  const root: string = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-envs-'))
+
+  try {
+    const dirs = new Map<string, string>()
+    for (const variant of ['plankton', 'plankton-test', 'plankton-dev'] as const) {
+      const identity: ProductIdentity = await identityForVariant(variant)
+      const paths: Record<string, string> = { appData: root, userData: path.join(root, 'Hermes') }
+      const app: Parameters<typeof applyDesktopIdentity>[0] = {
+        getPath: (key: string): string => paths[key],
+        setPath: (key: string, value: string): void => {
+          paths[key] = value
+        },
+        setName: (): void => {}
+      }
+      runtime.applyDesktopIdentity(app, identity)
+      const userData = path.basename(paths.userData)
+      // Distinct userData = distinct single-instance lock + distinct window
+      // state, which is what lets dev/test/prod run side by side.
+      assert.equal(dirs.get(userData), undefined, `userData ${userData} is shared by ${dirs.get(userData)} and ${variant}`)
+      dirs.set(userData, variant)
+      assert.equal(userData, identity.appNamePascal)
+    }
+    assert.equal(dirs.size, 3)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('an enterprise build pins userData to its own appData dir before the app name can change', async (): Promise<void> => {
   const plankton: ProductIdentity = await identityForVariant('plankton')
   const runtime: { applyDesktopIdentity: typeof applyDesktopIdentity } = await import('./product-identity')

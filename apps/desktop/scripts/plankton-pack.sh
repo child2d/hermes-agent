@@ -9,18 +9,45 @@
 #   cd apps/desktop && npm run pack:plankton          # unpacked .app (local install)
 #   cd apps/desktop && npm run pack:plankton -- --dmg # distributable .dmg (hand-off)
 #
+#   PLANKTON_ENV=dev|test|prod picks the environment (default prod). A non-prod
+#   build is a SEPARATE app (own id/name/userData/engine home) and lands in
+#   release/<env>/ so it can never overwrite another environment's artifact.
+#
 # Artifact: apps/desktop/release/mac-arm64/Plankton.app (.dmg next to it with --dmg)
 # See apps/desktop/ENTERPRISE.md ("Build / pack / distribution").
 set -euo pipefail
 cd "$(dirname "$0")/.." # apps/desktop
 REPO_ROOT="$(cd ../.. && pwd)"
 
+# --- environment selection ---------------------------------------------------
+# Plankton ships one INDEPENDENT app per environment (see plankton-envs.cjs):
+#
+#   PLANKTON_ENV=prod → variant plankton      → ~/.plankton/engine/home
+#   PLANKTON_ENV=test → variant plankton-test → ~/.plankton/test/engine/home
+#   PLANKTON_ENV=dev  → variant plankton-dev  → ~/.plankton/dev/engine/home
+#
+# Each gets its own app id, app name, desktop userData dir and engine home, so
+# the three installs coexist on one machine without sharing state. The variant
+# is BAKED into the artifact (identity + install stamp): the running app derives
+# its environment from itself, never from a variable in the shell it was
+# launched from — which is the whole point of splitting them.
+PLANKTON_ENV="${PLANKTON_ENV:-prod}"
+ENV_SPEC="$(node -e '
+  const spec = require(process.cwd() + "/plankton-envs.cjs").planktonEnvByName(process.argv[1])
+  if (!spec) process.exit(1)
+  process.stdout.write(`${spec.variant} ${spec.env}`)
+' "$PLANKTON_ENV")" || {
+  echo "[plankton-pack] ERROR: PLANKTON_ENV must be dev, test or prod (got '${PLANKTON_ENV}')." >&2
+  exit 1
+}
+VARIANT="${ENV_SPEC%% *}"
+
 # --- build-time pins (all overridable from the environment) -------------------
 HERMES_PYTHON="${HERMES_PYTHON:-/opt/homebrew/bin/python3}"
 ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://registry.npmmirror.com/-/binary/electron/}"
 export HERMES_PYTHON
 export ELECTRON_MIRROR
-export HERMES_DESKTOP_VARIANT=plankton
+export HERMES_DESKTOP_VARIANT="$VARIANT"
 # Signing is OFF by default: this machine has no Apple Developer identity, and
 # auto-discovery would otherwise fail the pack. Both switches stay overridable,
 # so a machine WITH a "Developer ID Application" cert signs by exporting
@@ -28,6 +55,35 @@ export HERMES_DESKTOP_VARIANT=plankton
 # notarization then runs if APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER
 # are set (scripts/notarize.mjs runs from afterSign).
 export CSC_IDENTITY_AUTO_DISCOVERY="${CSC_IDENTITY_AUTO_DISCOVERY:-false}"
+echo "[plankton-pack] env=$PLANKTON_ENV variant=$VARIANT"
+
+# --- per-environment manifest (non-secret) -----------------------------------
+# This build's OWN environment description (SSO client id + issuer, provider
+# defaults, update feed, feature switches) travels in the artifact as
+# Resources/enterprise/env.json. Committed in git: a hand-off build must carry
+# its environment with it instead of depending on what the build machine had
+# configured. It carries NO secret — the SSO client_secret is a SEPARATE,
+# explicitly staged resource (`build/enterprise/sso-config.json`, below), and
+# that split is deliberate: the environment description must not become the
+# place a credential hides. Refuse to pack without it — a build whose
+# environment description is missing ships green and fails end to end at
+# someone else's desk.
+ENV_MANIFEST="enterprise/envs/${PLANKTON_ENV}.json"
+if [ ! -s "$ENV_MANIFEST" ]; then
+  echo "[plankton-pack] ERROR: missing per-environment manifest $ENV_MANIFEST" >&2
+  exit 1
+fi
+node -e '
+  const json = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
+  if (json.env !== process.argv[2]) {
+    console.error(`${process.argv[1]} declares env=${json.env}, expected ${process.argv[2]}`)
+    process.exit(1)
+  }
+' "$ENV_MANIFEST" "$PLANKTON_ENV" || {
+  echo "[plankton-pack] ERROR: $ENV_MANIFEST does not declare env=$PLANKTON_ENV." >&2
+  exit 1
+}
+echo "[plankton-pack] manifest: $ENV_MANIFEST → Resources/enterprise/env.json"
 
 # --- first-launch model seed resource ----------------------------------------
 # The real seed (which may carry the provider key) lives here on the build
@@ -167,8 +223,18 @@ echo "[plankton-pack] ELECTRON_MIRROR=$ELECTRON_MIRROR"
 # DERIVED from this, never hardcoded: a redirected build used to print a path that
 # did not exist (it misled a reviewer).
 OUTPUT_DIR="$(node -e "const c=require('./electron-builder.config.cjs');process.stdout.write(String(c.directories?.output||'release'))")"
+REDIRECT_OUTPUT=0
 if [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
   OUTPUT_DIR="$PLANKTON_OUTPUT_DIR"
+  REDIRECT_OUTPUT=1
+elif [ "$PLANKTON_ENV" != prod ]; then
+  # A non-prod build lands in its OWN directory: it must never overwrite the
+  # release artifact of another environment, and the log/verification must be
+  # able to name which environment's build a directory holds.
+  OUTPUT_DIR="release/$PLANKTON_ENV"
+  REDIRECT_OUTPUT=1
+fi
+if [ "$REDIRECT_OUTPUT" = 1 ]; then
   echo "[plankton-pack] output redirected to: $OUTPUT_DIR"
 fi
 # --- artifact kind ------------------------------------------------------------
@@ -190,12 +256,12 @@ echo "[plankton-pack] kind=$PACK_KIND"
 echo "[plankton-pack] start  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [ "$PACK_KIND" = dmg ]; then
   npm run build
-  if [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
+  if [ "$REDIRECT_OUTPUT" = 1 ]; then
     npm run builder -- --mac dmg --publish never -c.directories.output="$OUTPUT_DIR"
   else
     npm run builder -- --mac dmg --publish never
   fi
-elif [ -n "${PLANKTON_OUTPUT_DIR:-}" ]; then
+elif [ "$REDIRECT_OUTPUT" = 1 ]; then
   npm run build
   npm run builder -- --dir --publish never -c.directories.output="$OUTPUT_DIR"
 else
@@ -206,7 +272,7 @@ echo "[plankton-pack] done   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # the log can never point at a path a redirected build did not produce.
 APP_PATH="$(find "$OUTPUT_DIR" -maxdepth 2 -name '*.app' -type d 2>/dev/null | head -1)"
 if [ -n "$APP_PATH" ]; then
-  echo "[plankton-pack] artifact: $(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
+  echo "[plankton-pack] artifact (env=$PLANKTON_ENV variant=$VARIANT): $(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 else
   echo "[plankton-pack] artifact dir: $(pwd)/$OUTPUT_DIR (no .app found)"
 fi

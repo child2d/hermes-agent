@@ -8,6 +8,7 @@ import {
   ENTERPRISE_WINDOWS_HOME_SEGMENTS,
   enterpriseHermesHomeFor,
   enterpriseHomeIsolationIssue,
+  enterpriseHomeSegments,
   enterpriseHomeSelection
 } from './enterprise-paths'
 
@@ -149,6 +150,90 @@ test('windows comparison is case-insensitive', () => {
     }),
     null
   )
+})
+
+// --- one independent app per environment -------------------------------------
+// The three Plankton environments are separate apps, not one artifact that
+// reads a variable: each owns a root, and prod's is the historical one.
+
+test('each environment resolves to its own engine home, prod staying historical', () => {
+  const cases = [
+    { identity: { enterprise: true }, suffix: '' },
+    { identity: { enterprise: true, env: 'prod', homeDir: null }, suffix: '' },
+    { identity: { enterprise: true, env: 'test', homeDir: 'test' }, suffix: '/test' },
+    { identity: { enterprise: true, env: 'dev', homeDir: 'dev' }, suffix: '/dev' }
+  ] as const
+
+  for (const { identity, suffix } of cases) {
+    // An identity without `homeDir` (an artifact built before the split, or the
+    // prod default) keeps resolving to the historical root.
+    assert.equal(
+      enterpriseHermesHomeFor(identity, { home: '/Users/u', platform: 'darwin' }),
+      `/Users/u/.plankton${suffix}/engine/home`
+    )
+    assert.equal(
+      enterpriseHermesHomeFor(identity, { home: '/home/u', platform: 'linux' }),
+      `/home/u/.plankton${suffix}/engine/home`
+    )
+    assert.equal(
+      enterpriseHermesHomeFor(identity, {
+        home: 'C:\\Users\\u',
+        platform: 'win32',
+        env: { LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local' }
+      }),
+      `C:\\Users\\u\\AppData\\Local\\plankton${suffix.replace(/\//g, '\\')}\\engine\\home`
+    )
+  }
+})
+
+test('the environment segments are derived from the identity, never the process env', () => {
+  assert.deepEqual(enterpriseHomeSegments({ enterprise: true }, 'darwin'), ['.plankton', 'engine', 'home'])
+  assert.deepEqual(enterpriseHomeSegments({ enterprise: true, homeDir: 'test' }, 'darwin'), [
+    '.plankton',
+    'test',
+    'engine',
+    'home'
+  ])
+  assert.deepEqual(enterpriseHomeSegments({ enterprise: true, homeDir: 'test' }, 'win32'), [
+    'plankton',
+    'test',
+    'engine',
+    'home'
+  ])
+  // An empty/absent segment is the default root, not a stray separator.
+  assert.deepEqual(enterpriseHomeSegments({ enterprise: true, homeDir: '' }, 'darwin'), ['.plankton', 'engine', 'home'])
+  // An explicit HERMES_HOME in the shell cannot move the artifact's root: the
+  // default is only the default (the override is applied by the caller).
+  assert.equal(
+    enterpriseHermesHomeFor(
+      { enterprise: true, homeDir: 'dev' },
+      { home: '/Users/u', platform: 'darwin', env: { HERMES_HOME: '/tmp/other' } }
+    ),
+    '/Users/u/.plankton/dev/engine/home'
+  )
+})
+
+test('every environment root stays outside the personal root, so the gate stays quiet', () => {
+  for (const spec of [
+    { env: 'prod', homeDir: null },
+    { env: 'test', homeDir: 'test' },
+    { env: 'dev', homeDir: 'dev' }
+  ] as const) {
+    const home = enterpriseHermesHomeFor({ enterprise: true, ...spec }, { home: '/Users/u', platform: 'darwin' })
+    assert.ok(home)
+    assert.equal(enterpriseHomeIsolationIssue(home, { home: '/Users/u', platform: 'darwin' }), null)
+    assert.ok(!home.includes('.hermes'))
+  }
+})
+
+test('a malformed environment segment fails loudly instead of resolving somewhere else', () => {
+  for (const bad of ['../escape', 'a/b', '.hidden', 'DEV', 'engine', 'dev/']) {
+    assert.throws(
+      () => enterpriseHermesHomeFor({ enterprise: true, homeDir: bad }, { home: '/Users/u', platform: 'darwin' }),
+      /Invalid enterprise homeDir/,
+      `${bad} must be rejected`
+    )
+  }
 })
 
 // --- startup contract: the home the enterprise app actually uses -------------

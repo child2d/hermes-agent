@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "env": "dev",
+  "sso": {
+    "clientId": "plankton",
+    "issuer": null,
+    "redirectUri": "http://127.0.0.1:18924/callback"
+  },
+  "model": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "base_url": null,
+    "api_key_env": "DEEPSEEK_API_KEY"
+  },
+  "update": {
+    "channel": null,
+    "feedUrl": null
+  },
+  "features": {},
+  "todo": [
+    "sso.issuer: point at the dev/test tenant's SSO issuer (prod uses https://tech.shaoke.com/sso)",
+    "sso.redirectUri: port 18924 so dev/test/prod can be logged in at the same time; the SSO client must whitelist this redirect URI or login fails",
+    "update.channel/feedUrl: a dev build must never be pulled onto an update feed"
+  ]
+}

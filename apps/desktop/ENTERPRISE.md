@@ -69,6 +69,71 @@ and, when no ambient `HERMES_HOME` exists, exports it to `process.env` so the
 spawned backend and the pure PATH helpers agree. `electron/entry.ts` does the
 same for the Linux pre-launch config read.
 
+### One independent app per environment (prod / test / dev)
+
+Plankton ships **three separate apps, one per environment** — not one artifact
+that switches on an environment variable. Each has its own app id, OS-visible
+name, desktop userData dir, engine home and artifact, so a development machine
+can never be the environment someone else runs, and the three can be installed
+and launched side by side.
+
+| Environment | Variant (`HERMES_DESKTOP_VARIANT`) | App id / name | Desktop userData | Engine home |
+|---|---|---|---|---|
+| prod | `plankton` (historical) | `com.shaoke.plankton` / `Plankton` | `…/Application Support/Plankton` | `~/.plankton/engine/home` |
+| test | `plankton-test` | `com.shaoke.plankton.test` / `Plankton Test` | `…/PlanktonTest` | `~/.plankton/test/engine/home` |
+| dev | `plankton-dev` | `com.shaoke.plankton.dev` / `Plankton Dev` | `…/PlanktonDev` | `~/.plankton/dev/engine/home` |
+
+- **Single source:** `apps/desktop/plankton-envs.cjs` — the table. The identity
+  (`product-identity.cjs`), the stamp writer, the main bundler and the packager
+  all derive from it, and `scripts/plankton-envs.test.mjs` asserts the Python
+  stamp writer agrees.
+- **The environment is BAKED, never read from the shell.** The variant reaches
+  the artifact through its install stamp (`identityVariant`) and the identity it
+  bakes; `enterpriseHermesHomeFor()` keys the root on `identity.homeDir`, not on
+  a variable in the environment the app was launched from. A build handed to a
+  colleague therefore cannot be redirected by whatever `HERMES_*` values happen
+  to be in their shell — which is the failure this split exists to prevent. The
+  legitimate overrides (`HERMES_HOME`, `HERMES_DESKTOP_USER_DATA_DIR`) still
+  win, so sandbox and multi-instance rehearsals keep working.
+- **prod is unchanged, byte for byte:** same variant key, app id, name and root,
+  and `homeDir: null` means "the historical root itself". An existing install
+  and its sessions do not move. (The one prod-visible string that changed is the
+  dmg volume title, which was upstream's hardcoded `Hermes Agent Installer` and
+  is now `${displayName} Installer`.)
+- **`~/.plankton/<env>/…`** for dev/test, so the product root keeps room for
+  sibling state later; the engine's own `engine/home` leaf is intact in every
+  environment, and every root is still outside the personal `~/.hermes` (the
+  fail-closed isolation check is unchanged and stays quiet).
+- A malformed `homeDir` (a path separator, `..`, `engine`, uppercase) is
+  rejected loudly at startup rather than resolving somewhere else.
+
+### Per-environment manifest (non-secret config that must travel with the build)
+
+`enterprise/envs/<env>.json` is committed in git and ships inside the artifact as
+`Resources/enterprise/env.json` (one entry in `extraResources`, selected by the
+variant). It carries the **non-secret** half of an environment's configuration:
+SSO `clientId` / `issuer` / `redirectUri`, the provider/model defaults, the
+update channel/feed, and feature switches. Secrets never enter it —
+`client_secret` stays in the per-machine `sso-config.local.json` and provider
+keys in the per-machine seed (see §3), and the test asserts no secret-shaped key
+is present.
+
+Why: a build must carry its own environment description instead of depending on
+what the build machine happened to have configured — that is exactly the
+"works on my machine" failure this whole split addresses.
+
+**Status: skeleton.** Nothing reads it yet; today it is the build's
+self-description (and the artifact's answer to "which environment am I?"). The
+intended consumers, each of which must then treat a `null` value as "not
+provided" and fail loudly: `plankton-sso.ts` (currently defaults hardcoded in
+`PLANKTON_SSO_DEFAULTS`), `enterprise-model-seed.ts`, and the updater feed.
+`prod.json` is asserted to equal the values the code defaults to today, so the
+manifest cannot drift from actual behavior before a consumer lands. `test.json`
+and `dev.json` carry explicit `todo` entries: their SSO issuer is `null` (no
+test tenant wired yet) and their callback ports differ (18923 / 18924) so all
+three environments can be logged in at once — the SSO client must whitelist
+those redirect URIs, or login fails.
+
 **Override preserved:** a *legitimate* explicit `HERMES_HOME` (one outside the
 personal root) or `HERMES_DESKTOP_USER_DATA_DIR` always wins (multi-instance,
 sandbox tests, fresh-install rehearsals). `resolveDesktopHermesHome`'s upstream
@@ -515,21 +580,53 @@ never what the app can do" rule (⌘K and every keybind still reach every surfac
 
 ## Build / pack / rollback
 
-### One command (the supported entry point)
+### One command per environment (the supported entry points)
 
 ```bash
 cd apps/desktop
-npm run pack:plankton
+
+# prod — the historical artifact path, unchanged
+npm run pack:plankton                     # PLANKTON_ENV=prod
 # artifact: apps/desktop/release/mac-arm64/Plankton.app
+
+# test — an independent app for end-to-end runs
+npm run pack:plankton:test                # PLANKTON_ENV=test
+# artifact: apps/desktop/release/test/mac-arm64/Plankton Test.app
+
+# any environment, explicitly (dev included)
+PLANKTON_ENV=dev bash scripts/plankton-pack.sh
+# artifact: apps/desktop/release/dev/mac-arm64/Plankton Dev.app
+
+# dev, unpackaged: vite + electron straight from the source tree, identity
+# Plankton Dev, home ~/.plankton/dev/engine/home, userData …/PlanktonDev.
+# Cmd+R reloads it. Nothing is packaged and no engine payload is staged.
+npm run dev:plankton
 ```
 
-`scripts/plankton-pack.sh` pins every build-time variable the enterprise pack
-needs — `HERMES_PYTHON=/opt/homebrew/bin/python3`,
-`ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`,
-`HERMES_DESKTOP_VARIANT=plankton`, `CSC_IDENTITY_AUTO_DISCOVERY=false` — makes
-sure `build/enterprise/model-seed.json` exists (keyless placeholder when no
-secret seed is present), **refreshes the bundled engine payload source tree
-from HEAD**, then runs `npm run pack`.
+`scripts/plankton-pack.sh` resolves `PLANKTON_ENV` (default `prod`) through
+`plankton-envs.cjs` — an unknown value is refused — and pins every build-time
+variable the enterprise pack needs (`HERMES_PYTHON=/opt/homebrew/bin/python3`,
+`ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`, the
+resolved `HERMES_DESKTOP_VARIANT`, `CSC_IDENTITY_AUTO_DISCOVERY=false`), asserts
+the environment's manifest exists and declares that environment, makes sure
+`build/enterprise/model-seed.json` exists (keyless placeholder when no secret
+seed is present), **refreshes the bundled engine payload source tree from HEAD**,
+then runs the pack.
+
+Non-prod builds land in `release/<env>/` so one environment's build can never
+overwrite another's artifact; `PLANKTON_OUTPUT_DIR` still overrides the location
+entirely (`npm run pack` for prod remains the untouched path).
+
+**A dev app starts on an EMPTY home** (`~/.plankton/dev/…`), because the whole
+point is that it cannot read the tuned state of another environment. Two
+per-machine values have to be supplied for it to be usable:
+
+- provider/model: drop a seed at `<home>/enterprise/model-seed.json` or point
+  `HERMES_ENTERPRISE_MODEL_SEED` at one (§3). With neither, the seed step is a
+  logged no-op and the composer has no provider.
+- SSO `client_secret`: `PLANKTON_OIDC_CLIENT_SECRET`, or an unpackaged-run
+  fallback file at `apps/desktop/sso-config.local.json` (gitignored as of this
+  split), or `<PlanktonDev userData>/plankton-state/sso-config.local.json`.
 
 > **The engine payload is a `git archive HEAD` snapshot** (upstream
 > `scripts/bundles/native.py:_prepare_native`). Uncommitted source never reaches
@@ -600,7 +697,7 @@ omit — via the `HERMES_PAYLOAD_UV_CACHE` build switch (§4).
 
 **怎么给别人**：整包拷贝 `Plankton.app` 即可（它自带运行时，不需要对方另装引擎或 Python）。
 
-- **⚠️ 同一台机器不要同时打开两个 Plankton**：两个实例共用同一个企业数据目录（桌面 `~/Library/Application Support/Plankton`，引擎 `~/.plankton/engine/home`），同时打开会争用同一份 `state.db` 与会话。用完一个再开另一个。
+- **⚠️ 同一环境不要同时打开两个**：同一个环境（例如两个 prod）的两个实例共用同一份企业数据目录（桌面 `~/Library/Application Support/Plankton`，引擎 `~/.plankton/engine/home`），同时打开会争用同一份 `state.db` 与会话。用完一个再开另一个。**不同环境可以同时开**：dev / test / prod 是三个独立 app（各自的 appId、userData 与引擎 home，见 §2「One independent app per environment」），互不干扰。
 - **未签名会遇到的拦阻**：macOS Gatekeeper 会提示「无法验证开发者 / 已损坏，无法打开」。
   - 临时处置一：右键（或 Control-点击）应用 → 打开 → 在弹窗里再点「打开」。
   - 临时处置二：`xattr -dr com.apple.quarantine /path/to/Plankton.app` 去掉隔离属性后再打开。

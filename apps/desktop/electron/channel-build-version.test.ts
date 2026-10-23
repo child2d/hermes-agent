@@ -372,6 +372,9 @@ test('actual MSIX manifest writer consumes the channel quad across rollover inst
   try {
     for (const file of [
       'apps/desktop/product-identity.cjs',
+      // product-identity.cjs builds the Plankton family from this table, so the
+      // fixture must carry it too (one independent app per environment).
+      'apps/desktop/plankton-envs.cjs',
       'apps/desktop/electron-builder.config.cjs',
       'apps/desktop/package.json',
       'apps/desktop/update-feed.cjs',

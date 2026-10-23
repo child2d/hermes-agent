@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "env": "prod",
+  "sso": {
+    "clientId": "plankton",
+    "issuer": "https://tech.shaoke.com/sso",
+    "redirectUri": "http://127.0.0.1:18922/callback"
+  },
+  "model": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "base_url": "https://api.deepseek.com",
+    "api_key_env": "DEEPSEEK_API_KEY"
+  },
+  "update": {
+    "channel": "latest",
+    "feedUrl": null
+  },
+  "features": {},
+  "todo": []
+}

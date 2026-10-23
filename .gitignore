@@ -91,6 +91,10 @@ hermes_cli/web_dist/
 .web_ui_build.lock
 apps/desktop/build/
 apps/desktop/dist/
+# Per-machine enterprise secrets. In an unpackaged run the SSO resolver falls
+# back to `<desktop root>/sso-config.local.json` (see electron/plankton-sso.ts),
+# which carries a client_secret — it must never enter git.
+apps/desktop/sso-config.local.json
 
 # tsc-emitted artifacts (a stray `tsc -b` compiles into src/, and vite then
 # resolves the stale .js OVER the .tsx — never track these)

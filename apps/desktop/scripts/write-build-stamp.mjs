@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs"
 import { resolve, join, relative, posix } from "path"
 import productIdentity from "../product-identity.cjs"
+import planktonEnvs from "../plankton-envs.cjs"
 import { channelBuildRequest } from "../../../scripts/msix-shared.mjs"
 import { validateBundleEnvironment } from "./bundle-env.mjs"
 import { execFileSync } from "child_process"
@@ -17,12 +18,13 @@ import { isMain } from "./utils.mjs"
 
 const STAMP_SCHEMA_VERSION = 1
 
-// Variants that ship the bundled runtime shape under their own branding. The
-// install stamp still says `payload: bundled` (installShape, bundledPayload
-// and steward.is_bundled_payload all key on that), but the Electron main
-// bundle must bake THIS variant's identity. Recorded as `identityVariant` so
-// bundle-electron-main.mjs needs no build-env input.
-const BRANDED_BUNDLED_VARIANTS = new Set(["plankton"])
+// Variants that ship the bundled runtime shape under their own branding (one
+// per environment — see plankton-envs.cjs). The install stamp still says
+// `payload: bundled` (installShape, bundledPayload and steward.is_bundled_payload
+// all key on that), but the Electron main bundle must bake THIS variant's
+// identity. Recorded as `identityVariant` so bundle-electron-main.mjs needs no
+// build-env input.
+const BRANDED_BUNDLED_VARIANTS = new Set(planktonEnvs.PLANKTON_VARIANTS)
 
 /** All-zero placeholder used when no real commit can be resolved. */
 export const FALLBACK_COMMIT = "0000000000000000000000000000000000000000"
@@ -262,9 +264,13 @@ export function buildStampPayload(stamp, env = process.env, platform = process.p
   const updateMechanism = {
     '': 'self',
     bootstrap: 'self',
-    // The enterprise variant is a branded bundled carrier: it takes the same
-    // native update owner as `bundled`, never a checkout self-update.
-    plankton: { win32: 'app-installer', darwin: 'electron-updater' }[platform] || 'external',
+  // The enterprise family is a branded bundled carrier: it takes the same
+    // native update owner as `bundled`, never a checkout self-update. One entry
+    // per environment comes from the table above, so a new environment cannot
+    // fall through to `Unknown desktop variant` at stamp time.
+    ...Object.fromEntries(
+      planktonEnvs.PLANKTON_VARIANTS.map(v => [v, { win32: 'app-installer', darwin: 'electron-updater' }[platform] || 'external'])
+    ),
     store: 'microsoft-store',
     bundled: { win32: 'app-installer', darwin: 'electron-updater' }[platform] || 'external',
     light: platform === 'darwin' ? 'electron-updater' : 'external'

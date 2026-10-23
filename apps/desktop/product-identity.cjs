@@ -2,10 +2,13 @@
 // value a variant owns. HERMES_DESKTOP_VARIANT=light builds "Hermes
 // Light", the remote-only client; everything else is full "Hermes".
 //
-// 'plankton' is the enterprise variant: a *branded bundled carrier*. It ships
-// the same in-artifact runtime as `bundled` (the install stamp still reads
-// `payload: bundled`; see scripts/write-build-stamp.mjs), under its own name,
-// app id, icon and first-launch data roots. See ENTERPRISE.md.
+// 'plankton', 'plankton-test' and 'plankton-dev' are the enterprise fork's
+// family: a *branded bundled carrier*, one INDEPENDENT app per environment.
+// Each ships the same in-artifact runtime as `bundled` (the install stamp still
+// reads `payload: bundled`; see scripts/write-build-stamp.mjs), under its own
+// name, app id, icon, desktop userData dir and first-launch engine home — so
+// the three installs coexist on one machine without sharing state. The
+// environment is a build-time axis only; see plankton-envs.cjs. ENTERPRISE.md.
 //
 // Consumed at build time by electron-builder.config.cjs (packaging
 // identity). electron/product-identity.ts is the typed runtime accessor.
@@ -13,7 +16,31 @@
 /// <reference types="node" />
 'use strict'
 
-/** @typedef {{ display: string, kebab: string, pascal: string, appIdBase?: string, iconBase?: string, enterprise?: boolean, bundledCarrier?: boolean }} Variant */
+const { PLANKTON_ENVS } = require('./plankton-envs.cjs')
+
+/** @typedef {{ display: string, kebab: string, pascal: string, appIdBase?: string, iconBase?: string, enterprise?: boolean, bundledCarrier?: boolean, env?: string, homeDir?: string|null }} Variant */
+
+/** The Plankton environment variants, built from the one environment table
+ *  (plankton-envs.cjs) so a new environment can never drift between the
+ *  identity and the packaging scripts. `env`/`homeDir` carry the environment
+ *  INTO the identity, which is what makes the data roots a property of the
+ *  artifact rather than of the shell it was launched from. */
+const planktonVariantEntries = Object.fromEntries(
+  Object.values(PLANKTON_ENVS).map(spec => [
+    spec.variant,
+    {
+      display: spec.display,
+      kebab: spec.kebab,
+      pascal: spec.pascal,
+      appIdBase: spec.appIdBase,
+      iconBase: 'assets/plankton/icon',
+      enterprise: true,
+      bundledCarrier: true,
+      env: spec.env,
+      homeDir: spec.homeDir
+    }
+  ])
+)
 
 /** @type {Record<string, Variant>} */
 const variants = {
@@ -28,28 +55,25 @@ const variants = {
     kebab: 'hermes-bundled',
     pascal: 'HermesBundled'
   },
-  // Plankton — the enterprise variant. `enterprise: true` is the one switch
-  // the desktop runtime reads to pick enterprise data roots (see
+  // Plankton — the enterprise family. `enterprise: true` is the one switch the
+  // desktop runtime reads to pick enterprise data roots (see
   // electron/enterprise-paths.ts) and the first-launch model seed
   // (electron/enterprise-model-seed.ts). `bundledCarrier: true` says its
   // artifact reuses the `bundled` in-artifact runtime shape; electron-builder
   // and the install stamp key on it (see electron-builder.config.cjs,
   // scripts/write-build-stamp.mjs). `appIdBase` and `iconBase` keep every
   // upstream variant on today's values.
-  plankton: {
-    display: 'Plankton',
-    kebab: 'plankton',
-    pascal: 'Plankton',
-    appIdBase: 'com.shaoke.plankton',
-    iconBase: 'assets/plankton/icon',
-    enterprise: true,
-    bundledCarrier: true
-  }
+  ...planktonVariantEntries
 }
 
 const variant = process.env.HERMES_DESKTOP_VARIANT || ''
-if (!['', 'light', 'bundled', 'store', 'plankton'].includes(variant)) {
-  throw new Error(`Unknown HERMES_DESKTOP_VARIANT ${variant}. expected one of (empty), light, bundled, store, plankton`)
+// 'store' is a packaging identity layered on `bundled` rather than a table
+// entry, so it is listed here beside the real variant keys.
+const knownVariants = ['', 'light', 'bundled', 'store', ...Object.keys(planktonVariantEntries)]
+if (!knownVariants.includes(variant)) {
+  throw new Error(
+    `Unknown HERMES_DESKTOP_VARIANT ${variant}. expected one of ${knownVariants.map(v => v || '(empty)').join(', ')}`
+  )
 }
 
 // 'store' is a Store-submission packaging identity layered on the bundled
@@ -59,10 +83,10 @@ if (!['', 'light', 'bundled', 'store', 'plankton'].includes(variant)) {
 const store = variant === 'store'
 const light = variant === 'light'
 const name = variants[store ? 'bundled' : (variant || '')]
-// Enterprise fork marker. False for every upstream variant, including the
+// Enterprise family marker. False for every upstream variant, including the
 // store build (which inherits the `bundled` name and must keep upstream
-// behavior).
-const enterprise = variant === 'plankton'
+// behavior). True for all three Plankton environments.
+const enterprise = Boolean(name.enterprise)
 
 // The electron-updater feed channel this build PUBLISHES to. A canary
 // tag (vX.Y.Z+canary.YYYYMMDDTHHMMSSZ) writes canary.yml / light-canary.yml;
@@ -97,6 +121,12 @@ const identity = {
   enterprise,
   // True only for a branded variant that ships the `bundled` runtime shape.
   bundledCarrier: Boolean(name.bundledCarrier),
+  // The environment this artifact IS (`dev` / `test` / `prod`) and the single
+  // segment its engine home inserts under the product root (`null` = the
+  // historical `~/.plankton/engine/home`). Present only on the enterprise
+  // family: the data roots derive from the ARTIFACT's baked identity, never
+  // from a variable in the environment it happens to be launched in.
+  ...(name.env ? { env: name.env, homeDir: name.homeDir ?? null } : {}),
   displayName,
   appId: `${name.appIdBase || `com.nousresearch.${name.kebab}`}${kebabSuffix}`,
   // Store and commit builds do not publish a release feed.

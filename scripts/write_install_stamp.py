@@ -45,6 +45,15 @@ from hermes_cli.steward import UPDATE_MECHANISMS  # noqa: E402
 STAMP_SCHEMA_VERSION = 2
 _REPO_ROOT = Path(__file__).parent.parent.resolve()
 
+# The enterprise desktop fork's family: ONE INDEPENDENT APP PER ENVIRONMENT
+# (dev / test / prod). `plankton` is prod — the historical name, kept verbatim
+# so an existing install does not move. All three stamp `payload: bundled` (the
+# shared in-artifact runtime shape) and carry their branding + environment in
+# the desktop build variant. Single source: apps/desktop/plankton-envs.cjs —
+# apps/desktop/scripts/plankton-envs.test.mjs asserts this tuple matches it.
+_BRANDED_PLANKTON = ("plankton", "plankton-test", "plankton-dev")
+_KNOWN_VARIANTS = ("", "bootstrap", "bundled", "light", "store", "runtime", *_BRANDED_PLANKTON)
+
 # Who applies the next update to the tree this stamp describes. REQUIRED —
 # stamp readers hard-fail a stamp without it.
 #   self             — `hermes update` owns the tree (installer-created
@@ -231,20 +240,24 @@ def build_stamp(
     #               must not stamp as one: 'bundled' readers locate an
     #               enclosing desktop app (bundled_app.resolve_bundle_layout)
     #               and a tree without one is damage to them.
-    #   plankton  — the enterprise desktop fork: a branded bundled carrier.
-    #               It ships the SAME in-artifact runtime as 'bundled' and
-    #               stamps as 'bundled' (shared bundled shape logic), but its
-    #               own identity and first-launch data roots come from the
-    #               desktop build variant. Never a source checkout.
+    #   plankton / plankton-test / plankton-dev
+    #               — the enterprise desktop fork's family: ONE INDEPENDENT APP
+    #               PER ENVIRONMENT (see apps/desktop/plankton-envs.cjs; prod is
+    #               the historical `plankton`). Each ships the SAME in-artifact
+    #               runtime as 'bundled' and stamps as 'bundled' (shared bundled
+    #               shape logic), but its own identity and first-launch data
+    #               roots come from the desktop build variant. Never a source
+    #               checkout. The tuple below is asserted against the JS table by
+    #               apps/desktop/scripts/plankton-envs.test.mjs.
     # Release artifacts pin a tag. Commit builds never enter an update channel.
     variant = os.environ.get("HERMES_DESKTOP_VARIANT", "").strip()
-    if variant not in ("", "bootstrap", "bundled", "light", "store", "runtime", "plankton"):
+    if variant not in _KNOWN_VARIANTS:
         raise SystemExit(
             f"write_install_stamp: unknown HERMES_DESKTOP_VARIANT {variant!r} "
             "(expected unset, 'bootstrap', 'bundled', 'light', 'store', "
-            "'runtime', or 'plankton')"
+            "'runtime', or one of 'plankton', 'plankton-test', 'plankton-dev')"
         )
-    payload = "bundled" if variant in ("store", "plankton") else (variant or "bootstrap")
+    payload = "bundled" if variant in ("store", *_BRANDED_PLANKTON) else (variant or "bootstrap")
     tag = os.environ.get("HERMES_PAYLOAD_TAG") or None
 
     _stable_tag = re.compile(r"^v(0|[1-9]\d{0,2})\.\d+\.\d+$")

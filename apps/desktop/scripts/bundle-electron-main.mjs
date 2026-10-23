@@ -5,13 +5,15 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { isMain, workspaceTool } from '../../../scripts/build/frontend-common.mjs'
+import planktonEnvs from '../plankton-envs.cjs'
 import { environmentDefaultsBanner } from './bundle-env.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '../../..')
 
 // Variants that stamp `payload: bundled` (runtime shape) under their own
-// branding; the stamp records the branding variant in `identityVariant`.
-const BRANDED_BUNDLED_VARIANTS = new Set(['plankton'])
+// branding — one per environment (see plankton-envs.cjs); the stamp records the
+// branding variant in `identityVariant`.
+const BRANDED_BUNDLED_VARIANTS = new Set(planktonEnvs.PLANKTON_VARIANTS)
 
 // Evaluate the one identity module in a fresh process. Its CJS cache and the
 // caller's environment must not carry a previous variant into this artifact.
@@ -21,7 +23,7 @@ function productIdentity(source, stamp) {
   // A branded bundled carrier keeps its own baked identity even though its
   // payload kind is 'bundled'. The stamp is the whole source: no build env.
   const variant = BRANDED_BUNDLED_VARIANTS.has(stamp.identityVariant) ? stamp.identityVariant : derived
-  if (!['', 'bundled', 'light', 'store', 'plankton'].includes(variant)) {
+  if (!['', 'bundled', 'light', 'store', ...planktonEnvs.PLANKTON_VARIANTS].includes(variant)) {
     throw new Error(`Invalid desktop stamp payload: ${stamp.payload}`)
   }
   return execFileSync(process.execPath, ['-e', 'console.log(JSON.stringify(require(process.argv[1])))',
