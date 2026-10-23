@@ -1315,6 +1315,7 @@ export function ChatBar({
             'z-30 flex flex-col',
             poppedOut ? 'fixed max-w-[calc(100vw-1.5rem)]' : 'absolute bottom-0 left-1/2 max-w-full -translate-x-1/2'
           )}
+          data-fold-shift=""
           data-popped-out={poppedOut ? '' : undefined}
           data-slot="composer-dock"
           data-thread-scrolled-up={scrolledUp ? '' : undefined}
@@ -1614,6 +1615,7 @@ export function ChatBarFallback() {
         'group/composer absolute bottom-0 left-1/2 z-30 w-(--composer-dock-width) max-w-full -translate-x-1/2 rounded-2xl pt-2 pb-[var(--composer-shell-pad-block-end)]',
         'bg-linear-to-b from-transparent to-background/55'
       )}
+      data-fold-shift=""
       data-slot="composer-root"
     >
       <div className="composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit] shadow-composer">

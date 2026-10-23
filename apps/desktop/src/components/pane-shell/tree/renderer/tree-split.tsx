@@ -831,40 +831,47 @@ export function TreeSplit({
   return (
     <div
       className={cn('relative flex min-h-0 min-w-0 flex-1', horizontal ? 'flex-row' : 'flex-col', anchorsEnd && 'justify-end')}
+      // The folded zone's width and the direction of travel: the keyframes in
+      // renderer/index.tsx read both (the neighbours' content moves half of it).
+      data-fold={foldAnim?.dir}
       data-tree-split={node.id}
       ref={containerRef}
-      // The folded zone's width, read by the keyframes (its neighbour's slide is
-      // exactly that far).
       style={foldAnim ? ({ '--zone-fold-shift': `${foldAnim.width}px` } as CSSProperties) : undefined}
     >
       {tracks.map(({ child, collapsed, foldTrack, minimized, minimizedTrack, narrowCollapsed, sizing, track }, i) => {
         const partner = collapsed ? -1 : seamPartner(i)
         const absorbs = i === absorberIndex
         const folding = foldAnim?.index === i
-        const sliding = foldAnim !== null && i > foldAnim.index
 
-        // The zone that is folding keeps its place: out of the flow at the width it
-        // had (or is reclaiming), clipped away from the content side. Its
-        // neighbours start at their OLD place and slide home — so nothing jumps on
-        // the frame the layout commits.
+        // The folding zone's own motion. FOLDING takes it OUT of the flow: the
+        // layout it is leaving IS the committed one (a minimized zone reserves
+        // nothing), so the ghost must not disturb it — it keeps the width it had
+        // and is clipped away, uncovering the zone that is already where it will
+        // end up. UNFOLDING is the opposite: the committed layout is the OPEN one,
+        // so the zone STAYS in the flow and takes its width back on the first
+        // frame. Keeping it out of the flow for the animation instead left the row
+        // at the folded widths for its whole length and re-measured in one jump
+        // when the flow returned — the twitch at the end of an expand.
+        //
+        // What travels is the neighbours' CONTENT (`data-fold-shift`, driven by the
+        // CSS in renderer/index.tsx), never their boxes: translating a box that also
+        // carries the pane's fill leaves its own fill short at the far edge.
         const motion: CSSProperties = folding
-          ? {
-              animation: `${foldAnim.dir === 'close' ? 'zone-fold-hide' : 'zone-fold-show'} ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both`,
-              height: '100%',
-              left: 0,
-              // The live zone is shown here; its boxes belong to the committed
-              // layout, so it must not answer clicks while it is a ghost.
-              pointerEvents: 'none',
-              position: 'absolute',
-              top: 0,
-              width: `${foldAnim.width}px`,
-              zIndex: 5
-            }
-          : sliding
+          ? foldAnim.dir === 'close'
             ? {
-                animation: `${foldAnim.dir === 'close' ? 'zone-fold-neighbors' : 'zone-unfold-neighbors'} ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both`
+                animation: `zone-fold-hide ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both`,
+                height: '100%',
+                left: 0,
+                // The live zone is shown here; its boxes belong to the committed
+                // layout, so it must not answer clicks while it is a ghost.
+                pointerEvents: 'none',
+                position: 'absolute',
+                top: 0,
+                width: `${foldAnim.width}px`,
+                zIndex: 5
               }
-            : {}
+            : { animation: `zone-fold-show ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both` }
+          : {}
 
         return (
           <div
@@ -946,11 +953,12 @@ export function TreeSplit({
   )
 }
 
-/** The fold's motion, in ms — the FLIP animation and the tear-down timer share it. */
-const FOLD_MOTION_MS = 150
+/** The fold's motion, in ms — the FLIP animation, the CSS keyframes and the
+ *  tear-down timer all read it. */
+export const FOLD_MOTION_MS = 150
 
 /** The fold's easing, matched to the basis transition it replaces. */
-const FOLD_MOTION_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
+export const FOLD_MOTION_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
 /** Motion off (the OS asked) → the fold commits with no animation at all. */
 function useMotionEnabled(): boolean {

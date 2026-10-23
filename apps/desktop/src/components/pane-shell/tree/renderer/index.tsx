@@ -36,6 +36,7 @@ import { FloatingPanes } from './floating-panes'
 import { KeepAlivePanes } from './keep-alive-panes'
 import { NarrowOverlays } from './narrow-overlays'
 import { TreeNode } from './tree-node'
+import { FOLD_MOTION_EASE, FOLD_MOTION_MS } from './tree-split'
 
 export function LayoutTreeRoot({ children, titlebar = false }: { children?: ReactNode; titlebar?: boolean }) {
   const tree = useStore($layoutTree)
@@ -99,20 +100,26 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
           from { clip-path: inset(0 100% 0 0); }
           to { clip-path: inset(0 0 0 0); }
         }
-        /* HALF the folded width, not all of it: a neighbour beside the folded
-           zone keeps its far edge and grows into the freed space, so its CONTENT
-           (centred, capped width) only travels half as far as that edge — and it
-           is the content a transform must reproduce. The neighbour's own fill
-           ends up 118px short for the length of the animation, which the clipped
-           zone above it hides; by the time that zone has been clipped away, the
-           fill has arrived. */
-        @keyframes zone-fold-neighbors {
-          from { transform: translateX(calc(var(--zone-fold-shift, 0px) / 2)); }
-          to { transform: none; }
+        /* What travels is the neighbours' CONTENT — the transcript column and the
+           composer card, which sit centred in their pane, so they move HALF the
+           folded width (the pane keeps its far edge and grows into the freed
+           space). Their BOXES never move: a box carries the pane's fill, and
+           translating it leaves that fill short at the far edge. It is the
+           translate property, not transform, so the composer's own -50% centring
+           survives. */
+        [data-fold='close'] [data-fold-shift] {
+          animation: zone-fold-content ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both;
         }
-        @keyframes zone-unfold-neighbors {
-          from { transform: translateX(calc(var(--zone-fold-shift, 0px) / -2)); }
-          to { transform: none; }
+        [data-fold='open'] [data-fold-shift] {
+          animation: zone-unfold-content ${FOLD_MOTION_MS}ms ${FOLD_MOTION_EASE} both;
+        }
+        @keyframes zone-fold-content {
+          from { translate: calc(var(--zone-fold-shift, 0px) / 2) 0; }
+          to { translate: 0 0; }
+        }
+        @keyframes zone-unfold-content {
+          from { translate: calc(var(--zone-fold-shift, 0px) / -2) 0; }
+          to { translate: 0 0; }
         }
 
         /* The content area's cast is the CARD's own box-shadow now (see the

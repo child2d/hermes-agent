@@ -133,9 +133,11 @@ describe('the list pane fold is a FLIP', () => {
     expect(list.style.animation).toContain('zone-fold-hide')
     // It is a ghost of a committed layout: no clicks while it plays.
     expect(list.style.pointerEvents).toBe('none')
-    // The neighbour starts at its OLD on-screen place and slides home — half the
-    // folded width, because its content only travels half as far as its edge.
-    expect(main.style.animation).toContain('zone-fold-neighbors')
+    // The neighbour's BOX does not move — its own fill would gap at the far edge.
+    // What travels is its content, marked `data-fold-shift` and driven by the
+    // `data-fold` CSS, so the split only has to publish the direction and width.
+    expect(main.style.animation).toBe('')
+    expect(splitEl().getAttribute('data-fold')).toBe('close')
     expect(splitEl().style.getPropertyValue('--zone-fold-shift')).toBe('237px')
   })
 
@@ -148,13 +150,21 @@ describe('the list pane fold is a FLIP', () => {
     setTreeGroupMinimized('grp-list', false)
 
     await waitFor(() => expect(wrappers()[0].style.animation).toContain('zone-fold-show'))
-    expect(wrappers()[1].style.animation).toContain('zone-unfold-neighbors')
+    expect(splitEl().getAttribute('data-fold')).toBe('open')
+    // The open direction commits the OPEN layout: the zone takes its width back in
+    // the flow on the first frame. Holding it out of the flow for the animation
+    // left the row at the folded widths and re-measured in one jump at the end —
+    // the twitch that closed this out.
+    expect(wrappers()[0].style.position).toBe('')
+    expect(wrappers()[0].style.flex).toContain('237px')
 
     // The timer, not animationend (a background window may never fire it): the
-    // zone must return to the flow on its own.
-    await waitFor(() => expect(wrappers()[0].style.position).toBe(''), { timeout: 800 })
-    expect(wrappers()[0].style.animation).toBe('')
+    // transient state must clear itself. The zone is in the flow throughout the
+    // open direction, so the ANIMATION is what says the motion is over.
+    await waitFor(() => expect(wrappers()[0].style.animation).toBe(''), { timeout: 800 })
+    expect(wrappers()[0].style.position).toBe('')
     expect(wrappers()[1].style.animation).toBe('')
+    expect(splitEl().getAttribute('data-fold')).toBeNull()
     expect(splitEl().style.getPropertyValue('--zone-fold-shift')).toBe('')
   })
 
@@ -169,5 +179,6 @@ describe('the list pane fold is a FLIP', () => {
     expect(wrappers()[0].style.position).toBe('')
     expect(wrappers()[0].style.animation).toBe('')
     expect(wrappers()[1].style.animation).toBe('')
+    expect(splitEl().getAttribute('data-fold')).toBeNull()
   })
 })

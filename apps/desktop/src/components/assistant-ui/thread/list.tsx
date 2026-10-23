@@ -1558,6 +1558,10 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
             'mx-auto flex min-h-full w-full max-w-(--composer-width) min-w-0 flex-col',
             renderEmpty ? 'py-8' : threadContentTopPad
           )}
+          // Marked for the fold's motion: the split shifts this with `translate`
+          // while the list pane folds, because it is the CONTENT that travels (the
+          // pane's fill stays where it is).
+          data-fold-shift=""
           data-slot="aui_thread-content"
           ref={contentRef as React.RefCallback<HTMLDivElement>}
         >
