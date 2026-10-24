@@ -51,6 +51,7 @@ import {
   appVersionInfo,
   type AppVersionInfo,
   assertSourceUpdateChannel,
+  aboutCredits,
   nativeAboutVersion,
   packagedReleaseChannel
 } from './app-version'
@@ -2279,9 +2280,20 @@ if (IS_WINDOWS) {
 // covers the first open and any non-menu invocation path. Never seed empty:
 // an empty applicationVersion falls back to the bundle version, which is the
 // 0.0.0 placeholder on local builds (#124581).
+/** About-panel credits: `{ credits }` on an environment build, `{}` upstream. */
+function aboutPanelCredits(): { credits?: string } {
+  const credits = aboutCredits({ env: PRODUCT_IDENTITY.env, home: HERMES_HOME, homedir: os.homedir() })
+
+  return credits ? { credits } : {}
+}
+
 app.setAboutPanelOptions({
   applicationName: APP_NAME,
   applicationVersion: nativeAboutVersion(appVersionInfo(INSTALL_STAMP, '', app.getVersion())),
+  // Environment + engine home as a second line (#Plankton envs). Empty for
+  // upstream variants, and `credits: ''` would render an empty line, hence the
+  // conditional spread.
+  ...aboutPanelCredits(),
   copyright: 'Copyright © 2026 Nous Research'
 })
 
@@ -15721,6 +15733,13 @@ function createWindow() {
       app.dock?.setIcon(
         resolveAppIcon(dockIconCandidates({ appRoot: APP_ROOT, iconBase: PRODUCT_IDENTITY.iconBase })) ?? icon
       )
+      // Dock badge: a second, text-readable environment marker on top of the
+      // badged artwork — it survives where the artwork is too small to read
+      // (⌘-Tab, Mission Control, a screenshot of the Dock). Non-shipped
+      // environments only: the shipping build's Dock must look as it always has.
+      if (PRODUCT_IDENTITY.env && PRODUCT_IDENTITY.env !== 'prod') {
+        app.dock?.setBadge(PRODUCT_IDENTITY.env.toUpperCase())
+      }
     }
   }
 
@@ -19317,6 +19336,7 @@ function showAboutPanelFresh(): void {
     app.setAboutPanelOptions({
       applicationName: APP_NAME,
       applicationVersion: skew.outOfSync ? `${display} — app build out of date, update the desktop app` : display,
+      ...aboutPanelCredits(),
       copyright: 'Copyright © 2026 Nous Research'
     })
     app.showAboutPanel()

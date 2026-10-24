@@ -76,6 +76,34 @@ export function nativeAboutVersion(info: AppVersionInfo): string {
   return 'unknown'
 }
 
+/**
+ * Second line of the native About panel: which environment this artifact is and
+ * which engine home it picked.
+ *
+ * Neither fact is visible anywhere else on that panel, and a product that ships
+ * more than one environment shows the same name and version in all of them —
+ * "which home is this app actually using" is the first question once two of them
+ * run side by side. Empty when there is no environment (every upstream variant),
+ * so their panel stays exactly as it was.
+ *
+ * ponytail: English-only, like nativeAboutVersion above — the native panel has
+ * no localization path of its own.
+ */
+export function aboutCredits(opts: { env?: string | null; home?: string | null; homedir?: string | null }): string {
+  const env = opts.env?.trim()
+
+  if (!env) {
+    return ''
+  }
+
+  const home = opts.home?.trim()
+  const homedir = opts.homedir?.trim()
+  // `~` instead of the operator's real name: this line ends up in screenshots.
+  const shown = home ? (homedir && home.startsWith(`${homedir}/`) ? `~${home.slice(homedir.length)}` : home) : null
+
+  return shown ? `Environment: ${env}\nHome: ${shown}` : `Environment: ${env}`
+}
+
 /** The backend may live on another machine and run a different release. */
 export function appVersionInfo(
   stamp: Readonly<InstallStamp> | null,

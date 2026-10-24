@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { appVersionInfo, assertSourceUpdateChannel, nativeAboutVersion } from './app-version'
+import { appVersionInfo, aboutCredits, assertSourceUpdateChannel, nativeAboutVersion } from './app-version'
 import type { InstallStamp } from './install-stamp'
 
 describe('artifact version identity', (): void => {
@@ -121,5 +121,34 @@ describe('artifact version identity', (): void => {
     expect(nativeAboutVersion({ appVersion: '9.9.9' })).toBe('9.9.9')
     expect(nativeAboutVersion({ appVersion: '0.0.0', baseVersion: '1.2.3' })).toBe('1.2.3')
     expect(nativeAboutVersion({ appVersion: '' })).toBe('unknown')
+  })
+})
+
+describe('About panel credits', (): void => {
+  // The panel shows the same name and version in every environment, so these
+  // lines are the only thing on it that says which one is running.
+  it('names the environment and shortens a home inside the operator’s home', (): void => {
+    expect(
+      aboutCredits({ env: 'dev', home: '/Users/someone/.plankton/dev/engine/home', homedir: '/Users/someone' })
+    ).toBe('Environment: dev\nHome: ~/.plankton/dev/engine/home')
+  })
+
+  it('leaves a home outside the operator’s home alone', (): void => {
+    expect(
+      aboutCredits({ env: 'test', home: '/Volumes/build/.plankton/test/engine/home', homedir: '/Users/someone' })
+    ).toBe('Environment: test\nHome: /Volumes/build/.plankton/test/engine/home')
+  })
+
+  it('names prod’s historical root, which has no environment segment', (): void => {
+    expect(aboutCredits({ env: 'prod', home: '/Users/someone/.plankton/engine/home' })).toBe(
+      'Environment: prod\nHome: /Users/someone/.plankton/engine/home'
+    )
+  })
+
+  it('returns nothing without an environment, so upstream panels are unchanged', (): void => {
+    expect(aboutCredits({})).toBe('')
+    expect(aboutCredits({ env: null, home: '/x' })).toBe('')
+    expect(aboutCredits({ env: '   ' })).toBe('')
+    expect(aboutCredits({ env: 'dev' })).toBe('Environment: dev')
   })
 })
