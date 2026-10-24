@@ -100,3 +100,26 @@ export function appIconCandidates(opts: {
 export function shouldOverrideDockIcon(opts: { platform: NodeJS.Platform; isPackaged: boolean }): boolean {
   return opts.platform === 'darwin' && !opts.isPackaged
 }
+
+/**
+ * Dock-icon ladder for the override above: the artifact's OWN identity icon
+ * first, then upstream's mac artwork as a fallback.
+ *
+ * The order matters when a product has more than one identity. This fork ships
+ * three apps (prod / test / dev) with three badged artworks, but a dev run is
+ * Electron's own bundle — the Dock icon can ONLY come from this override. A
+ * ladder that started at `assets/icon-mac.png` therefore showed UPSTREAM artwork
+ * in every environment and made them indistinguishable in the Dock, which is
+ * exactly the signal the icon exists to give.
+ *
+ * `<iconBase>.png` is the runtime form of the packaging artwork: packaging reads
+ * `<iconBase>.icns`/`.ico` (electron-builder.config.cjs), the Dock reads the PNG.
+ */
+export function dockIconCandidates(opts: { appRoot: string; iconBase?: string | null }): string[] {
+  const { appRoot, iconBase } = opts
+
+  return [
+    ...(iconBase ? [path.join(appRoot, `${iconBase}.png`)] : []),
+    path.join(appRoot, 'assets', 'icon-mac.png')
+  ]
+}

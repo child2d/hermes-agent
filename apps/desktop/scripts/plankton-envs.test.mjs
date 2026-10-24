@@ -66,6 +66,34 @@ test('the table holds exactly the three environments, keyed by env name', () => 
   }
 })
 
+test('each environment carries its own icon, and all three files exist', () => {
+  // The icon is the only signal an UNPACKAGED run has (it is Electron's bundle),
+  // so a shared iconBase made dev/test/prod indistinguishable in the Dock. One
+  // artwork per environment, and every form the two consumers resolve —
+  // packaging wants `<base>.icns`/`.ico`, the Dock wants `<base>.png`.
+  const bases = new Map()
+  for (const spec of Object.values(PLANKTON_ENVS)) {
+    assert.equal(spec.iconBase, `assets/plankton/icon${spec.env === 'prod' ? '' : `-${spec.env}`}`)
+    assert.equal(bases.get(spec.iconBase), undefined, `${spec.iconBase} is shared by two environments`)
+    bases.set(spec.iconBase, spec.variant)
+    for (const extension of ['png', 'icns', 'ico']) {
+      const file = path.join(desktopRoot, `${spec.iconBase}.${extension}`)
+      assert.ok(fs.existsSync(file), `${file} must be committed (generate with scripts/plankton-env-icons.py)`)
+      assert.ok(fs.statSync(file).size > 1024, `${file} looks truncated`)
+    }
+  }
+  // The shipped environment keeps the historical artwork path verbatim.
+  assert.equal(PLANKTON_ENVS.prod.iconBase, 'assets/plankton/icon')
+})
+
+test('the identity resolves each environment to its own icon', () => {
+  for (const spec of Object.values(PLANKTON_ENVS)) {
+    assert.equal(identityFor(spec.variant).iconBase, spec.iconBase)
+  }
+  // Upstream variants are untouched by the badged artwork.
+  assert.equal(identityFor('bundled').iconBase, 'assets/icon')
+})
+
 test('prod keeps the historical identity and data root verbatim', () => {
   const prod = PLANKTON_ENVS.prod
   assert.equal(prod.display, 'Plankton')

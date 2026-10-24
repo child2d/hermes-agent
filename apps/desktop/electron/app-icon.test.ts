@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import { test } from 'vitest'
 
-import { appIconCandidates, decodingFileProbe, resolveAppIcon, shouldOverrideDockIcon } from './app-icon'
+import { appIconCandidates, decodingFileProbe, dockIconCandidates, resolveAppIcon, shouldOverrideDockIcon } from './app-icon'
 
 // Regression: a packaged app.asar can contain a TRUNCATED apple-touch-icon.png
 // (interrupted electron-builder run, partial copy). Electron's
@@ -13,6 +13,19 @@ import { appIconCandidates, decodingFileProbe, resolveAppIcon, shouldOverrideDoc
 // on undecodable bytes, which killed the main process inside createWindow()
 // and took the app down mid-session. Icon resolution must fail soft: skip a
 // candidate that exists but does not decode, exactly like a missing one.
+
+test('the Dock icon ladder puts the identity icon ahead of upstream artwork', () => {
+  // A dev run is Electron's own bundle: this ladder is the ONLY source of its
+  // Dock icon, so upstream-first would show the same artwork in every
+  // environment and hide which one is running.
+  assert.deepEqual(dockIconCandidates({ appRoot: '/app', iconBase: 'assets/plankton/icon-dev' }), [
+    '/app/assets/plankton/icon-dev.png',
+    '/app/assets/icon-mac.png'
+  ])
+  // No identity icon (upstream variants) → upstream mac artwork only.
+  assert.deepEqual(dockIconCandidates({ appRoot: '/app' }), ['/app/assets/icon-mac.png'])
+  assert.deepEqual(dockIconCandidates({ appRoot: '/app', iconBase: null }), ['/app/assets/icon-mac.png'])
+})
 
 test('resolveAppIcon skips an existing but undecodable candidate', () => {
   // First candidate "exists" (probe says true) but does not decode; second

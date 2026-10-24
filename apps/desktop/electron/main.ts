@@ -45,7 +45,7 @@ import {
   readStatusCode,
   withRetry
 } from './api-transport'
-import { appIconCandidates, resolveAppIcon, shouldOverrideDockIcon } from './app-icon'
+import { appIconCandidates, dockIconCandidates, resolveAppIcon, shouldOverrideDockIcon } from './app-icon'
 import { stageAppInstallerFile } from './app-installer-file'
 import {
   appVersionInfo,
@@ -15718,7 +15718,9 @@ function createWindow() {
     // Packaged builds keep the bundle icon so macOS can style it (#73195).
     if (icon && shouldOverrideDockIcon({ platform: process.platform, isPackaged: app.isPackaged })) {
       // The window icon is full-bleed for Linux; the Dock wants the mac grid.
-      app.dock?.setIcon(resolveAppIcon([path.join(APP_ROOT, 'assets', 'icon-mac.png')]) ?? icon)
+      app.dock?.setIcon(
+        resolveAppIcon(dockIconCandidates({ appRoot: APP_ROOT, iconBase: PRODUCT_IDENTITY.iconBase })) ?? icon
+      )
     }
   }
 

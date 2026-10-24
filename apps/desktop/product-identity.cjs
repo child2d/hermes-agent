@@ -33,7 +33,7 @@ const planktonVariantEntries = Object.fromEntries(
       kebab: spec.kebab,
       pascal: spec.pascal,
       appIdBase: spec.appIdBase,
-      iconBase: 'assets/plankton/icon',
+      iconBase: spec.iconBase,
       enterprise: true,
       bundledCarrier: true,
       env: spec.env,

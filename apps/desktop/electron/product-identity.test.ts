@@ -334,14 +334,23 @@ test('the enterprise variant owns its identity and leaves upstream variants unto
 
 test('one independent app per environment: the three Plankton variants cannot collide', async (): Promise<void> => {
   const expected = [
-    { variant: 'plankton', env: 'prod', appId: 'com.shaoke.plankton', pascal: 'Plankton', display: 'Plankton', homeDir: null },
+    {
+      variant: 'plankton',
+      env: 'prod',
+      appId: 'com.shaoke.plankton',
+      pascal: 'Plankton',
+      display: 'Plankton',
+      homeDir: null,
+      iconBase: 'assets/plankton/icon'
+    },
     {
       variant: 'plankton-test',
       env: 'test',
       appId: 'com.shaoke.plankton.test',
       pascal: 'PlanktonTest',
       display: 'Plankton Test',
-      homeDir: 'test'
+      homeDir: 'test',
+      iconBase: 'assets/plankton/icon-test'
     },
     {
       variant: 'plankton-dev',
@@ -349,7 +358,8 @@ test('one independent app per environment: the three Plankton variants cannot co
       appId: 'com.shaoke.plankton.dev',
       pascal: 'PlanktonDev',
       display: 'Plankton Dev',
-      homeDir: 'dev'
+      homeDir: 'dev',
+      iconBase: 'assets/plankton/icon-dev'
     }
   ] as const
 
@@ -363,7 +373,7 @@ test('one independent app per environment: the three Plankton variants cannot co
     assert.equal(identity.appNamePascal, spec.pascal)
     assert.equal(identity.artifactNamePascal, spec.pascal)
     assert.equal(identity.displayName, spec.display)
-    assert.equal(identity.iconBase, 'assets/plankton/icon')
+    assert.equal(identity.iconBase, spec.iconBase)
     // The runtime must never derive the environment from the shell it is
     // launched in, so no build selector leaks into the identity.
     assert.equal(identity.store, false)
