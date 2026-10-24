@@ -384,6 +384,11 @@ declare global {
       localModelsEnabled?: boolean
       /** Build-identity fact: this artifact is the enterprise (Plankton) build. */
       enterpriseEnabled?: boolean
+      /**
+       * Build-identity fact: which environment this enterprise artifact is —
+       * 'dev' | 'test' | 'prod'. Absent on every upstream variant.
+       */
+      productEnv?: string | null
       /** Enterprise SSO gate fact: run the login gate before mounting the app. */
       planktonAuthRequired?: boolean
       /** Enterprise SSO bridge — present only when `planktonAuthRequired`. */

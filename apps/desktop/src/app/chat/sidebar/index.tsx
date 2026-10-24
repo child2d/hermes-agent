@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 
 import { PlatformAvatar } from '@/app/messaging/platform-icon'
+import { EnvironmentBadge } from '@/app/shell/environment-badge'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu'
@@ -1562,8 +1563,13 @@ export function ChatSidebar({
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
             {/* The fork's own name, standing where Codex puts its own — the
-                titlebar carries the icon, this carries the word. */}
-            <span className="truncate text-lg font-semibold tracking-tight text-(--ui-text-primary)">Plankton</span>
+                titlebar carries the icon, this carries the word. The environment
+                tag beside it is what separates three artifacts whose wordmark is
+                identical (EnvironmentBadge renders nothing on the shipped one). */}
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-lg font-semibold tracking-tight text-(--ui-text-primary)">Plankton</span>
+              <EnvironmentBadge />
+            </div>
             {showSessionSections && (
               <button
 

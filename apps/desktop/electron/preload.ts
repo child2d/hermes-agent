@@ -15,7 +15,7 @@ const translucencySupport = ipcRenderer.sendSync('hermes:translucency:support')
 const hudWindowing = ipcRenderer.sendSync('hermes:hud:windowing')
 const hudNativeDrag = hudWindowing?.nativeDrag === true
 
-const launchFlags: { localModels?: boolean; guestOnboarding?: boolean; enterprise?: boolean; planktonAuthRequired?: boolean } | undefined =
+const launchFlags: { localModels?: boolean; guestOnboarding?: boolean; enterprise?: boolean; planktonAuthRequired?: boolean; env?: string } | undefined =
   ipcRenderer.sendSync('hermes:feature-flags')
 
 // Local, sanitized skin payload for the first renderer theme paint. This does
@@ -39,6 +39,11 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   // Additive and false on every upstream variant; the renderer uses it to drop
   // upstream-only surfaces (the shared-metrics "Send" row). See ENTERPRISE.md §5.
   enterpriseEnabled: launchFlags?.enterprise === true,
+  // Build-identity fact: which environment this enterprise artifact is
+  // ('dev' | 'test' | 'prod'), or null upstream. Present on prod too — the
+  // renderer decides what (if anything) to mark, so an unknown value renders
+  // nothing rather than guessing. Static for the window's lifetime.
+  productEnv: typeof launchFlags?.env === 'string' ? launchFlags.env : null,
   // Enterprise SSO gate bridge — present ONLY on an enterprise build, so every
   // upstream variant's bridge object is byte-for-byte the same as before.
   // The renderer runs the login gate while `planktonAuthRequired` is true.

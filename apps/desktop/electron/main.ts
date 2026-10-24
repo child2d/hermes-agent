@@ -18857,6 +18857,11 @@ ipcMain.on('hermes:feature-flags', (event: IpcMainEvent): void => {
     // shared-metrics "Send" row). Additive and always present; upstream
     // variants receive `false` and never read it. See ENTERPRISE.md §5.
     enterprise: PRODUCT_IDENTITY.enterprise === true,
+    // Which environment this artifact is ('dev' | 'test' | 'prod'), or null on
+    // every upstream variant. The sidebar's environment badge reads it; prod
+    // carries a value too and the badge renders nothing for it, so the shipping
+    // UI is unchanged. See ENTERPRISE.md (one environment = one app).
+    env: PRODUCT_IDENTITY.env ?? null,
     // Enterprise SSO gate fact: the renderer must run the login gate before
     // mounting the app. False on every upstream variant (which never reads it).
     planktonAuthRequired: PRODUCT_IDENTITY.enterprise === true

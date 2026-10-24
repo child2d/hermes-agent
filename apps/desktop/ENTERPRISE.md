@@ -132,6 +132,32 @@ Flipping it is **one cell** in `plankton-envs.cjs` (`prod.homeDir: null` →
 differs from the historical one), so the flip cannot land half-done and silently
 start prod on an empty home.
 
+### Telling the three apart (environment markers)
+
+Three artifacts share one wordmark and one product name, so each carries markers
+that survive a screenshot:
+
+| marker | dev / test | prod |
+| --- | --- | --- |
+| app icon | badged artwork `assets/plankton/icon-<env>.{png,icns,ico}` | the shipped artwork, byte-for-byte |
+| Dock badge | the uppercase environment token | none |
+| menu-bar / ⌘-Tab name | `Plankton Dev` / `Plankton Test` | `Plankton` |
+| sidebar wordmark tag | a `DEV` / `TEST` pill (`src/app/shell/environment-badge.tsx`) | nothing renders |
+| About panel | `Environment: <env>` + `Home: ~/.plankton/<env>/engine/home` | `Environment: prod` + the historical root |
+| startup log | `enterprise engine home: <path> (env=<env>)` | the same line, `env=prod` |
+
+Two things to keep in mind when touching them:
+
+- The artwork is **generated**, not drawn by hand — rerun
+  `python3 scripts/plankton-env-icons.py` after any change to the shipped icon.
+  `identity.iconBase` is the single source: packaging resolves
+  `<iconBase>.icns`/`.ico` (electron-builder.config.cjs) and an unpackaged run
+  resolves `<iconBase>.png` for the Dock. That Dock override is the ONLY icon
+  source in a dev run (its bundle is Electron's own), so pointing it at upstream
+  artwork made all three environments identical in the Dock.
+- Environment labels are never translated: like the product name they are
+  identifiers, and ten locale files would otherwise carry the same ASCII.
+
 ### Per-environment manifest (non-secret config that must travel with the build)
 
 `enterprise/envs/<env>.json` is committed in git and ships inside the artifact as
