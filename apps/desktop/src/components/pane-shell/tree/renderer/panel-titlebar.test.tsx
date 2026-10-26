@@ -54,8 +54,8 @@ describe('usePanelTitlebar', () => {
     document.body.append(element)
     const ref = { current: element }
 
-    renderHook(() => usePanelTitlebar(ref, true, false))
-    expect(element.style.getPropertyValue('--panel-titlebar-left')).toBe('172px')
+    const { result } = renderHook(() => usePanelTitlebar(ref, true, false))
+    expect(result.current.left).toBe(172)
 
     // Fullscreen: the traffic lights vanish and the cluster pins to the edge —
     // a pure translate. No ResizeObserver callback, no `resize` event.
@@ -64,7 +64,7 @@ describe('usePanelTitlebar', () => {
       $connection.set({ ...$connection.get()!, isFullscreen: true })
     })
 
-    expect(element.style.getPropertyValue('--panel-titlebar-left')).toBe('86px')
+    expect(result.current.left).toBe(86)
   })
 
   it('ignores connection updates that leave the chrome where it is', () => {
@@ -73,7 +73,7 @@ describe('usePanelTitlebar', () => {
     document.body.append(element)
     const ref = { current: element }
 
-    renderHook(() => usePanelTitlebar(ref, true, false))
+    const { result } = renderHook(() => usePanelTitlebar(ref, true, false))
     // A stale-geometry read must not be re-committed by an unrelated update
     // (e.g. a status heartbeat): only chrome-moving fields trigger a measure.
     clusterLeft = 14
@@ -81,6 +81,6 @@ describe('usePanelTitlebar', () => {
       $connection.set({ ...$connection.get()!, connected: true } as HermesConnection)
     })
 
-    expect(element.style.getPropertyValue('--panel-titlebar-left')).toBe('172px')
+    expect(result.current.left).toBe(172)
   })
 })

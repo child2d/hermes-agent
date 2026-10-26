@@ -14,8 +14,29 @@ function chromeKey(): string {
   return `${connection?.isFullscreen ? 1 : 0}:${position?.x ?? ''}:${position?.y ?? ''}`
 }
 
+/** Where the fixed window-chrome clusters cover THIS zone, in px from its own
+ *  edges — plus whether the strip has to drop below them. `null` until
+ *  measured: the band then reserves its whole slot (the spacers' own safe
+ *  default in tree-group.tsx) instead of painting a title under the traffic
+ *  lights.
+ *
+ *  RETURNED, never written onto the zone element: a top-edge band is PORTALED
+ *  out of the zone into the window's own row (app-top-bar.tsx), where a custom
+ *  property set on the zone no longer inherits — the spacers fell back to
+ *  `100%` and pushed every drag surface in the band out of its slot. */
+export interface PanelTitlebarReservation {
+  belowControls: boolean
+  left: null | number
+  right: null | number
+}
+
 /** Reserve actual chrome intersections, including after a neighbor becomes a rail. */
-export function usePanelTitlebar(ref: RefObject<HTMLElement | null>, enabled: boolean, minimized: boolean) {
+export function usePanelTitlebar(
+  ref: RefObject<HTMLElement | null>,
+  enabled: boolean,
+  minimized: boolean
+): PanelTitlebarReservation {
+  const [reservation, setReservation] = useState<{ left: number; right: number } | null>(null)
   const [belowControls, setBelowControls] = useState(true)
 
   const measure = useCallback(() => {
@@ -44,8 +65,7 @@ export function usePanelTitlebar(ref: RefObject<HTMLElement | null>, enabled: bo
 
     const left = Math.min(rect.width, Math.max(0, leftControls.right + 12 - rect.left))
     const right = Math.min(rect.width - left, Math.max(0, rect.right - rightControls.left + 24))
-    element.style.setProperty('--panel-titlebar-left', `${left}px`)
-    element.style.setProperty('--panel-titlebar-right', `${right}px`)
+    setReservation(previous => (previous?.left === left && previous.right === right ? previous : { left, right }))
     setBelowControls(minimized || rect.width - left - right < 120)
   }, [enabled, minimized, ref])
 
@@ -109,5 +129,9 @@ export function usePanelTitlebar(ref: RefObject<HTMLElement | null>, enabled: bo
     }
   }, [enabled, measure])
 
-  return enabled && belowControls
+  return {
+    belowControls: enabled && belowControls,
+    left: reservation?.left ?? null,
+    right: reservation?.right ?? null
+  }
 }

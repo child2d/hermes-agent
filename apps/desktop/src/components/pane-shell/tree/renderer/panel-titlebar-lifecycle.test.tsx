@@ -53,9 +53,18 @@ let disposeRoutes: () => void
 
 function Panel({ enabled = true, minimized = false }: { enabled?: boolean; minimized?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const below = usePanelTitlebar(ref, enabled, minimized)
+  const titlebar = usePanelTitlebar(ref, enabled, minimized)
 
-  return <div data-below={below} data-testid="panel" data-tree-group="sessions" ref={ref} />
+  return (
+    <div
+      data-below={titlebar.belowControls}
+      data-left={titlebar.left ?? ''}
+      data-right={titlebar.right ?? ''}
+      data-testid="panel"
+      data-tree-group="sessions"
+      ref={ref}
+    />
+  )
 }
 
 function Clusters({ branch }: { branch: string }) {
@@ -122,8 +131,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const reservation = (side: 'left' | 'right') =>
-  screen.getByTestId('panel').style.getPropertyValue(`--panel-titlebar-${side}`)
+const reservation = (side: 'left' | 'right') => screen.getByTestId('panel').dataset[side]
 
 const chromeChanged = () => window.dispatchEvent(new Event(TITLEBAR_CHROME_CHANGED_EVENT))
 
@@ -138,7 +146,7 @@ describe('titlebar reservation lifecycle', () => {
 
     const { rerender } = render(fixture('chat'))
     const previous = globalThis.document.querySelector('[data-titlebar-cluster="left"]')!
-    expect(reservation('left')).toBe('200px')
+    expect(reservation('left')).toBe('200')
 
     chipWidth = 200
     rerender(fixture('kanban'))
@@ -146,12 +154,12 @@ describe('titlebar reservation lifecycle', () => {
     expect(current).not.toBe(previous)
     expect(previous.isConnected).toBe(false)
     act(chromeChanged)
-    expect(reservation('left')).toBe('310px')
+    expect(reservation('left')).toBe('310')
     expect([...observers].some(observer => observer.targets.has(previous))).toBe(false)
 
     chipWidth = 260
     act(() => deliver(current))
-    expect(reservation('left')).toBe('370px')
+    expect(reservation('left')).toBe('370')
   })
 
   it('drops narrow panel tabs below the picker and restores them when room returns', () => {
@@ -180,11 +188,11 @@ describe('titlebar reservation lifecycle', () => {
         <Clusters branch="kanban" />
       </>
     )
-    expect(reservation('right')).toBe('0px')
+    expect(reservation('right')).toBe('0')
 
     rightEdge = 700
     act(chromeChanged)
-    expect(reservation('right')).toBe('124px')
+    expect(reservation('right')).toBe('124')
   })
 
   it('remeasures through real chat, contributed-page and overlay navigation', () => {
@@ -197,21 +205,21 @@ describe('titlebar reservation lifecycle', () => {
         </MemoryRouter>
       </StrictMode>
     )
-    expect(reservation('left')).toBe('200px')
+    expect(reservation('left')).toBe('200')
 
     chipWidth = 200
     fireEvent.click(screen.getByText('Kanban'))
     expect(screen.getByText('Openplanet').closest('[data-titlebar-cluster="left"]')).not.toBeNull()
     expect(globalThis.document.querySelector('[data-titlebar-cluster="right"]')).not.toBeNull()
-    expect(reservation('left')).toBe('310px')
+    expect(reservation('left')).toBe('310')
 
     fireEvent.click(screen.getByText('Settings'))
     expect(globalThis.document.querySelector('[data-titlebar-cluster]')).toBeNull()
-    expect(reservation('left')).toBe('310px')
+    expect(reservation('left')).toBe('310')
 
     chipWidth = 90
     fireEvent.click(screen.getByText('Chat'))
-    expect(reservation('left')).toBe('200px')
+    expect(reservation('left')).toBe('200')
     expect(screen.queryByText('Openplanet')).toBeNull()
   })
 })
