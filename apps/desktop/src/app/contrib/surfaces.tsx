@@ -46,14 +46,14 @@ export function LegacySessionRedirect() {
   return <Navigate replace to={sessionId ? sessionRoute(sessionId) : NEW_CHAT_ROUTE} />
 }
 
-/** Which views bring a sidebar of their own.
+/** Which views paint a SIDEBAR here — the session list.
  *
- *  The sidebar is not "the session list" — it is a per-view panel. Chat's is
- *  the session list; a tool that wants its own (a capabilities tree, a cron
- *  list, …) joins this set and gets a branch in `SidebarSurface`.
- *
- *  Views NOT in the set fold the sidebar pane down to its rail, which stays on
- *  screen because the rail is the only way back to chat. */
+ *  The column is a per-view panel, and a view can also fill it without this
+ *  surface: 消息平台 and 定时任务 swap their own list in through
+ *  `WorkspaceListPane` (list-panes.tsx), above this component. What the column
+ *  DOES on a view change — fold away for a view that paints nothing there, show
+ *  it for a view with a list of its own — is the wiring's call, as one table in
+ *  `sidebar-route-step.ts`. */
 export const VIEWS_WITH_SIDEBAR: ReadonlySet<string> = new Set(['chat'])
 
 export const SidebarSurface = memo(function SidebarSurface({

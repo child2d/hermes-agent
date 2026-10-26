@@ -614,11 +614,21 @@ export function toggleLeftSide() {
   }
 
   // Hidden — minimized, or its side collapsed by the side's owner (the files
-  // toggle when flipped, or the sidebar). Reopen through that owner so the
-  // store the titlebar reads agrees, then restore the zone like its
-  // rail/chevron does.
-  const pane = group.active ?? group.panes[0]
-  const side = paneRootSide(pane)
+  // toggle when flipped, or the sidebar).
+  revealPaneColumn(group.active ?? group.panes[0])
+}
+
+/** Show the column a pane lives in, whatever hid it: the zone's own minimize,
+ *  a hidden pane, or the SIDE owner's collapse ($sidebarOpen / $fileBrowserOpen
+ *  — while flipped, "the left column" may be the file tree).
+ *
+ *  The unfold half of `toggleLeftSide`, shared with the route-driven reveal
+ *  (`sidebar-route-step.ts`): a view whose column carries a list of its own
+ *  must arrive showing that list, and it must come back through the same owner
+ *  the titlebar reads — reopening the zone alone would leave the titlebar
+ *  button disagreeing with the screen. */
+export function revealPaneColumn(paneId: string) {
+  const side = paneRootSide(paneId)
 
   if (side && $collapsedTreeSides.get().has(side)) {
     const openSide = side === sidebarSide() ? setSidebarOpen : setFileBrowserOpen
@@ -626,7 +636,7 @@ export function toggleLeftSide() {
     openSide(true)
   }
 
-  restoreTreePane(pane)
+  restoreTreePane(paneId)
 }
 
 /** ⌘-positional-left's dispatch gate: something foldable lives left of main. */

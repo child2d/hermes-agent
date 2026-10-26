@@ -51,7 +51,7 @@ import { $cronReviewRequest, setCronFocusJobId } from '@/store/cron'
 import { requestGatewayForProfile } from '@/store/gateway'
 import { reconnectGateway } from '@/store/gateway-reconnect'
 import { $interfaceMode, shownInMode } from '@/store/interface-mode'
-import { $pinnedSessionIds, pinSession, restoreWorktree, unpinSession } from '@/store/layout'
+import { $pinnedSessionIds, pinSession, restoreWorktree, revealPaneColumn, unpinSession } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
 import { $poolLimitsSettingsRequest } from '@/store/pool-limits'
 import { $previewTarget } from '@/store/preview'
@@ -173,7 +173,8 @@ import { useOnboardingHandoff } from './onboarding-handoff'
 import { useOnboardingKickoff } from './onboarding-kickoff'
 import { $restartPreviewServer, useTitlebarToolContributions } from './panes'
 import { type AmbientGatewayRequest, createSessionRpcDispatcher } from './session-rpc-dispatcher'
-import { ChatRoutesSurface, SidebarSurface, StatusbarSurface, TerminalSurface, VIEWS_WITH_SIDEBAR } from './surfaces'
+import { sidebarRouteStep } from './sidebar-route-step'
+import { ChatRoutesSurface, SidebarSurface, StatusbarSurface, TerminalSurface } from './surfaces'
 import type { WiringActions, WiringApi } from './types'
 import { POOL_LIMITS_SETTINGS_ROUTE } from './wiring-routing'
 
@@ -1251,10 +1252,14 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // node's keys leaves its element reference intact, so `WiredPane` (memoized)
   // bails on that pane subtree — panes render independently of one another.
   // The sidebar is a per-view panel, not "the session list": only the views in
-  // VIEWS_WITH_SIDEBAR bring one. Leaving chat for a tool without a sidebar of
-  // its own folds the pane down to its rail — which stays, because the rail is
-  // the way back — and returning reopens it. Only a fold THIS effect made is
-  // undone, so a sidebar the user collapsed by hand stays collapsed.
+  // VIEWS_WITH_SIDEBAR paint one. Leaving chat for a tool without a list of its
+  // own folds the pane down to its rail — which stays, because the rail is the
+  // way back — and returning reopens it. Switching TO a tool that HAS a list of
+  // its own (消息平台's platform roster, 定时任务's job roster) SHOWS that column:
+  // the list is the way into the tool. Only a fold THIS effect made is undone,
+  // so a sidebar the user collapsed by hand stays collapsed — until they switch
+  // to a view whose column is a list of its own. The rule itself is a table in
+  // `sidebar-route-step.ts`, where it is unit-tested.
   useEffect(() => {
     const tree = $layoutTree.get()
     const group = tree ? findGroupOfPane(tree, 'sessions') : null
@@ -1263,18 +1268,19 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       return
     }
 
-    if (!VIEWS_WITH_SIDEBAR.has(currentView)) {
-      if (!group.minimized) {
-        setTreeGroupMinimized(group.id, true)
-        sidebarFoldedByRoute = true
-      }
+    const step = sidebarRouteStep(currentView, {
+      foldedByRoute: sidebarFoldedByRoute,
+      minimized: group.minimized
+    })
 
-      return
-    }
+    sidebarFoldedByRoute = step.foldedByRoute
 
-    if (sidebarFoldedByRoute) {
+    if (step.action === 'fold') {
+      setTreeGroupMinimized(group.id, true)
+    } else if (step.action === 'reveal') {
+      revealPaneColumn('sessions')
+    } else if (step.action === 'unfold') {
       setTreeGroupMinimized(group.id, false)
-      sidebarFoldedByRoute = false
     }
   }, [currentView])
 

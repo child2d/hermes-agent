@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { $cronJobs } from '@/store/cron'
 
 import { MessagingPlatformsPane } from '../../messaging/platforms-pane'
-import { CRON_ROUTE, MESSAGING_ROUTE } from '../../routes'
+import { appViewForPath, CRON_ROUTE, MESSAGING_ROUTE } from '../../routes'
 
 /** One standing list pane owns the column. Routes change its content, never
  * the layout tree: registering each list as a pane lets automatic adoption
@@ -17,6 +17,14 @@ const LIST_FOR_ROUTE: Record<string, React.ComponentType> = {
   [CRON_ROUTE]: CronJobsPane,
   [MESSAGING_ROUTE]: MessagingPlatformsPane
 }
+
+/** The VIEWS whose column carries a list of its own — derived from the map
+ *  above, so "a route swaps a list in" and "this view has a list pane" cannot
+ *  drift apart. The shell reads it to show the column when you switch to such a
+ *  view (`sidebar-route-step.ts`): the list is the way INTO the tool. */
+export const LIST_PANE_VIEWS: ReadonlySet<string> = new Set(
+  Object.keys(LIST_FOR_ROUTE).map(route => appViewForPath(route))
+)
 
 export function WorkspaceListPane({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation()
