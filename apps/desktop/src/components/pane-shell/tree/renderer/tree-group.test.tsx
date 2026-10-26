@@ -175,6 +175,26 @@ describe('TreeGroup', () => {
 
       expect(fixed.length).toBeGreaterThan(0)
     })
+
+    it('carries the chrome reservation on the band, which the portal moves out of the zone', () => {
+      mountCrowdedStrip(800)
+      const zone = container!.querySelector<HTMLElement>('[data-tree-group]')!
+      const band = container!.querySelector<HTMLElement>('[data-panel-header]')!
+      const spacers = [...band.querySelectorAll<HTMLElement>('div')].filter(spacer =>
+        spacer.style.width.includes('--panel-titlebar-')
+      )
+
+      expect(spacers.length).toBe(2)
+      // A top-edge band is PORTALED into the window's own top row, so the
+      // reservation has to travel WITH the band: declared on the zone element
+      // it never reaches these spacers, they fall back to `100%` — wider than
+      // the slot — and shove the band's drag surfaces (the flexible title band
+      // and the drag handle) out of it, which is a top bar with no window drag
+      // anywhere on it.
+      expect(band.style.getPropertyValue('--panel-titlebar-left')).toBe('112px')
+      expect(band.style.getPropertyValue('--panel-titlebar-right')).toBe('124px')
+      expect(zone.style.getPropertyValue('--panel-titlebar-left')).toBe('')
+    })
   })
 
   it('hides a keep-alive pane through hide/restore while a plain pane still parks', () => {
