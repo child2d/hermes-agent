@@ -11,7 +11,6 @@ import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { ErrorBanner } from '@/components/ui/error-state'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { ResponsiveTabs } from '@/components/ui/tab-dropdown'
 import {
   Tooltip,
   TooltipContent,
@@ -19,8 +18,6 @@ import {
 } from '@/components/ui/tooltip'
 import {
   approvePairing,
-  getMessagingPlatforms,
-  getPairing,
   type MessagingEnvVarInfo,
   type MessagingPlatformInfo,
   type PairingUser,
@@ -31,24 +28,31 @@ import {
 import { type Translations, useI18n } from '@/i18n'
 import { openExternalLink } from '@/lib/external-link'
 import { AlertTriangle, ExternalLink, RefreshCw, Save, Trash2 } from '@/lib/icons'
-import { platformStatusTone } from '@/lib/platform-status'
-import { normalize } from '@/lib/text'
+import { platformStatusTone, TONE_PILL_CLASS } from '@/lib/platform-status'
 import { cn } from '@/lib/utils'
 import { $changeEventsAvailable, $pairingChangeTick, $platformsChangeTick } from '@/store/live-sync'
+import {
+  $messagingPairing,
+  $messagingPlatforms,
+  refreshMessagingPairing,
+  refreshMessagingPlatforms,
+  setMessagingPairing,
+  updateMessagingPlatforms
+} from '@/store/messaging'
 import { notify, notifyError } from '@/store/notifications'
 import { $settingsRequestProfile } from '@/store/settings-scope'
 import { $gatewayRestarting, runGatewayRestart, watchGatewayRestartOutcome } from '@/store/system-actions'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
-import { DetailColumn, ListColumn, MasterDetail } from '../master-detail'
-import { PageSearchShell } from '../page-search-shell'
+import { DetailColumn } from '../master-detail'
 import { CREDENTIAL_CONTROL_CLASS } from '../settings/credential-key-ui'
 import { credentialPreview } from '../settings/helpers'
 import { ListRow } from '../settings/primitives'
 import { SettingsProfileScope } from '../settings/profile-scope'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
+import { byPlatform, pairingKey, pairingLabel } from './pairing'
 import { PlatformAvatar } from './platform-icon'
 import { TelegramQrSetup } from './telegram-qr-setup'
 
@@ -58,30 +62,8 @@ interface MessagingViewProps extends React.ComponentProps<'section'> {
 
 type EditMap = Record<string, Record<string, string>>
 
-const PILL_TONE: Record<StatusTone, string> = {
-  good: 'bg-primary/10 text-primary',
-  muted: 'bg-muted text-muted-foreground',
-  warn: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
-  bad: 'bg-destructive/10 text-destructive'
-}
-
 const stateLabel = (state: null | string | undefined, m: Translations['messaging']) =>
   state ? m.states[state] || state.replace(/_/g, ' ') : m.unknown
-
-// Filter order: what needs you first, then what's fine, then what's off.
-const STATUS_FILTER_ORDER: StatusTone[] = ['bad', 'warn', 'good', 'muted']
-
-function platformMatches(platform: MessagingPlatformInfo, tone: 'all' | StatusTone, query: string): boolean {
-  const q = normalize(query)
-
-  return (
-    (tone === 'all' || platformStatusTone(platform) === tone) &&
-    (!q ||
-      [platform.id, platform.name, platform.description, platform.state]
-        .filter(Boolean)
-        .some(value => String(value).toLowerCase().includes(q)))
-  )
-}
 
 const trimEdits = (edits: Record<string, string>): Record<string, string> =>
   Object.fromEntries(
@@ -89,22 +71,6 @@ const trimEdits = (edits: Record<string, string>): Record<string, string> =>
       .map(([k, v]) => [k, v.trim()])
       .filter(([, v]) => v)
   )
-
-/** Stable row identity: a user id is only unique within its platform. */
-const pairingKey = (user: PairingUser) => `${user.platform}:${user.user_id}`
-
-const pairingLabel = (user: PairingUser) => user.user_name || user.user_id
-
-/** Group pairing rows by platform id so a detail pane can slice its own. */
-function byPlatform(rows: PairingUser[]): Record<string, PairingUser[]> {
-  const grouped: Record<string, PairingUser[]> = {}
-
-  for (const row of rows) {
-    ;(grouped[row.platform] ||= []).push(row)
-  }
-
-  return grouped
-}
 
 const FIELD_COPY: Record<string, { advanced?: boolean }> = {
   TELEGRAM_PROXY: { advanced: true },
@@ -140,27 +106,39 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   // Shared settings "Applies to" scope, request-shaped (undefined → follow
   // the active profile; the API helpers treat null as "target primary").
   const scopeProfile = useStore($settingsRequestProfile)
-  const [platforms, setPlatforms] = useState<MessagingPlatformInfo[] | null>(null)
+  // The roster is shared with the list column (see store/messaging): the pane
+  // and this page read the same scoped cache, so they cannot disagree.
+  const platforms = useStore($messagingPlatforms)
+  const pairing = useStore($messagingPairing)
   // A saved credential/toggle only takes effect on the next gateway start, so a
   // vanishing toast is not enough: the page keeps a banner up until a restart
   // actually happens (dashboard parity). Cleared on a completed restart.
   const [restartNeeded, setRestartNeeded] = useState(false)
   const gatewayRestarting = useStore($gatewayRestarting)
 
-  const [pairing, setPairing] = useState<{ approved: PairingUser[]; pending: PairingUser[] }>({
-    approved: [],
-    pending: []
-  })
-
   const [approving, setApproving] = useState<null | string>(null)
   const [pendingRevoke, setPendingRevoke] = useState<null | PairingUser>(null)
   const [edits, setEdits] = useState<EditMap>({})
-  const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | StatusTone>('all')
-  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
   const platformIds = useMemo(() => platforms?.map(p => p.id) ?? [], [platforms])
   const [selectedId, setSelectedId] = useRouteEnumParam('platform', platformIds, platformIds[0] ?? '')
+
+  // The scope-tagged cache in store/messaging is the other half of the page's
+  // data story: a response is dropped unless the scope it was issued for is
+  // still the rendered one, and a scope switch hides the previous snapshot in
+  // the render it is switched in (#96542).
+  const refreshAll = useCallback(
+    async (silent = false) => {
+      await Promise.all([refreshMessagingPlatforms(scopeProfile, silent), refreshMessagingPairing(scopeProfile)])
+    },
+    [scopeProfile]
+  )
+
+  // Latest-callback ref: the deferred post-restart refresh must not capture a
+  // stale scope closure from before a profile switch.
+  const refreshAllRef = useRef(refreshAll)
+
+  refreshAllRef.current = refreshAll
 
   const restartGatewayNow = useCallback(async () => {
     // runGatewayRestart never rejects: it toasts the failure and settles the
@@ -169,7 +147,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
     if (ok) {
       setRestartNeeded(false)
-      window.setTimeout(() => void refreshPlatformsRef.current(true), 4000)
+      window.setTimeout(() => void refreshAllRef.current(true), 4000)
     }
   }, [])
 
@@ -177,7 +155,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   // banner; re-read status once the adapter had a moment to connect. Anything else needs a restart.
   const settleAfterUpdate = useCallback((hotServed: boolean | undefined) => {
     if (hotServed) {
-      window.setTimeout(() => void refreshPlatformsRef.current(true), 4000)
+      window.setTimeout(() => void refreshAllRef.current(true), 4000)
 
       return
     }
@@ -185,90 +163,22 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     setRestartNeeded(true)
   }, [])
 
-  // The scope each in-flight fetch was issued for. A→B: A's request can resolve
-  // AFTER the switch and repaint A's platforms/env snapshot (its redacted
-  // Telegram token included) under B until B's own response lands (#96542).
-  // A response whose scope is no longer the rendered one is dropped.
-  const scopeRef = useRef(scopeProfile)
-
-  scopeRef.current = scopeProfile
-
-  const refreshPlatforms = useCallback(
-    async (silent = false) => {
-      if (!silent) {
-        setRefreshing(true)
-      }
-
-      try {
-        const result = await getMessagingPlatforms(scopeProfile)
-
-        if (scopeRef.current === scopeProfile) {
-          setPlatforms(result.platforms)
-        }
-      } catch (err) {
-        if (!silent) {
-          notifyError(err, m.loadFailed)
-        }
-      } finally {
-        if (!silent) {
-          setRefreshing(false)
-        }
-      }
-    },
-    [m, scopeProfile]
-  )
-
-  // Latest-callback ref: the deferred post-restart refresh must not capture a
-  // stale scope closure from before a profile switch.
-  const refreshPlatformsRef = useRef(refreshPlatforms)
-
-  refreshPlatformsRef.current = refreshPlatforms
-
-  // Pairing has its own signal. platforms.changed tracks connect/disconnect
-  // health via gateway_state.json, which a new pairing request never moves —
-  // riding it would leave a pending row invisible until something unrelated
-  // reconnected. Failures stay silent: an older backend without the endpoint
-  // should show no rows, not an error banner over a working page.
-  const refreshPairing = useCallback(async () => {
-    try {
-      const result = await getPairing(scopeProfile)
-
-      if (scopeRef.current === scopeProfile) {
-        setPairing({ approved: result.approved ?? [], pending: result.pending ?? [] })
-      }
-    } catch {
-      // Leave the last known rows in place rather than blanking them.
-    }
-  }, [scopeProfile])
-
-  const refreshAll = useCallback(
-    async (silent = false) => {
-      await Promise.all([refreshPlatforms(silent), refreshPairing()])
-    },
-    [refreshPairing, refreshPlatforms]
-  )
-
   useRefreshHotkey(() => void refreshAll())
 
   useEffect(() => {
     void refreshAll()
   }, [refreshAll])
 
-  // Scope switch: the mounted list still shows the PREVIOUS profile's
-  // platforms/pairing while the new fetch is in flight — blank it so stale
-  // rows can't be toggled against the wrong backend. This must run during
-  // render, not in an effect: passive effects fire after paint, and that
-  // first painted frame would show the previous profile's credential
-  // placeholders (e.g. a redacted Telegram token) under the new profile's
-  // scope for the ~1s until the fetch lands (#96542). Setting state during
-  // render makes React throw the stale frame away before it reaches the
-  // screen.
+  // Scope switch: an in-flight editor's typed credentials belong to the profile
+  // they were typed for. This must run during render, not in an effect: passive
+  // effects fire after paint, and that first painted frame would show the
+  // previous profile's edits under the new profile's scope for the ~1s until
+  // the fetch lands (#96542). The platforms/pairing caches blank themselves
+  // through their scope tag, in this same render.
   const [prevScope, setPrevScope] = useState(scopeProfile)
 
   if (prevScope !== scopeProfile) {
     setPrevScope(scopeProfile)
-    setPlatforms(null)
-    setPairing({ approved: [], pending: [] })
     setEdits({})
   }
 
@@ -277,14 +187,17 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const pairingChangeTick = useStore($pairingChangeTick)
 
   // A new pending request (or a grant from another surface) moves the pairing
-  // store on disk; the change watcher turns that into pairing.changed.
+  // store on disk; the change watcher turns that into pairing.changed. Pairing
+  // has its OWN signal on purpose: platforms.changed tracks connect/disconnect
+  // health via gateway_state.json, which a new request never moves — riding it
+  // would leave a pending row invisible until something unrelated reconnected.
   useEffect(() => {
     if (!changeEventsAvailable || pairingChangeTick === 0 || document.hidden) {
       return
     }
 
-    void refreshPairing()
-  }, [changeEventsAvailable, pairingChangeTick, refreshPairing])
+    void refreshMessagingPairing(scopeProfile)
+  }, [changeEventsAvailable, pairingChangeTick, scopeProfile])
 
   // Connection status updates without a manual "check" click. platforms.changed
   // (the gateway persisting connect/disconnect/health to gateway_state.json)
@@ -295,8 +208,8 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       return
     }
 
-    void refreshPlatforms(true)
-  }, [changeEventsAvailable, platformsChangeTick, refreshPlatforms])
+    void refreshMessagingPlatforms(scopeProfile, true)
+  }, [changeEventsAvailable, platformsChangeTick, scopeProfile])
 
   useEffect(() => {
     if (changeEventsAvailable) {
@@ -310,7 +223,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         return
       }
 
-      void refreshAll(true)
+      void refreshAllRef.current(true)
     }
 
     const id = window.setInterval(tick, 6000)
@@ -319,7 +232,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       cancelled = true
       window.clearInterval(id)
     }
-  }, [changeEventsAvailable, refreshAll])
+  }, [changeEventsAvailable])
 
   const selected = useMemo(() => {
     if (!platforms) {
@@ -332,50 +245,21 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const pendingByPlatform = useMemo(() => byPlatform(pairing.pending), [pairing.pending])
   const approvedByPlatform = useMemo(() => byPlatform(pairing.approved), [pairing.approved])
 
-  // Only tones some platform is actually in get a tab; a filter whose last
-  // platform changed state falls back to All instead of an empty list.
-  const presentTones = useMemo(
-    () => STATUS_FILTER_ORDER.filter(tone => platforms?.some(platform => platformStatusTone(platform) === tone)),
-    [platforms]
-  )
-
-  const activeStatusFilter = statusFilter !== 'all' && presentTones.includes(statusFilter) ? statusFilter : 'all'
-
-  const visiblePlatforms = useMemo(
-    () => platforms?.filter(platform => platformMatches(platform, activeStatusFilter, query)) ?? [],
-    [activeStatusFilter, platforms, query]
-  )
-
-  // Picking a filter moves the detail pane into it. Only on that click: a
-  // platform that leaves the filter because you just enabled it stays open.
-  function handleStatusFilter(next: 'all' | StatusTone) {
-    setStatusFilter(next)
-
-    if (selected && !platformMatches(selected, next, query)) {
-      const first = platforms?.find(platform => platformMatches(platform, next, query))
-
-      if (first) {
-        setSelectedId(first.id)
-      }
-    }
-  }
-
   async function handleToggle(platform: MessagingPlatformInfo, enabled: boolean) {
     setSaving(`enabled:${platform.id}`)
 
     try {
       const result = await updateMessagingPlatform(platform.id, { enabled }, scopeProfile)
-      setPlatforms(
-        current =>
-          current?.map(row =>
-            row.id === platform.id
-              ? {
-                  ...row,
-                  enabled,
-                  state: enabled ? (row.configured ? 'pending_restart' : 'not_configured') : 'disabled'
-                }
-              : row
-          ) ?? current
+      updateMessagingPlatforms(scopeProfile, current =>
+        current.map(row =>
+          row.id === platform.id
+            ? {
+                ...row,
+                enabled,
+                state: enabled ? (row.configured ? 'pending_restart' : 'not_configured') : 'disabled'
+              }
+            : row
+        )
       )
       settleAfterUpdate(result.hot_served)
       notify({
@@ -402,7 +286,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     try {
       const result = await updateMessagingPlatform(platform.id, { env }, scopeProfile)
       setEdits(current => ({ ...current, [platform.id]: {} }))
-      await refreshPlatforms()
+      await refreshMessagingPlatforms(scopeProfile)
       settleAfterUpdate(result.hot_served)
       notify({
         kind: 'success',
@@ -428,7 +312,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
           [key]: ''
         }
       }))
-      await refreshPlatforms()
+      await refreshMessagingPlatforms(scopeProfile)
       settleAfterUpdate(result.hot_served)
       notify({ kind: 'success', title: m.keyCleared(key), message: m.setupUpdated(platform.name) })
     } catch (err) {
@@ -442,7 +326,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   // the gateway. restart_started only means the child spawned; watch its exit
   // so a failed restart lands in the banner instead of a silent "stopped".
   async function handleTelegramApplied(result: TelegramOnboardingApplyResponse) {
-    await refreshPlatforms(true)
+    await refreshMessagingPlatforms(scopeProfile, true)
 
     if (result.restart_started) {
       const connectedBot = result.bot_username ? `${m.states.connected}: @${result.bot_username}` : null
@@ -469,7 +353,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         })
       }
 
-      void refreshPlatforms(true)
+      void refreshMessagingPlatforms(scopeProfile, true)
 
       return
     }
@@ -497,17 +381,17 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     const key = pairingKey(user)
     const snapshot = pairing
     setApproving(key)
-    setPairing(current => ({
-      approved: current.approved,
-      pending: current.pending.filter(row => pairingKey(row) !== key)
-    }))
+    setMessagingPairing(scopeProfile, {
+      approved: pairing.approved,
+      pending: pairing.pending.filter(row => pairingKey(row) !== key)
+    })
 
     try {
       await approvePairing(user.platform, user.request_id, scopeProfile)
       notify({ kind: 'success', title: m.approvedUser(pairingLabel(user)), message: m.approvedHint })
-      await refreshPairing()
+      await refreshMessagingPairing(scopeProfile)
     } catch (err) {
-      setPairing(snapshot)
+      setMessagingPairing(scopeProfile, snapshot)
       // 429 is the code path's brute-force lockout — a distinct condition the
       // operator can only wait out, so it gets its own message.
       const lockedOut = err instanceof Error && err.message.includes('429')
@@ -522,123 +406,96 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   async function handleRevoke(user: PairingUser) {
     const key = pairingKey(user)
     const snapshot = pairing
-    setPairing(current => ({
-      approved: current.approved.filter(row => pairingKey(row) !== key),
-      pending: current.pending
-    }))
+    setMessagingPairing(scopeProfile, {
+      approved: pairing.approved.filter(row => pairingKey(row) !== key),
+      pending: pairing.pending
+    })
 
     try {
       await revokePairing(user.platform, user.user_id, scopeProfile)
       notify({ kind: 'success', title: m.revokedUser(pairingLabel(user)), message: user.platform })
-      await refreshPairing()
+      await refreshMessagingPairing(scopeProfile)
     } catch (err) {
-      setPairing(snapshot)
+      setMessagingPairing(scopeProfile, snapshot)
       throw err
     }
   }
 
   return (
-    <PageSearchShell
-      {...props}
-      onSearchChange={setQuery}
-      searchHidden={(platforms?.length ?? 0) === 0}
-      searchHints={platforms?.slice(0, 5).map(platform => t.common.tryHint(platform.name.toLowerCase()))}
-      searchPlaceholder={m.search}
-      searchTrailingAction={
-        presentTones.length > 1 && (
-          <ResponsiveTabs
-            align="end"
-            onChange={id => handleStatusFilter(id as 'all' | StatusTone)}
-            tabs={(['all', ...presentTones] as const).map(id => ({ id, label: m.statusFilter[id] }))}
-            value={activeStatusFilter}
-          />
-        )
-      }
-      searchValue={query}
-    >
-      {!platforms ? (
-        <PageLoader label={m.loading} />
-      ) : (
-        <div className="flex h-full min-h-0 flex-col">
-          {/* Which profile's gateway this page configures (hidden for
-              single-profile users). */}
-          <SettingsProfileScope className="border-b border-(--ui-stroke-secondary) px-3 py-2" />
-          <div className="min-h-0 flex-1">
-            <MasterDetail>
-              <ListColumn>
-                <ul className="space-y-1">
-                  {visiblePlatforms.map(platform => (
-                    <li key={platform.id}>
-                      <PlatformRow
-                        active={selected?.id === platform.id}
-                        onSelect={() => setSelectedId(platform.id)}
-                        pendingCount={pendingByPlatform[platform.id]?.length ?? 0}
-                        platform={platform}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </ListColumn>
-
-              <DetailColumn
-                actionBar={
-                  selected && (
-                    <PlatformActionBar
-                      hasEdits={Object.keys(trimEdits(edits[selected.id] || {})).length > 0}
-                      onSave={() => void handleSave(selected)}
-                      onToggle={enabled => void handleToggle(selected, enabled)}
-                      platform={selected}
-                      saving={saving}
-                    />
-                  )
-                }
-              >
-                {restartNeeded && (
-                  <Alert variant="destructive">
-                    <AlertTriangle />
-                    <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-                      <span>{m.restartNeeded}</span>
-                      <Button
-                        disabled={gatewayRestarting}
-                        onClick={() => void restartGatewayNow()}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        <RefreshCw className={gatewayRestarting ? 'animate-spin' : undefined} />
-                        {gatewayRestarting ? m.restarting : m.restartNow}
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {selected && (
-                  <PlatformDetail
-                    approved={approvedByPlatform[selected.id] ?? []}
-                    approving={approving}
-                    edits={edits[selected.id] || {}}
-                    onApprove={user => void handleApprove(user)}
-                    onClear={key => void handleClear(selected, key)}
-                    onEdit={(key, value) =>
-                      setEdits(current => ({
-                        ...current,
-                        [selected.id]: {
-                          ...(current[selected.id] || {}),
-                          [key]: value
-                        }
-                      }))
-                    }
-                    onRevoke={setPendingRevoke}
-                    onTelegramApplied={result => void handleTelegramApplied(result)}
-                    pending={pendingByPlatform[selected.id] ?? []}
+    <>
+      <section
+        {...props}
+        className={cn(
+          'flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
+          props.className
+        )}
+      >
+        {!platforms ? (
+          <PageLoader label={m.loading} />
+        ) : (
+          <div className="flex h-full min-h-0 flex-col">
+            {/* Which profile's gateway this page configures (hidden for
+                single-profile users). */}
+            <SettingsProfileScope className="border-b border-(--ui-stroke-secondary) px-3 py-2" />
+            <DetailColumn
+              actionBar={
+                selected && (
+                  <PlatformActionBar
+                    hasEdits={Object.keys(trimEdits(edits[selected.id] || {})).length > 0}
+                    onSave={() => void handleSave(selected)}
+                    onToggle={enabled => void handleToggle(selected, enabled)}
                     platform={selected}
                     saving={saving}
-                    scopeProfile={scopeProfile}
                   />
-                )}
-              </DetailColumn>
-            </MasterDetail>
+                )
+              }
+              className="flex-1"
+            >
+              {restartNeeded && (
+                <Alert variant="destructive">
+                  <AlertTriangle />
+                  <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                    <span>{m.restartNeeded}</span>
+                    <Button
+                      disabled={gatewayRestarting}
+                      onClick={() => void restartGatewayNow()}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      <RefreshCw className={gatewayRestarting ? 'animate-spin' : undefined} />
+                      {gatewayRestarting ? m.restarting : m.restartNow}
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {selected && (
+                <PlatformDetail
+                  approved={approvedByPlatform[selected.id] ?? []}
+                  approving={approving}
+                  edits={edits[selected.id] || {}}
+                  onApprove={user => void handleApprove(user)}
+                  onClear={key => void handleClear(selected, key)}
+                  onEdit={(key, value) =>
+                    setEdits(current => ({
+                      ...current,
+                      [selected.id]: {
+                        ...(current[selected.id] || {}),
+                        [key]: value
+                      }
+                    }))
+                  }
+                  onRevoke={setPendingRevoke}
+                  onTelegramApplied={result => void handleTelegramApplied(result)}
+                  pending={pendingByPlatform[selected.id] ?? []}
+                  platform={selected}
+                  saving={saving}
+                  scopeProfile={scopeProfile}
+                />
+              )}
+            </DetailColumn>
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
       <ConfirmDialog
         busyLabel={m.revoking}
@@ -651,53 +508,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         open={Boolean(pendingRevoke)}
         title={m.revokeTitle}
       />
-    </PageSearchShell>
-  )
-}
-
-function PlatformRow({
-  active,
-  onSelect,
-  pendingCount,
-  platform
-}: {
-  active: boolean
-  onSelect: () => void
-  pendingCount: number
-  platform: MessagingPlatformInfo
-}) {
-  const { t } = useI18n()
-
-  return (
-    <button
-      className={cn(
-        'row-hover flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:text-foreground',
-        active ? 'bg-(--ui-row-active-background) text-foreground' : 'text-(--ui-text-secondary)'
-      )}
-      onClick={onSelect}
-      type="button"
-    >
-      <PlatformAvatar platformId={platform.id} platformName={platform.name} />
-      <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-        <span className="truncate text-[length:var(--conversation-text-font-size)] font-normal">{platform.name}</span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          {/* Someone is waiting to be let in — the only way this page tells
-              you so before you open the platform. */}
-          {pendingCount > 0 && (
-            <span
-              aria-label={t.messaging.pendingAria(pendingCount)}
-              className={cn(
-                'inline-flex min-w-4 items-center justify-center rounded-full px-1 text-2xs font-medium tabular-nums',
-                PILL_TONE.warn
-              )}
-            >
-              {pendingCount}
-            </span>
-          )}
-          <StatusDot tone={platformStatusTone(platform)} />
-        </span>
-      </span>
-    </button>
+    </>
   )
 }
 
@@ -1116,7 +927,7 @@ function StatePill({ children, tone }: { children: string; tone: StatusTone }) {
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-2xs font-medium',
-        PILL_TONE[tone]
+        TONE_PILL_CLASS[tone]
       )}
     >
       <StatusDot tone={tone} />
@@ -1130,7 +941,7 @@ function SetupPill({ active, children }: { active: boolean; children: string }) 
     <span
       className={cn(
         'inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium',
-        PILL_TONE[active ? 'good' : 'muted']
+        TONE_PILL_CLASS[active ? 'good' : 'muted']
       )}
     >
       {children}

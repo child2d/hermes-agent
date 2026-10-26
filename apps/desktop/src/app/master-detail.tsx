@@ -170,11 +170,15 @@ export function ListColumn({ children, header }: { children: ReactNode; header?:
 export function DetailColumn({
   actionBar,
   children,
+  className,
   footer,
   width = 'measure'
 }: {
   actionBar?: ReactNode
   children: ReactNode
+  /** Layout escape hatch for a detail that owns its column (a page whose list
+   *  lives in the shell's list column passes `flex-1` to fill the pane). */
+  className?: string
   footer?: ReactNode
   /** `measure` centers the body at a reading width — right for the classic
    *  left/right split, where the detail is a narrow column. `full` drops both
@@ -184,7 +188,7 @@ export function DetailColumn({
   width?: 'measure' | 'full'
 }) {
   return (
-    <main className="flex min-h-0 flex-col overflow-hidden">
+    <main className={cn('flex min-h-0 flex-col overflow-hidden', className)}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
         <div
           className={cn(

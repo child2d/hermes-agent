@@ -7,6 +7,8 @@ import { $changeEventsAvailable, $pairingChangeTick, $platformsChangeTick } from
 import { $settingsScopeOverride } from '@/store/settings-scope'
 import type { MessagingPlatformInfo } from '@/types/hermes'
 
+import { MessagingPlatformsPane } from './platforms-pane'
+
 import { MessagingView } from './index'
 
 // Imports are static on purpose: `await import(...)` inside test bodies ran
@@ -113,11 +115,16 @@ afterEach(() => {
 // 34600757569, 34601269252). Same pattern as chat/index.test.tsx.
 void import('./index')
 
+// Both surfaces as the shell mounts them for the route: the roster in the
+// standing list column and the selected platform's detail in the page beside
+// it. The list column IS the way in (a row sets the `platform` route param),
+// so a test that only mounted the page could not reach a platform at all.
 async function renderMessaging() {
   let result: ReturnType<typeof render>
   await act(async () => {
     result = render(
       <MemoryRouter>
+        <MessagingPlatformsPane />
         <MessagingView />
       </MemoryRouter>
     )
@@ -141,27 +148,87 @@ describe('MessagingView profile scope', () => {
   })
 })
 
-describe('MessagingView status filter', () => {
+describe('MessagingPlatformsPane roster', () => {
   const rowNames = (container: HTMLElement) =>
     [...container.querySelectorAll('ul > li > button')].map(row => row.querySelector('.truncate')?.textContent)
 
-  it('offers a tab only for tones some platform is in, and narrows the list to that tone', async () => {
-    getMessagingPlatforms.mockResolvedValue({
-      platforms: [
-        platform({ enabled: true, id: 'discord', name: 'Discord', state: 'connected' }),
-        platform({ enabled: true, id: 'slack', name: 'Slack', state: 'retrying' }),
-        platform({ id: 'teams', name: 'Microsoft Teams' })
-      ]
-    })
+  const threePlatforms = () => ({
+    platforms: [
+      platform({ enabled: true, id: 'discord', name: 'Discord', state: 'connected' }),
+      platform({ enabled: true, id: 'slack', name: 'Slack', state: 'retrying' }),
+      platform({ id: 'teams', name: 'Microsoft Teams' })
+    ]
+  })
+
+  async function openFilter(name: string) {
+    const trigger = screen.getByRole('button', { name: 'All' })
+
+    // Radix's dropdown trigger opens on pointerdown, not on 'click' alone.
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' })
+    fireEvent.pointerUp(trigger, { button: 0, pointerType: 'mouse' })
+    fireEvent.click(trigger)
+
+    fireEvent.click(await screen.findByRole('menuitem', { name }))
+  }
+
+  it('offers a filter only for tones some platform is in, and narrows the roster to that tone', async () => {
+    getMessagingPlatforms.mockResolvedValue(threePlatforms())
 
     const { container } = await renderMessaging()
 
     await waitFor(() => expect(rowNames(container)).toHaveLength(3))
-    expect(screen.queryByRole('button', { name: 'Errors' })).toBeNull()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Needs attention' })[0])
+    await openFilter('Needs attention')
 
     expect(rowNames(container)).toEqual(['Slack'])
+  })
+
+  it('does not offer a tone no platform is in', async () => {
+    getMessagingPlatforms.mockResolvedValue(threePlatforms())
+
+    await renderMessaging()
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'All' }).length).toBeGreaterThan(0))
+
+    const trigger = screen.getByRole('button', { name: 'All' })
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' })
+    fireEvent.pointerUp(trigger, { button: 0, pointerType: 'mouse' })
+    fireEvent.click(trigger)
+
+    expect(await screen.findByRole('menuitem', { name: 'Needs attention' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Errors' })).toBeNull()
+  })
+
+  it('narrows the roster by the search field', async () => {
+    getMessagingPlatforms.mockResolvedValue(threePlatforms())
+
+    const { container } = await renderMessaging()
+    await waitFor(() => expect(rowNames(container)).toHaveLength(3))
+
+    // The placeholder rotates through data hints; the accessible name is fixed.
+    fireEvent.change(screen.getByLabelText('Search messaging...'), { target: { value: 'slack' } })
+
+    expect(rowNames(container)).toEqual(['Slack'])
+  })
+
+  it('opens the platform a row picks, in the detail beside it', async () => {
+    getMessagingPlatforms.mockResolvedValue(threePlatforms())
+
+    const { container } = await renderMessaging()
+    await waitFor(() => expect(rowNames(container)).toHaveLength(3))
+
+    // The roster is the way in: the first platform's detail is up before any
+    // click, and a row click has to move the page onto that platform.
+    expect(await screen.findByRole('heading', { name: 'Discord' })).toBeTruthy()
+
+    const slackRow = [...container.querySelectorAll('ul > li > button')].find(
+      row => row.querySelector('.truncate')?.textContent === 'Slack'
+    )
+
+    await act(async () => {
+      fireEvent.click(slackRow!)
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Slack' })).toBeTruthy()
   })
 })
 
@@ -369,15 +436,23 @@ describe('MessagingView pairing', () => {
     expect(screen.getByText('Bee')).toBeTruthy()
   })
 
-  it('still renders platforms when the pairing endpoint fails', async () => {
-    // An older backend without the endpoint must not blank the page.
+  it('still renders platforms, and no phantom requests, when the pairing endpoint fails', async () => {
+    // An older backend without the endpoint must not blank the page. The scope
+    // is its own (the pairing cache is per profile), so a row cached by an
+    // earlier test's successful fetch cannot stand in for this failure.
+    const { $settingsScopeOverride } = await import('@/store/settings-scope')
+    $settingsScopeOverride.set('pairing-down')
     getMessagingPlatforms.mockResolvedValue({ platforms: [platform()] })
     getPairing.mockRejectedValue(new Error('404 not found'))
 
-    await renderMessaging()
+    try {
+      await renderMessaging()
 
-    expect((await screen.findAllByText('Microsoft Teams')).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+      expect((await screen.findAllByText('Microsoft Teams')).length).toBeGreaterThan(0)
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+    } finally {
+      $settingsScopeOverride.set(null)
+    }
   })
 
   it('refetches pending rows on pairing.changed, not on platforms.changed', async () => {

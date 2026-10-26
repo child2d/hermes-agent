@@ -11,9 +11,6 @@ vi.mock('./wiring', () => ({
   ContribWiring: ({ children }: { children: ReactNode }) => children,
   WiredPane: ({ part }: { part: string }) => <div data-testid={`wired-${part}`}>{part}</div>
 }))
-vi.mock('@/app/chat/sidebar/connection-switcher', () => ({
-  ConnectionSwitcher: () => <div data-testid="channel-list">channels</div>
-}))
 
 const { ContribController } = await import('./controller')
 
@@ -59,12 +56,15 @@ describe('the production shell composition', () => {
 
     for (let round = 0; round < 2; round++) {
       fireEvent.click(screen.getByText('test channels'))
-      expect(screen.getByTestId('channel-list').closest('[data-tree-group]')).toBe(listZone)
+      // The messaging column swaps to the platform roster — same zone, same
+      // slot the job roster uses, and the session list is gone with it.
+      expect(globalThis.document.querySelector('[data-slot="list-pane"]')?.closest('[data-tree-group]')).toBe(listZone)
+      expect(screen.getByText('Messaging')).not.toBeNull()
       expect(screen.queryByTestId('wired-sidebar')).toBeNull()
       fireEvent.click(screen.getByText('test jobs'))
       // The job roster is asserted by its own slot, not by copy: the pane's
       // empty state is a phrasing that changes.
-      expect(document.querySelector('[data-slot="list-pane"]')?.closest('[data-tree-group]')).toBe(listZone)
+      expect(globalThis.document.querySelector('[data-slot="list-pane"]')?.closest('[data-tree-group]')).toBe(listZone)
       fireEvent.click(screen.getByText('test history'))
       expect(screen.getAllByTestId('wired-sidebar')).toHaveLength(1)
       // The old implementation re-adopted absent list contributions whenever
