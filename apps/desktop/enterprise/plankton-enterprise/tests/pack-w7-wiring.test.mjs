@@ -27,6 +27,10 @@ const PLUGIN_API = fs.readFileSync(path.join(PLUGIN_DIR, 'dashboard', 'plugin_ap
 const WIRING = fs.readFileSync(path.join(PLUGIN_DIR, 'audit_wiring.py'), 'utf8')
 const TRANSPORT = fs.readFileSync(path.join(PLUGIN_DIR, 'audit_transport.py'), 'utf8')
 const PACK_SH = fs.readFileSync(path.resolve(HERE, '..', '..', '..', 'scripts', 'plankton-pack.sh'), 'utf8')
+const PACK_WIN = fs.readFileSync(
+  path.resolve(HERE, '..', '..', '..', 'scripts', 'plankton-pack-windows.mjs'),
+  'utf8'
+)
 const AFTER_PACK = fs.readFileSync(path.resolve(HERE, '..', '..', '..', 'scripts', 'after-pack.mjs'), 'utf8')
 
 /** 去掉 Python docstring 与注释行，只留会执行的代码（结构断言针对代码，不针对说明文字）。 */
@@ -74,9 +78,17 @@ test('接线：接线状态面不触发会话、不上传（纯只读描述）',
 
 // ── 3 · 接线承载真的在产物清单里 ──────────────────────────────────────────────
 
-test('产物清单：plankton-pack.sh 必需 payload 含接线两模块', () => {
-  assert.match(PACK_SH, /audit_wiring\.py/, 'pack 必需 payload 必须含 audit_wiring.py')
-  assert.match(PACK_SH, /audit_transport\.py/, 'pack 必需 payload 必须含 audit_transport.py')
+test('产物清单：两个 packer（mac + windows）必需 payload 都含接线两模块', () => {
+  // The Windows packer is a SECOND packer (a Windows artifact has to be built
+  // on Windows), so the list that keeps the wiring modules in the artifact
+  // exists twice and must not drift.
+  for (const [name, source] of [
+    ['plankton-pack.sh', PACK_SH],
+    ['plankton-pack-windows.mjs', PACK_WIN]
+  ]) {
+    assert.match(source, /audit_wiring\.py/, `${name} 必需 payload 必须含 audit_wiring.py`)
+    assert.match(source, /audit_transport\.py/, `${name} 必需 payload 必须含 audit_transport.py`)
+  }
 })
 
 test('产物清单：after-pack.mjs 也枚举接线两模块（丢失在打包期变红）', () => {

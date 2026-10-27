@@ -26,6 +26,7 @@ const PLUGIN_JS = path.resolve(HERE, '..', 'desktop', 'plugin.js')
 const PLUGIN_API = path.resolve(HERE, '..', 'dashboard', 'plugin_api.py')
 const EGRESS = path.resolve(HERE, '..', 'audit_egress.py')
 const PACK_SH = path.resolve(HERE, '..', '..', '..', 'scripts', 'plankton-pack.sh')
+const PACK_WIN = path.resolve(HERE, '..', '..', '..', 'scripts', 'plankton-pack-windows.mjs')
 
 const JS = fs.readFileSync(PLUGIN_JS, 'utf8')
 const API = fs.readFileSync(PLUGIN_API, 'utf8')
@@ -67,8 +68,14 @@ test('W6 护栏：客户端后端没有 /audit 的写路由（只读面）', () 
 
 // ── 2 · W5/W6 承载真的在产物清单里 ──────────────────────────────────────────
 
-test('W6 护栏：产物 payload 清单含 audit_egress.py（否则打包会静默漏 W5/W6）', () => {
+test('W6 护栏：两个 packer（mac + windows）的产物 payload 清单都含 audit_egress.py', () => {
   assert.ok(PACK.includes('audit_egress.py'), 'plankton-pack.sh 必须列 audit_egress.py')
+  // A Windows artifact is built by the Windows packer, so it carries its own
+  // copy of the required-payload list — same invariant, both files.
+  assert.ok(
+    fs.readFileSync(PACK_WIN, 'utf8').includes('audit_egress.py'),
+    'plankton-pack-windows.mjs 必须列 audit_egress.py'
+  )
 })
 
 // ── 3 · 出口契约关键字面量 + 无真实端点/CLI 表 ──────────────────────────────
