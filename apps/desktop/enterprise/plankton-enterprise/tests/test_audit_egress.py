@@ -43,6 +43,9 @@ AUDIT_PATH = PLUGIN_ROOT / "audit_unit.py"
 PLUGIN_API = PLUGIN_ROOT / "dashboard" / "plugin_api.py"
 PLUGIN_JS = PLUGIN_ROOT / "desktop" / "plugin.js"
 PACK_SH = PLUGIN_ROOT.parents[1] / "scripts" / "plankton-pack.sh"
+# The Windows packer carries its own copy of the required-payload list, because a
+# Windows artifact has to be built on Windows (the engine payload is host-staged).
+PACK_WIN = PLUGIN_ROOT.parents[1] / "scripts" / "plankton-pack-windows.mjs"
 
 EGRESS_SRC = EGRESS_PATH.read_text(encoding="utf-8")
 
@@ -433,6 +436,7 @@ def test_guard_summary_states_the_invariants(egress):
 
 
 def test_pack_payload_lists_the_egress_module():
-    """产物必须带 W5/W6 的模块：pack 清单里列出 `audit_egress.py`（否则打包会静默漏）。"""
-    text = PACK_SH.read_text(encoding="utf-8")
-    assert "audit_egress.py" in text, "plankton-pack.sh 的必需 payload 清单必须含 audit_egress.py"
+    """产物必须带 W5/W6 的模块：两个 packer 的清单里都列出 `audit_egress.py`（否则打包会静默漏）。"""
+    for name, path in (("plankton-pack.sh", PACK_SH), ("plankton-pack-windows.mjs", PACK_WIN)):
+        text = path.read_text(encoding="utf-8")
+        assert "audit_egress.py" in text, f"{name} 的必需 payload 清单必须含 audit_egress.py"

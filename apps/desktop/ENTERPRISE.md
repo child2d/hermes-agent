@@ -698,6 +698,45 @@ Non-prod builds land in `release/<env>/` so one environment's build can never
 overwrite another's artifact; `PLANKTON_OUTPUT_DIR` still overrides the location
 entirely (`npm run pack` for prod remains the untouched path).
 
+### Windows (x64 / arm64)
+
+**A Windows artifact must be packed ON Windows** — the engine payload is staged
+for the host that runs the build (`pm/store.py::current_target()` reads
+`platform.machine()` + `sys.platform`, with no override), so a macOS build would
+embed a macOS engine. `scripts/plankton-pack.sh` is the macOS half;
+`scripts/plankton-pack-windows.mjs` is the Windows half — same guards, same
+environment selection, same output rule:
+
+```powershell
+cd apps\desktop
+
+npm run pack:plankton:win              # PLANKTON_ENV=prod, MSIX, x64
+npm run pack:plankton:win:test         # PLANKTON_ENV=test → release\test\
+node scripts\plankton-pack-windows.mjs --kind nsis --arch arm64
+node scripts\plankton-pack-windows.mjs --preflight-only   # validate inputs, build nothing
+# artifact: apps\desktop\release[<env>]\Plankton[Test]-<version>-win-<arch>.msix
+```
+
+Prerequisites on the Windows machine: Node + `npm ci` at the repo root, a Python
+for `HERMES_PYTHON` (default `python`, used only when `build/agent-payload` does
+not exist yet — the script then runs `npm run payload` itself), and the **Windows
+`shaoke-cli`** staged via `%PLANKTON_SHAOKE_CLI_SRC%` or on `PATH` (the artifact
+carries it; the pack refuses without it, and it must be a real PE of that arch —
+a darwin binary is rejected by `scripts/plankton-cli-format.mjs`). The SSO secret
+comes from the machine's own `plankton-state\sso-config.local.json` or
+`%PLANKTON_SSO_SECRET_FILE%`; missing = failed build, not a warning.
+
+The default kind is `msix` (the repo's Windows target). Windows only installs a
+**signed** MSIX: with no signing identity the package is for dev/CI sideloading
+(`Add-AppxPackage -AllowUnsigned` with Developer Mode on). For an installer a
+colleague can double-click, use `--kind nsis` (or sign with
+`AZURE_SIGN_ENDPOINT` / `AZURE_CLIENT_ID`, see
+`electron-builder.config.cjs::windowsSigning`).
+
+`--preflight-only` runs every staging step and the payload-target assertion and
+prints the commands it would run — it is how this script is exercised from the
+mac checkout (it refuses to BUILD anywhere but Windows).
+
 **A dev app starts on an EMPTY home** (`~/.plankton/dev/…`), because the whole
 point is that it cannot read the tuned state of another environment. Two
 per-machine values have to be supplied for it to be usable:
