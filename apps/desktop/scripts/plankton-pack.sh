@@ -282,3 +282,15 @@ DMG_PATH="$(ls -t "$OUTPUT_DIR"/*.dmg 2>/dev/null | head -1)"
 if [ -n "$DMG_PATH" ]; then
   echo "[plankton-pack] dmg: $(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
 fi
+# The hand-off note that travels WITH the dmg (install steps, why an unsigned
+# build says "已损坏", the fix, the log command). Generated — not hand-written —
+# so the sha256/version/commit in it always describe THIS artifact.
+if [ "$PACK_KIND" = dmg ] && [ -n "$DMG_PATH" ]; then
+  if [ -n "$APP_PATH" ]; then
+    node scripts/write-handoff-readme.mjs "$DMG_PATH" --app "$APP_PATH" \
+      || echo "[plankton-pack] WARN: hand-off README not written (the dmg itself is fine)" >&2
+  else
+    node scripts/write-handoff-readme.mjs "$DMG_PATH" \
+      || echo "[plankton-pack] WARN: hand-off README not written (the dmg itself is fine)" >&2
+  fi
+fi

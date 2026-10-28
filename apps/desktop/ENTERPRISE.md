@@ -816,6 +816,16 @@ omit — via the `HERMES_PAYLOAD_UV_CACHE` build switch (§4).
 **产物在哪**：`apps/desktop/release/mac-arm64/Plankton.app`（未签名、未公证；~2.8G，内置引擎）。
 
 **怎么给别人**：整包拷贝 `Plankton.app` 即可（它自带运行时，不需要对方另装引擎或 Python）。
+走 dmg 时打包脚本会**顺带生成一份随包说明**（`<dmg 同名>.安装说明.md`，落在 dmg 旁边）：
+安装步骤、"已损坏"的真实原因与判定/处置/日志命令、sha256 与 `hdiutil verify` 的校验、
+数据目录与卸载方式。它是**生成**的而不是手写的，所以里面的版本/commit/sha256 永远描述那一份
+产物；单独重生成（不发包）：
+
+```bash
+cd apps/desktop
+node scripts/write-handoff-readme.mjs release/test/PlanktonTest-0.1.2-mac-arm64.dmg \
+  --app "release/test/mac-arm64/Plankton Test.app"
+```
 
 - **⚠️ 同一环境不要同时打开两个**：同一个环境（例如两个 prod）的两个实例共用同一份企业数据目录（桌面 `~/Library/Application Support/Plankton`，引擎 `~/.plankton/engine/home`），同时打开会争用同一份 `state.db` 与会话。用完一个再开另一个。**不同环境可以同时开**：dev / test / prod 是三个独立 app（各自的 appId、userData 与引擎 home，见 §2「One independent app per environment」），互不干扰。
 - **未签名会遇到的拦阻**：macOS Gatekeeper 会提示「无法验证开发者 / 已损坏，无法打开」。
