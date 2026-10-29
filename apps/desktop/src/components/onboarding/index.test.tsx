@@ -48,22 +48,25 @@ afterEach(() => {
 })
 
 describe('onboarding Picker', () => {
-  it('features Nous Portal and hides other providers behind a disclosure', () => {
-    setProviders([makeOAuthProvider('anthropic', 'Anthropic Claude'), makeOAuthProvider('nous', 'Nous Portal')])
+  it('drops Nous Portal and shows every other provider directly (no disclosure)', () => {
+    setProviders([
+      makeOAuthProvider('anthropic', 'Anthropic Claude'),
+      makeOAuthProvider('nous', 'Nous Portal'),
+      makeOAuthProvider('openai-codex', 'OpenAI Codex / ChatGPT')
+    ])
     render(<Picker ctx={ctx} />)
 
-    expect(screen.getByText('Nous Portal')).toBeTruthy()
-    expect(screen.getByText('Recommended')).toBeTruthy()
-    // Fireworks stays behind the disclosure with the other alternatives; only
-    // Nous Portal is visible before the user expands the list.
-    expect(screen.queryByText('Fireworks AI')).toBeNull()
-    expect(screen.queryByText('Anthropic Account')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Other providers' }))
+    // The backend still reports the provider (Settings → Providers keeps
+    // featuring it) — this picker must not render the row or its badge.
+    expect(screen.queryByText('Nous Portal')).toBeNull()
+    expect(screen.queryByText('Recommended')).toBeNull()
+    // Nothing to fold behind, so the disclosure is gone with it.
+    expect(screen.queryByRole('button', { name: 'Other providers' })).toBeNull()
 
     expect(screen.getByText('Fireworks AI')).toBeTruthy()
     expect(screen.getByText('Anthropic Account')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
+    expect(screen.getByText('ChatGPT or Codex Subscription')).toBeTruthy()
+    expect(screen.getByText('OpenRouter')).toBeTruthy()
   })
 
   it('shows every provider directly when Nous Portal is absent', () => {

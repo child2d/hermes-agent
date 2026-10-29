@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { getGlobalModelOptions } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { Check, ChevronDown, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
+import { Check, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
 import { isSubmitEnter } from '@/lib/ime'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { cn } from '@/lib/utils'
@@ -43,7 +43,6 @@ import { DocsLink, FlowPanel, Status } from './flow'
 import { FreeTierSetupNotice } from './free-tier-setup-notice'
 import { DecodedLabel } from './glyph'
 import {
-  FeaturedProviderRow,
   FireworksProviderRow,
   LocalModelsProviderRow,
   OpenRouterProviderRow,
@@ -582,31 +581,19 @@ function Header() {
   )
 }
 
+/** Canonical id of upstream's featured provider. The Providers settings page
+ *  still floats this row to the top; the onboarding picker does not show it at
+ *  all (see HIDDEN_PROVIDER_IDS). */
 export const FEATURED_ID = 'nous'
-const SHOW_ALL_KEY = 'hermes-onboarding-show-all-v1'
 
-const readShowAll = () => {
-  try {
-    return window.localStorage.getItem(SHOW_ALL_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-const persistShowAll = (value: boolean) => {
-  try {
-    window.localStorage.setItem(SHOW_ALL_KEY, value ? '1' : '0')
-  } catch {
-    // localStorage unavailable — degrade silently.
-  }
-
-  return value
-}
+/** Plankton does not offer Nous Portal (upstream's own subscription), so the
+ *  picker drops the entry instead of demoting it: a backend that still reports
+ *  the provider must not leak the row back onto this page. */
+const HIDDEN_PROVIDER_IDS: ReadonlySet<string> = new Set([FEATURED_ID])
 
 export function Picker({ ctx }: { ctx: OnboardingContext }) {
   const { t } = useI18n()
   const { localEndpoint, manual, mode, providers } = useStore($desktopOnboarding)
-  const [showAll, setShowAll] = useState(readShowAll)
   // Which key-form option to preselect when we flip to 'apikey' mode. The
   // OpenRouter row selects its key; the generic link lands on the first option.
   const [apiKeyInitialEnv, setApiKeyInitialEnv] = useState<string | undefined>(undefined)
@@ -616,7 +603,13 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
     setOnboardingMode('apikey')
   }
 
-  const ordered = useMemo(() => (providers ? sortProviders(providers) : []), [providers])
+  // Nous Portal is dropped here rather than demoted: the picker is Plankton's
+  // and that entry is upstream's own subscription (HIDDEN_PROVIDER_IDS).
+  const ordered = useMemo(
+    () => (providers ? sortProviders(providers).filter(p => !HIDDEN_PROVIDER_IDS.has(p.id)) : []),
+    [providers]
+  )
+
   const hasOauth = ordered.length > 0
   const apiKeyOptions = useApiKeyCatalog(ctx.scope)
 
@@ -650,14 +643,8 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   }
 
   const select = (p: OAuthProvider) => void startProviderOAuth(p, ctx)
-  const featured = ordered.find(p => p.id === FEATURED_ID) ?? null
-  const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
-  // Collapse the secondary providers behind a disclosure whenever Nous Portal
-  // is present to anchor the choice — otherwise show the full list. The
-  // Fireworks/OpenRouter key rows always live behind the disclosure, so the
-  // toggle is warranted even when there are no other OAuth providers.
-  const collapsible = Boolean(featured)
-  const showRest = !collapsible || showAll
+  // No featured anchor means nothing to fold the rest behind — the list is flat,
+  // which is the shape this picker already used when Nous Portal was absent.
 
   // "Run models locally" leaves the picker for Settings -> Providers ->
   // Local Models, where install/download live. First-run: persist the skip
@@ -677,35 +664,17 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
-        {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
         {/* The no-account path: everything runs on this machine. Shipped
-            behind the --local launch flag. (Fireworks moved into the
-            expanded list on main.) */}
+            behind the --local launch flag. */}
         {$localModelsEnabled.get() ? <LocalModelsProviderRow onClick={openLocalModels} /> : null}
-        {showRest ? (
-          <>
-            {/* Fireworks leads the expanded list, matching CANONICAL_PROVIDERS
-                (Nous → Fireworks), but stays hidden until the user opens it. */}
-            <FireworksProviderRow onClick={() => openKeyForm('FIREWORKS_API_KEY')} />
-            {rest.map(p => (
-              <ProviderRow key={p.id} onSelect={select} provider={p} />
-            ))}
-            <OpenRouterProviderRow onClick={() => openKeyForm('OPENROUTER_API_KEY')} />
-          </>
-        ) : null}
+        {/* Fireworks leads the list and every provider is visible: with Nous
+            Portal dropped there is no anchor to fold the rest behind. */}
+        <FireworksProviderRow onClick={() => openKeyForm('FIREWORKS_API_KEY')} />
+        {ordered.map(p => (
+          <ProviderRow key={p.id} onSelect={select} provider={p} />
+        ))}
+        <OpenRouterProviderRow onClick={() => openKeyForm('OPENROUTER_API_KEY')} />
       </div>
-      {collapsible ? (
-        <Button
-          className="mt-1 self-center font-medium"
-          onClick={() => setShowAll(persistShowAll(!showAll))}
-          size="sm"
-          type="button"
-          variant="link"
-        >
-          {showAll ? t.onboarding.collapse : t.onboarding.otherProviders}
-          <ChevronDown className={cn('size-3.5 transition', showAll && 'rotate-180')} />
-        </Button>
-      ) : null}
       <div className="flex items-center justify-between gap-3 pt-1">
         {/* First run only: let the user defer the choice and land in the app.
             In manual mode the overlay already has a close affordance, so the
