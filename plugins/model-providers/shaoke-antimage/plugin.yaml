@@ -1,0 +1,5 @@
+name: shaoke-antimage-provider
+kind: model-provider
+version: 1.0.0
+description: Shaoke Antimage — the company's internal model gateway (New API relay)
+author: Shaoke + Hermes Agent
