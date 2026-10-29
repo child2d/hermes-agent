@@ -129,6 +129,7 @@ _ALIAS_GROUPS: Dict[str, Tuple[str, ...]] = {
     "tencent-tokenplan": ("tokenplan", "tencent-lkeap"),
     "bedrock": ("aws", "aws-bedrock", "amazon-bedrock", "amazon"), "arcee": ("arcee-ai", "arceeai"),
     "gmi": ("gmi-cloud", "gmicloud"), "fireworks": ("fireworks-ai", "fw"), "upstage": ("solar",),
+    "shaoke-antimage": ("antimage", "anti-mage", "shaoke"),
     "actual": ("actual-computer", "actualcomputer", "aci"),
     "nebius-token-factory": ("nebius", "nebius-tokenfactory", "nebius-tf", "token-factory", "tokenfactory"),
     "lmstudio": ("lmstudio", "lm-studio", "lm_studio"),

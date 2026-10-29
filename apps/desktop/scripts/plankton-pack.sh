@@ -95,9 +95,10 @@ mkdir -p "$SEED_DIR"
 if [ ! -f "$SEED" ]; then
   cat >"$SEED" <<'JSON'
 {
-  "provider": "deepseek",
-  "model": "deepseek-v4-flash",
-  "base_url": "https://api.deepseek.com"
+  "provider": "shaoke-antimage",
+  "model": "minimax-m3",
+  "base_url": "https://anti-mage.shaoke.com/v1",
+  "api_key_env": "SHAOKE_ANTIMAGE_API_KEY"
 }
 JSON
   chmod 600 "$SEED"
