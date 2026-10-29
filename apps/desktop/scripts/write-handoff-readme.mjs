@@ -155,18 +155,20 @@ codesign -dvv ${quote(appInstalled)} 2>&1 | grep -E "Signature|TeamIdentifier|Au
 spctl -a -vvv -t exec ${quote(appInstalled)}
 \`\`\`
 
-### 2) 去掉隔离标记（要用 sudo —— 这个包的引擎目录是只读的）
+### 2) 去掉隔离标记（一条命令，不用 sudo、别加 -r）
 
 \`\`\`bash
-sudo xattr -dr com.apple.quarantine ${quote(appInstalled)}
+xattr -d com.apple.quarantine ${quote(appInstalled)}
 open ${quote(appInstalled)}
 \`\`\`
 
-> \`sudo\` 是必需的，不是保险：包内置的引擎目录 \`Contents/Resources/agent-payload/\` 有约 2.4 万个只读文件
-> （权限 0444，防止运行时被改写），而删除扩展属性需要对该文件有写权限。用普通用户执行会刷一屏
-> \`xattr: [Errno 13] Permission denied\` —— 那是权限问题，**不是包损坏**，别据此判断安装包坏了。
-> 不想用 sudo 的话：先 \`xattr -d com.apple.quarantine <安装包>.dmg\` 去掉镜像自身的隔离位，
-> 再重新挂载、把 app 拷出来（拷出来的副本就不会带隔离位）。
+> 只去 app 这一层就够：Gatekeeper 判「已损坏」看的是 app bundle 本身，不是里面每个文件。
+> **别加 \`-r\`**：包内置的引擎目录有约 2.4 万个只读文件（权限 0444），递归删扩展属性会刷一屏
+> \`xattr: [Errno 13] Permission denied\` —— 那是权限问题，不影响 app 打开，也不能据此判断包坏了
+> （实测：同事那台递归跑到一半满屏报错，app 照样正常启动）。
+> 万一这条不生效，再退回：\`sudo xattr -dr com.apple.quarantine ${quote(appInstalled)}\`。
+> 也可以完全不碰已装的那份：先 \`xattr -d com.apple.quarantine <安装包>.dmg\` 去掉镜像自身的隔离位，
+> 再重新挂载、把 app 拷出来，副本就不带隔离位。
 > 「右键 → 打开」对「已损坏」**无效**（那只对「无法验证开发者」有效）；请用上面这条。
 
 ### 3) 想看系统日志（追踪这次拦截）

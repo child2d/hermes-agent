@@ -30,7 +30,9 @@ test('the note carries the artifact facts and the commands a colleague needs', (
   assert.match(built.markdown, /0\.1\.2/)
   // Diagnose → fix → trace.
   assert.match(built.markdown, /xattr -p com\.apple\.quarantine/)
-  assert.match(built.markdown, /xattr -dr com\.apple\.quarantine/)
+  // 主命令是非递归的 -d（递归版会在只读的引擎目录上刷 Errno 13，实测不影响打开）
+  assert.match(built.markdown, /xattr -d com\.apple\.quarantine/)
+  assert.match(built.markdown, /sudo xattr -dr com\.apple\.quarantine/)
   assert.match(built.markdown, /log show --last 5m/)
   assert.match(built.markdown, /hdiutil verify/)
   // Paths come from the environment table, not from a guess.
