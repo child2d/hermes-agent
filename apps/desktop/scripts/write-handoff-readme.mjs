@@ -155,14 +155,18 @@ codesign -dvv ${quote(appInstalled)} 2>&1 | grep -E "Signature|TeamIdentifier|Au
 spctl -a -vvv -t exec ${quote(appInstalled)}
 \`\`\`
 
-### 2) 去掉隔离标记（一行，之后正常打开）
+### 2) 去掉隔离标记（要用 sudo —— 这个包的引擎目录是只读的）
 
 \`\`\`bash
-xattr -dr com.apple.quarantine ${quote(appInstalled)}
+sudo xattr -dr com.apple.quarantine ${quote(appInstalled)}
 open ${quote(appInstalled)}
 \`\`\`
 
-> 若提示 \`Operation not permitted\`，前面加 \`sudo\` 再执行一次。
+> \`sudo\` 是必需的，不是保险：包内置的引擎目录 \`Contents/Resources/agent-payload/\` 有约 2.4 万个只读文件
+> （权限 0444，防止运行时被改写），而删除扩展属性需要对该文件有写权限。用普通用户执行会刷一屏
+> \`xattr: [Errno 13] Permission denied\` —— 那是权限问题，**不是包损坏**，别据此判断安装包坏了。
+> 不想用 sudo 的话：先 \`xattr -d com.apple.quarantine <安装包>.dmg\` 去掉镜像自身的隔离位，
+> 再重新挂载、把 app 拷出来（拷出来的副本就不会带隔离位）。
 > 「右键 → 打开」对「已损坏」**无效**（那只对「无法验证开发者」有效）；请用上面这条。
 
 ### 3) 想看系统日志（追踪这次拦截）
