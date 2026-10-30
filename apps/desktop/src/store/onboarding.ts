@@ -1119,12 +1119,18 @@ export async function saveOnboardingApiKey(
   // option, whose primary `value` is the base URL. Ignored for plain API-key
   // providers (their key IS `value`).
   endpointApiKey?: string,
-  // Optional manual model name — only meaningful for the "Local / custom
+  // The optional model name — only meaningful for the "Local / custom
   // endpoint" option when /v1/models discovery returns an empty list (e.g.
   // Cohere's OpenAI-compatible endpoint, which serves no OpenAI-shaped model
   // catalog). Mirrors the runtime's `discover_models: false` + explicit
   // `models:` config path. Ignored for plain API-key providers.
-  modelName?: string
+  modelName?: string,
+  // Explicit provider slug for this option. Without it the slug is guessed from
+  // the env-key prefix (`OPENROUTER_API_KEY` → `openrouter`), which is wrong
+  // whenever the two names differ: `SHAOKE_ANTIMAGE_API_KEY` strips to
+  // `shaoke_antimage` while the provider's slug is `shaoke-antimage`, so the
+  // guess would land the flow on whichever provider the backend lists first.
+  providerSlug?: string
 ) {
   ctx = captureContext(ctx)
   const generation = flowGeneration
@@ -1161,7 +1167,13 @@ export async function saveOnboardingApiKey(
     // env-key prefix stripped). Pass a couple of likely candidates;
     // fetchProviderDefaultModel falls back to the first authenticated
     // provider returned by /api/model/options if none match.
-    const slugCandidates = [envKey.replace(/_API_KEY$/, '').toLowerCase(), label.toLowerCase()]
+    // An explicit slug wins over the env-key heuristic (see providerSlug above).
+    const slugCandidates = [
+      ...(providerSlug ? [providerSlug.toLowerCase()] : []),
+      envKey.replace(/_API_KEY$/, '').toLowerCase(),
+      label.toLowerCase()
+    ]
+
     // ignoreRuntimeGate=true: never block onboarding on the runtime check.
     await completeWithModelConfirm(ctx, label, slugCandidates, () => undefined, true)
 

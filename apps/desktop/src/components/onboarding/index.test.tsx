@@ -83,6 +83,22 @@ describe('onboarding Picker', () => {
     expect(screen.queryByText('Recommended')).toBeNull()
   })
 
+  it('leads with the company gateway and opens its key form in one click', () => {
+    setProviders([makeOAuthProvider('anthropic', 'Anthropic Claude')])
+    render(<Picker ctx={ctx} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Shaoke Antimage/ }))
+
+    // The key form is up with this provider selected: its description is the
+    // curated i18n copy, and the field is the API-key one (the base URL comes
+    // from the provider profile, so there is nothing else to type).
+    expect(screen.getByText('Direct access to the company model gateway (every internal model).')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Paste API key')).toBeTruthy()
+    // The picker list is gone (the form replaced it), so the row's own pitch
+    // copy — which only the list renders — is no longer on screen.
+    expect(screen.queryByText('Company gateway — one key for every internal model')).toBeNull()
+  })
+
   it('offers "choose later" on first run and persists the skip', () => {
     setProviders([makeOAuthProvider('nous', 'Nous Portal')])
     render(<Picker ctx={ctx} />)
