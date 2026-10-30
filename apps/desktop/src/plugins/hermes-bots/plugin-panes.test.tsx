@@ -2,11 +2,9 @@
  * Bot Mode's surface contract, asserted by running the real `register()`
  * against a recording plugin context:
  *
- *  - the roster is a WORKSPACE PAGE (a `routes` contribution at `/bots`) paired
- *    with a `sidebar.nav` ROW beside Skills & Tools / Messaging. It is not a
- *    sidebar pane any more: the sessions zone must not grow a 会话 | 机器人 tab
- *    strip, and the nav label is re-registered on locale change so it follows
- *    the user's language.
+ *  - the roster is the `/bots` route's LIST COLUMN, paired with an activity-bar
+ *    entry. No new pane is registered: the sessions zone must not grow a
+ *    会话 | 机器人 tab strip. The nav label follows locale changes.
  *  - the Scheduled jobs (internally `routines`) pane only exists while a BOT
  *    CHAT owns the main workspace and Bot Mode is on screen — the 机器人 page
  *    being mounted, or a bot chat having been opened. It is registered and
@@ -177,7 +175,7 @@ afterEach(() => {
 })
 
 describe('the roster surface', () => {
-  it('registers a workspace page and a sidebar nav row, and no sidebar pane', () => {
+  it('registers a route-owned list and activity-bar entry, and no extra pane', () => {
     paneStores()
 
     const harness = recordingContext()
@@ -189,6 +187,7 @@ describe('the roster surface', () => {
     const page = harness.find('page')!
     expect(page.area).toBe('routes')
     expect(page.data!.path).toBe('/bots')
+    expect(page.data!.list).toEqual({ render: expect.any(Function), workspaceMode: 'bots' })
 
     const nav = harness.find('nav')!
     expect(nav.area).toBe('sidebar.nav')

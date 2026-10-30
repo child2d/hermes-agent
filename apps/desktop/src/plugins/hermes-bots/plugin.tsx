@@ -80,6 +80,7 @@ import { startBotRelay, stopBotRelay } from './relay'
 import { $activityToasts } from './roster-actions'
 import {
   botChatOwnsWorkspace,
+  BotsPane,
   releaseStaleOpenBotChat,
   selectedRosterBot,
   sessionOwnsWorkspace
@@ -446,12 +447,9 @@ export default {
       data: { render: (route: ProfileGroupRoute) => <ProfileGroupScreenPortal route={route} /> }
     })
 
-    // The 机器人 entry: a sidebar nav row beside Skills & Tools and Messaging,
-    // with a full workspace page behind it. Bot Mode used to be a PANE docked
-    // into the sessions zone, which grew a 会话 | 机器人 tab strip at the top of
-    // the sidebar and made the roster and the conversation list two tabs of one
-    // column. The roster is a nav-row surface now: the sidebar is always
-    // Sessions, and the page carries the roster at workspace width.
+    // The activity-bar entry swaps its roster into the standing list column.
+    // Do not register a separate pane: it would be automatically adopted as a
+    // second column or grow a 会话 | 机器人 tab strip. Main stays a conversation.
     //
     // The label is (re)registered on locale change, like kanban's: `ctx.i18n.t`
     // read at register time freezes whatever locale was active at module
@@ -470,7 +468,10 @@ export default {
     ctx.register({
       id: 'page',
       area: ROUTES_AREA,
-      data: { path: BOTS_PATH } satisfies RouteContribution,
+      data: {
+        path: BOTS_PATH,
+        list: { render: () => <BotsPane />, workspaceMode: 'bots' }
+      } satisfies RouteContribution,
       render: () => <BotsPage />
     })
 

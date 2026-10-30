@@ -38,6 +38,10 @@ describe('the left column on a view change', () => {
     expect(sidebarRouteStep('chat', foldedByRoute)).toEqual({ action: 'unfold', foldedByRoute: false })
   })
 
+  it('reveals the column for a contributed route with its own list', () => {
+    expect(sidebarRouteStep('extension', handFolded, true)).toEqual({ action: 'reveal', foldedByRoute: false })
+  })
+
   it('folds for a plugin page, which paints nothing in the column either', () => {
     expect(sidebarRouteStep('extension', open)).toEqual({ action: 'fold', foldedByRoute: true })
   })
