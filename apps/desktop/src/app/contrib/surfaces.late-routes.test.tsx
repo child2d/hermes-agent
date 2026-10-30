@@ -42,6 +42,28 @@ afterEach(() => {
 })
 
 describe('ChatRoutesSurface late-registered plugin routes', () => {
+  it('keeps the conversation in main when the route supplies a list-column roster', () => {
+    const dispose = registry.register({
+      area: 'routes',
+      id: 'bots-list:page',
+      data: { path: '/bots', list: { render: () => <div data-testid="bot-roster" /> } },
+      render: () => <div data-testid="bot-route-lifecycle" />
+    })
+
+    try {
+      render(
+        <MemoryRouter initialEntries={['/bots']}>
+          <ChatRoutesSurface actions={{} as unknown as WiringActions} />
+        </MemoryRouter>
+      )
+      expect(screen.getByTestId('chat-view')).toBeTruthy()
+      expect(screen.getByTestId('bot-route-lifecycle')).toBeTruthy()
+      expect(screen.queryByTestId('bot-roster')).toBeNull()
+    } finally {
+      dispose()
+    }
+  })
+
   it('renders a page whose route registers after mount', () => {
     const actions = {} as unknown as WiringActions
 

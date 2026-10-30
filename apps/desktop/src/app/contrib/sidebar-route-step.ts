@@ -34,8 +34,13 @@ export interface SidebarRouteStep {
 export function sidebarRouteStep(
   view: string,
   // `minimized` is optional on a tree group (undefined = not minimized).
-  column: { foldedByRoute: boolean; minimized: boolean | undefined }
+  column: { foldedByRoute: boolean; minimized: boolean | undefined },
+  hasContributedList = false
 ): SidebarRouteStep {
+  if (hasContributedList) {
+    return { action: 'reveal', foldedByRoute: false }
+  }
+
   // Nothing of this view's own lives in the column.
   if (!VIEWS_WITH_COLUMN.has(view)) {
     return column.minimized
