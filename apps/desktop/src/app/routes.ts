@@ -91,6 +91,12 @@ export const ROUTES_AREA = 'routes'
 export interface RouteContribution {
   /** Absolute path, e.g. `/kanban`. One segment; no params. */
   path: string
+  /** Optional roster hosted by the standing list column, not another pane. */
+  list?: {
+    render: () => ReactNode
+    /** Keep this roster beside chats owned by this workspace. */
+    workspaceMode?: 'sessions' | 'bots'
+  }
 }
 
 /** Bumps whenever the `routes` area mutates. For non-React consumers that
@@ -105,12 +111,13 @@ onMount($routesVersion, () => registry.subscribeArea(ROUTES_AREA, () => $routesV
 // can stay memoized across a late registration the subscription DID deliver.
 export function contributedRoutes(
   contributions: readonly Contribution[] = registry.getArea(ROUTES_AREA)
-): Array<{ key: string; path: string; title?: string; render: () => ReactNode }> {
+): Array<{ key: string; path: string; title?: string; list?: RouteContribution['list']; render: () => ReactNode }> {
   return contributions
     .map(c => ({
       key: `${c.source ?? 'core'}:${c.id}`,
       path: (c.data as RouteContribution | undefined)?.path ?? '',
       title: c.title,
+      list: (c.data as RouteContribution | undefined)?.list,
       render: c.render!
     }))
     .filter(route => Boolean(route.path.startsWith('/') && route.render) && !RESERVED_PATHS.has(route.path))

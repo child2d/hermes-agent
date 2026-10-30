@@ -2,13 +2,16 @@ import { useStore } from '@nanostores/react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { ListPane } from '@/components/list-pane'
+import { $workspaceMode } from '@/components/pane-shell/workspace-scope'
 import { Codicon } from '@/components/ui/codicon'
+import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
+import { useContributions } from '@/contrib/react/use-contributions'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { $cronJobs } from '@/store/cron'
 
 import { MessagingPlatformsPane } from '../../messaging/platforms-pane'
-import { appViewForPath, CRON_ROUTE, MESSAGING_ROUTE } from '../../routes'
+import { appViewForPath, contributedRoutes, CRON_ROUTE, MESSAGING_ROUTE, ROUTES_AREA } from '../../routes'
 
 /** One standing list pane owns the column. Routes change its content, never
  * the layout tree: registering each list as a pane lets automatic adoption
@@ -29,6 +32,13 @@ export const LIST_PANE_VIEWS: ReadonlySet<string> = new Set(
 export function WorkspaceListPane({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation()
   const List = LIST_FOR_ROUTE[pathname]
+  const workspaceMode = useStore($workspaceMode)
+  const routes = contributedRoutes(useContributions(ROUTES_AREA))
+
+  const routeList = routes.find(route => route.list && route.path === pathname)
+    ?? (appViewForPath(pathname) === 'chat'
+      ? routes.find(route => route.list?.workspaceMode === workspaceMode)
+      : undefined)
 
   // The column's pad and its surface live HERE — on the standing wrapper — so the
   // chat route (which renders `children`, the real session list) and a swapped-in
@@ -43,7 +53,11 @@ export function WorkspaceListPane({ children }: { children: React.ReactNode }) {
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-(--ui-sidebar-panel-background)"
       data-slot="list-column"
     >
-      {List ? <List /> : children}
+      {routeList?.list ? (
+        <ContribBoundary id={`${routeList.key}:list`}>
+          <ContribRender render={routeList.list.render} />
+        </ContribBoundary>
+      ) : List ? <List /> : children}
     </div>
   )
 }

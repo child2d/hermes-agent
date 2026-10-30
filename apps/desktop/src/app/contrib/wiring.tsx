@@ -117,6 +117,8 @@ import { resetProjectTreeState } from '../right-sidebar/files/use-project-tree'
 import { PersistentTerminal } from '../right-sidebar/terminal/persistent'
 import { closeAllTerminals } from '../right-sidebar/terminal/terminals'
 import {
+  $routesVersion,
+  contributedRoutes,
   CRON_ROUTE,
   navigateToWorkspacePage,
   routeSessionId,
@@ -206,6 +208,7 @@ const HANDOFF_CREATE_LEG_METHODS = new Set(['config.set', 'session.close', 'sess
 export function ContribWiring({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const location = useLocation()
+  const routesVersion = useStore($routesVersion)
   const navigate = useNavigate()
 
   const busyRef = useRef(false)
@@ -1268,10 +1271,12 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       return
     }
 
+    const hasContributedList = contributedRoutes().some(route => route.path === location.pathname && route.list)
+
     const step = sidebarRouteStep(currentView, {
       foldedByRoute: sidebarFoldedByRoute,
       minimized: group.minimized
-    })
+    }, hasContributedList)
 
     sidebarFoldedByRoute = step.foldedByRoute
 
@@ -1282,7 +1287,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     } else if (step.action === 'unfold') {
       setTreeGroupMinimized(group.id, false)
     }
-  }, [currentView])
+  }, [currentView, location.pathname, routesVersion])
 
   const sidebarNode = useMemo(
     () => <SidebarSurface actions={actions} currentView={currentView} />,
