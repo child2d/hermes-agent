@@ -190,6 +190,27 @@ describe('ProvidersSettings', () => {
     expect(listOAuthProviders).toHaveBeenCalledTimes(2)
   })
 
+  it('leads the accounts view with the company gateway and jumps to the keys view', async () => {
+    const onViewChange = vi.fn()
+    await act(async () => {
+      render(
+        <>
+          <ProvidersSettings onClose={vi.fn()} onViewChange={onViewChange} view="accounts" />
+          <ConfirmHost />
+        </>
+      )
+    })
+
+    // The row leads the page (slot #1) with the company-gateway pitch…
+    expect(screen.getByText('Company gateway — one key for every internal model')).toBeTruthy()
+
+    // …and clicking it lands on the view that holds the key field.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Shaoke Antimage/ }))
+    })
+    expect(onViewChange).toHaveBeenCalledWith('keys')
+  })
+
   it('leaves the account connected when the removal prompt is dismissed', async () => {
     await renderProvidersSettings()
 

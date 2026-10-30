@@ -46,6 +46,15 @@ export const CONTROL_TEXT = 'text-xs'
 
 export const PROVIDER_GROUPS: ProviderPrefix[] = [
   {
+    prefix: 'SHAOKE_ANTIMAGE_',
+    name: 'Shaoke Antimage',
+    description: 'Company model gateway (every internal model behind one key)',
+    docsUrl: 'https://anti-mage.shaoke.com/',
+    // Negative so the company gateway leads the Keys list without renumbering
+    // every other provider (priority is only used to sort these cards).
+    priority: -1
+  },
+  {
     prefix: 'NOUS_',
     name: 'Nous Portal',
     description: 'Hosted Hermes & Nous-trained models',

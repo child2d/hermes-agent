@@ -59,6 +59,7 @@ export {
   OpenRouterProviderRow,
   ProviderRow,
   providerTitle,
+  ShaokeAntimageProviderRow,
   sortProviders
 } from './providers'
 
