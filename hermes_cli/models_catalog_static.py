@@ -489,6 +489,7 @@ _PROVIDER_ALIASES = dict((
     ("kimi-cn", "kimi-coding-cn"), ("moonshot-cn", "kimi-coding-cn"), ("step", "stepfun"),
     ("stepfun-coding-plan", "stepfun"), ("arcee-ai", "arcee"), ("arceeai", "arcee"), ("gmi-cloud", "gmi"),
     ("gmicloud", "gmi"), ("fireworks-ai", "fireworks"), ("fw", "fireworks"), ("actual-computer", "actual"),
+    ("antimage", "shaoke-antimage"), ("anti-mage", "shaoke-antimage"), ("shaoke", "shaoke-antimage"),
     ("actualcomputer", "actual"), ("aci", "actual"), ("nebius", "nebius-token-factory"),
     ("nebius-tokenfactory", "nebius-token-factory"), ("nebius-tf", "nebius-token-factory"),
     ("token-factory", "nebius-token-factory"), ("tokenfactory", "nebius-token-factory"),

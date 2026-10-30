@@ -4456,8 +4456,13 @@ export const en: Translations = {
     fireworksPitch: 'Direct model API — Fireworks-hosted frontier models',
     localModelsTitle: 'Run models locally',
     localModelsPitch: 'No account needed — download a model and run it on this machine',
+    shaokeAntimagePitch: 'Company gateway — one key for every internal model',
     openRouterPitch: 'One key, hundreds of models — a solid default',
     apiKeyOptions: {
+      'shaoke-antimage': {
+        short: 'company gateway',
+        description: 'Direct access to the company model gateway (every internal model).'
+      },
       fireworks: {
         short: 'direct model API',
         description: 'Direct access to models hosted by Fireworks AI.'

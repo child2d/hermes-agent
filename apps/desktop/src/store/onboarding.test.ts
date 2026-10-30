@@ -1083,3 +1083,56 @@ describe('setOnboardingModel', () => {
     }
   })
 })
+
+describe('saveOnboardingApiKey provider attribution', () => {
+  it('prefers an explicit provider slug over the env-key guess', async () => {
+    const { saveOnboardingApiKey } = await import('./onboarding')
+
+    const requests: { path: string }[] = []
+    installApiMock(async request => {
+      requests.push(request)
+
+      // Two providers, the wanted one second: the env-key guess
+      // (`shaoke_antimage`) matches neither, so without the explicit slug the
+      // flow would fall back to providers[0] = anthropic and this test fails.
+      if (String(request.path).includes('model/options')) {
+        return {
+          providers: [
+            { slug: 'anthropic', name: 'Anthropic', models: ['claude-sonnet-5'], total_models: 1 },
+            { slug: 'shaoke-antimage', name: 'Shaoke Antimage', models: ['minimax-m3'], total_models: 1 }
+          ]
+        }
+      }
+
+      return { ok: true }
+    })
+
+    const ctx = onboardingContext(async method => {
+      if (method === 'setup.status') {
+        return { provider_configured: true } as never
+      }
+
+      if (method === 'setup.runtime_check') {
+        return { ok: true, provider: 'shaoke-antimage' } as never
+      }
+
+      return { ok: true } as never
+    })
+
+    await saveOnboardingApiKey(
+      'SHAOKE_ANTIMAGE_API_KEY',
+      'sk-antimage',
+      'Shaoke Antimage',
+      ctx,
+      undefined,
+      undefined,
+      'shaoke-antimage'
+    )
+
+    const setRequest = requests.find(r => String(r.path).includes('model/set'))
+
+    expect(setRequest).toBeTruthy()
+    expect(JSON.stringify(setRequest)).toContain('shaoke-antimage')
+    expect(JSON.stringify(setRequest)).not.toContain('anthropic')
+  })
+})

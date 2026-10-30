@@ -47,7 +47,28 @@ export const ChangedFilesCard: FC<{ parts: readonly unknown[] }> = ({ parts }) =
 
   return (
     <div
-      className={cn(WIDGET_SHELL_CLASS, 'mt-1.5 text-[length:var(--conversation-tool-font-size)]')}
+      className={cn(
+        WIDGET_SHELL_CLASS,
+        // The message's own gutter: every block of a turn — prose, tools, todos,
+        // the timestamp row (`px-(--message-text-indent)`) — shares this indent,
+        // and a root-level card pinned to the content edge instead overhung the
+        // text column by exactly that 12px (measured: card box 402 vs prose 414
+        // at a 402-wide content edge).
+        'ml-(--message-text-indent)',
+        // The one transcript widget that overrides the shared fill: this card is
+        // the turn's working-tree report, and on the widget token (near-white on
+        // a near-white transcript) it read as rows floating in the prose. A
+        // slate-100 block makes it a surface in its own right, still light enough
+        // to sit in the transcript.
+        //
+        // Both modes ride the app's OWN region rung rather than a shared token:
+        // slate-100 sits 1.9 L* under the light transcript (gray-50) and
+        // slate-900 9.0 L* over the dark one (gray-950) — the same pair of steps
+        // the app's panel rung uses (gray-100 / gray-900), so the card stays in
+        // the ladder in either mode. slate-800 was the alternative and lands 17.4
+        // L* up, i.e. at the window-chrome rung — too loud for a card.
+        'mt-1.5 bg-slate-100 text-[length:var(--conversation-tool-font-size)] dark:bg-slate-900'
+      )}
       data-slot="aui_changed-files"
     >
       <div className="flex items-center gap-2">

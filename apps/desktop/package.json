@@ -35,6 +35,8 @@
     "pack": "npm run build && npm run builder -- --dir --publish never",
     "pack:plankton": "bash scripts/plankton-pack.sh",
     "pack:plankton:test": "cross-env PLANKTON_ENV=test bash scripts/plankton-pack.sh",
+    "pack:plankton:win": "node scripts/plankton-pack-windows.mjs",
+    "pack:plankton:win:test": "cross-env PLANKTON_ENV=test node scripts/plankton-pack-windows.mjs",
     "dist": "npm run build && npm run builder",
     "payload": "node ../../scripts/build/python.mjs ../../scripts/bundles/stage.py --out build/agent-payload",
     "dist:bundled": "npm run payload && cross-env HERMES_DESKTOP_VARIANT=bundled npm run dist",

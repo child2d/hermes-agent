@@ -698,6 +698,45 @@ Non-prod builds land in `release/<env>/` so one environment's build can never
 overwrite another's artifact; `PLANKTON_OUTPUT_DIR` still overrides the location
 entirely (`npm run pack` for prod remains the untouched path).
 
+### Windows (x64 / arm64)
+
+**A Windows artifact must be packed ON Windows** — the engine payload is staged
+for the host that runs the build (`pm/store.py::current_target()` reads
+`platform.machine()` + `sys.platform`, with no override), so a macOS build would
+embed a macOS engine. `scripts/plankton-pack.sh` is the macOS half;
+`scripts/plankton-pack-windows.mjs` is the Windows half — same guards, same
+environment selection, same output rule:
+
+```powershell
+cd apps\desktop
+
+npm run pack:plankton:win              # PLANKTON_ENV=prod, MSIX, x64
+npm run pack:plankton:win:test         # PLANKTON_ENV=test → release\test\
+node scripts\plankton-pack-windows.mjs --kind nsis --arch arm64
+node scripts\plankton-pack-windows.mjs --preflight-only   # validate inputs, build nothing
+# artifact: apps\desktop\release[<env>]\Plankton[Test]-<version>-win-<arch>.msix
+```
+
+Prerequisites on the Windows machine: Node + `npm ci` at the repo root, a Python
+for `HERMES_PYTHON` (default `python`, used only when `build/agent-payload` does
+not exist yet — the script then runs `npm run payload` itself), and the **Windows
+`shaoke-cli`** staged via `%PLANKTON_SHAOKE_CLI_SRC%` or on `PATH` (the artifact
+carries it; the pack refuses without it, and it must be a real PE of that arch —
+a darwin binary is rejected by `scripts/plankton-cli-format.mjs`). The SSO secret
+comes from the machine's own `plankton-state\sso-config.local.json` or
+`%PLANKTON_SSO_SECRET_FILE%`; missing = failed build, not a warning.
+
+The default kind is `msix` (the repo's Windows target). Windows only installs a
+**signed** MSIX: with no signing identity the package is for dev/CI sideloading
+(`Add-AppxPackage -AllowUnsigned` with Developer Mode on). For an installer a
+colleague can double-click, use `--kind nsis` (or sign with
+`AZURE_SIGN_ENDPOINT` / `AZURE_CLIENT_ID`, see
+`electron-builder.config.cjs::windowsSigning`).
+
+`--preflight-only` runs every staging step and the payload-target assertion and
+prints the commands it would run — it is how this script is exercised from the
+mac checkout (it refuses to BUILD anywhere but Windows).
+
 **A dev app starts on an EMPTY home** (`~/.plankton/dev/…`), because the whole
 point is that it cannot read the tuned state of another environment. Two
 per-machine values have to be supplied for it to be usable:
@@ -777,6 +816,16 @@ omit — via the `HERMES_PAYLOAD_UV_CACHE` build switch (§4).
 **产物在哪**：`apps/desktop/release/mac-arm64/Plankton.app`（未签名、未公证；~2.8G，内置引擎）。
 
 **怎么给别人**：整包拷贝 `Plankton.app` 即可（它自带运行时，不需要对方另装引擎或 Python）。
+走 dmg 时打包脚本会**顺带生成一份随包说明**（`<dmg 同名>.安装说明.md`，落在 dmg 旁边）：
+安装步骤、"已损坏"的真实原因与判定/处置/日志命令、sha256 与 `hdiutil verify` 的校验、
+数据目录与卸载方式。它是**生成**的而不是手写的，所以里面的版本/commit/sha256 永远描述那一份
+产物；单独重生成（不发包）：
+
+```bash
+cd apps/desktop
+node scripts/write-handoff-readme.mjs release/test/PlanktonTest-0.1.2-mac-arm64.dmg \
+  --app "release/test/mac-arm64/Plankton Test.app"
+```
 
 - **⚠️ 同一环境不要同时打开两个**：同一个环境（例如两个 prod）的两个实例共用同一份企业数据目录（桌面 `~/Library/Application Support/Plankton`，引擎 `~/.plankton/engine/home`），同时打开会争用同一份 `state.db` 与会话。用完一个再开另一个。**不同环境可以同时开**：dev / test / prod 是三个独立 app（各自的 appId、userData 与引擎 home，见 §2「One independent app per environment」），互不干扰。
 - **未签名会遇到的拦阻**：macOS Gatekeeper 会提示「无法验证开发者 / 已损坏，无法打开」。

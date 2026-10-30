@@ -113,6 +113,15 @@ export function FireworksProviderRow({ onClick }: { onClick: () => void }) {
   return <KeyProviderRow onClick={onClick} pitch={t.onboarding.fireworksPitch} title="Fireworks AI" />
 }
 
+/** Onboarding row for the company's own model gateway — the enterprise default.
+ *  It opens the key form with this provider preselected; the base URL comes from
+ *  the provider profile, so all the user has to paste is the relay token. */
+export function ShaokeAntimageProviderRow({ onClick }: { onClick: () => void }) {
+  const { t } = useI18n()
+
+  return <KeyProviderRow onClick={onClick} pitch={t.onboarding.shaokeAntimagePitch} title="Shaoke Antimage" />
+}
+
 /** Onboarding row for the managed local runtime: no account, no key — the
  *  destination is the Local Models pane where install/download live. */
 export function LocalModelsProviderRow({ onClick }: { onClick: () => void }) {

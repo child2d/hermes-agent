@@ -279,7 +279,7 @@ export function TreeGroup({
   // The scrolling tab list inside the header (the strip also holds the
   // minimize chevron, which must not scroll away).
   const tabsRef = useRef<HTMLDivElement>(null)
-  const measuredBelowControls = usePanelTitlebar(ref, topEdge, Boolean(node.minimized))
+  const titlebar = usePanelTitlebar(ref, topEdge, Boolean(node.minimized))
   // The chip under the last right-click — the pane the zone menu's Split
   // actions carry into the new zone (header background = the active pane).
   // STATE, not a ref: the menu items (incl. Close's visibility) are JSX
@@ -331,7 +331,7 @@ export function TreeGroup({
   const active = paneFor(activeId)
   const isEmpty = shown.length === 0
   const sidebarGroup = !node.panes.some(id => id === 'workspace' || paneChrome(paneFor(id)).placement === 'main')
-  const tabsBelowControls = topEdge && (sidebarGroup || measuredBelowControls)
+  const tabsBelowControls = topEdge && (sidebarGroup || titlebar.belowControls)
   const tabsInTitlebar = topEdge && !tabsBelowControls
   const pageHeader = paneChrome(active).headerContent
 
@@ -742,7 +742,24 @@ export function TreeGroup({
             )}
             data-panel-header=""
             data-zone-band={node.id}
-            style={bandHeight ? { height: bandHeight } : undefined}
+            style={{
+              ...(bandHeight ? { height: bandHeight } : null),
+              // The reservation rides on the BAND, not on the zone element: a
+              // top-edge band is portaled out of the zone into the window's row
+              // (app-top-bar.tsx), so a custom property set on the zone never
+              // reaches it — the spacers below fell back to `100%`, which is
+              // wider than the slot, and pushed the band's drag surfaces (the
+              // flexible title band and the drag handle) out of it.
+              // Unmeasured stays unset: `100%` is the spacers' own safe default,
+              // and it keeps a pre-measure frame from painting the title under
+              // the traffic lights.
+              ...(topEdge && titlebar.left !== null && titlebar.right !== null
+                ? ({
+                    '--panel-titlebar-left': `${titlebar.left}px`,
+                    '--panel-titlebar-right': `${titlebar.right}px`
+                  } as CSSProperties)
+                : null)
+            }}
           >
             {topEdge && (
               <div aria-hidden="true" className="shrink-0" style={{ width: 'var(--panel-titlebar-left, 100%)' }} />

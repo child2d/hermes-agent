@@ -48,22 +48,25 @@ afterEach(() => {
 })
 
 describe('onboarding Picker', () => {
-  it('features Nous Portal and hides other providers behind a disclosure', () => {
-    setProviders([makeOAuthProvider('anthropic', 'Anthropic Claude'), makeOAuthProvider('nous', 'Nous Portal')])
+  it('drops Nous Portal and shows every other provider directly (no disclosure)', () => {
+    setProviders([
+      makeOAuthProvider('anthropic', 'Anthropic Claude'),
+      makeOAuthProvider('nous', 'Nous Portal'),
+      makeOAuthProvider('openai-codex', 'OpenAI Codex / ChatGPT')
+    ])
     render(<Picker ctx={ctx} />)
 
-    expect(screen.getByText('Nous Portal')).toBeTruthy()
-    expect(screen.getByText('Recommended')).toBeTruthy()
-    // Fireworks stays behind the disclosure with the other alternatives; only
-    // Nous Portal is visible before the user expands the list.
-    expect(screen.queryByText('Fireworks AI')).toBeNull()
-    expect(screen.queryByText('Anthropic Account')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Other providers' }))
+    // The backend still reports the provider (Settings → Providers keeps
+    // featuring it) — this picker must not render the row or its badge.
+    expect(screen.queryByText('Nous Portal')).toBeNull()
+    expect(screen.queryByText('Recommended')).toBeNull()
+    // Nothing to fold behind, so the disclosure is gone with it.
+    expect(screen.queryByRole('button', { name: 'Other providers' })).toBeNull()
 
     expect(screen.getByText('Fireworks AI')).toBeTruthy()
     expect(screen.getByText('Anthropic Account')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
+    expect(screen.getByText('ChatGPT or Codex Subscription')).toBeTruthy()
+    expect(screen.getByText('OpenRouter')).toBeTruthy()
   })
 
   it('shows every provider directly when Nous Portal is absent', () => {
@@ -78,6 +81,22 @@ describe('onboarding Picker', () => {
     expect(screen.getByText('ChatGPT or Codex Subscription')).toBeTruthy()
     expect(screen.queryByText('Other sign-in options')).toBeNull()
     expect(screen.queryByText('Recommended')).toBeNull()
+  })
+
+  it('leads with the company gateway and opens its key form in one click', () => {
+    setProviders([makeOAuthProvider('anthropic', 'Anthropic Claude')])
+    render(<Picker ctx={ctx} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Shaoke Antimage/ }))
+
+    // The key form is up with this provider selected: its description is the
+    // curated i18n copy, and the field is the API-key one (the base URL comes
+    // from the provider profile, so there is nothing else to type).
+    expect(screen.getByText('Direct access to the company model gateway (every internal model).')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Paste API key')).toBeTruthy()
+    // The picker list is gone (the form replaced it), so the row's own pitch
+    // copy — which only the list renders — is no longer on screen.
+    expect(screen.queryByText('Company gateway — one key for every internal model')).toBeNull()
   })
 
   it('offers "choose later" on first run and persists the skip', () => {
