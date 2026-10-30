@@ -7,6 +7,28 @@ function repair(tree: LayoutNode) {
 }
 
 describe('saved route-list columns', () => {
+  it('removes the retired Bots roster and routines split without losing the main conversation', () => {
+    const tree: LayoutNode = {
+      type: 'split', id: 'root', orientation: 'row', weights: [1, 7],
+      children: [
+        { type: 'group', id: 'list', panes: ['sessions', 'hermes-bots:pane'], active: 'sessions' },
+        { type: 'split', id: 'old-bot-split', orientation: 'row', weights: [0.71, 1], children: [
+          { type: 'group', id: 'main', panes: ['workspace', 'session-tile:chat'], active: 'session-tile:chat' },
+          { type: 'group', id: 'routines', panes: ['hermes-bots:routines'], active: 'hermes-bots:routines' }
+        ] }
+      ]
+    }
+
+    const migrated = repair(tree)
+    expect(allPaneIds(migrated)).toEqual(['sessions', 'workspace', 'session-tile:chat'])
+    expect(migrated.type === 'split' && migrated.children).toHaveLength(2)
+    expect(migrated.type === 'split' && migrated.weights).toEqual([1, 7])
+    expect(findGroupOfPane(migrated, 'workspace')).toEqual({
+      type: 'group', id: 'main', panes: ['workspace', 'session-tile:chat'], active: 'session-tile:chat'
+    })
+    expect(repair(migrated)).toEqual(migrated)
+  })
+
   it('consolidates repeated lists while preserving the original zone, siblings and relative widths', () => {
     const tree: LayoutNode = {
       type: 'split',
