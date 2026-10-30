@@ -629,6 +629,12 @@ export function migratePersistedTree(node: LayoutNode): LayoutNode {
     const tabStrip = rest.tabStrip === 'always' || rest.tabStrip === 'never' ? rest.tabStrip : undefined
 
     const panes = current.panes.flatMap(id => {
+      // Retired Bot Mode surfaces must not restore a third region. The roster
+      // is now the standing sessions column; schedules use their own route.
+      if (id === 'hermes-bots:pane' || id === 'hermes-bots:routines') {
+        return []
+      }
+
       if (!listIds.has(id)) {
         return [id]
       }
