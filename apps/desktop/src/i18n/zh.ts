@@ -4440,8 +4440,10 @@ export const zh = defineLocale({
     fireworksPitch: '直接模型 API — Fireworks 托管的前沿模型',
     localModelsTitle: '本地运行模型',
     localModelsPitch: '无需账号——下载模型，在本机运行',
+    shaokeAntimagePitch: '公司中转站——一把密钥用全部内部模型',
     openRouterPitch: '一个密钥，数百个模型 — 稳妥的默认选择',
     apiKeyOptions: {
+      'shaoke-antimage': { short: '公司中转站', description: '通过公司中转站访问内部全部模型。' },
       fireworks: { short: '直接模型 API', description: '直接访问 Fireworks AI 托管的模型。' },
       openrouter: { short: '一个密钥，多个模型', description: '用一个密钥访问数百个模型。适合新安装的默认选择。' },
       openai: { short: 'GPT 级模型', description: '直接访问 OpenAI 模型。' },

@@ -3725,6 +3725,7 @@ export interface Translations {
     fireworksPitch: string
     localModelsTitle: string
     localModelsPitch: string
+    shaokeAntimagePitch: string
     openRouterPitch: string
     apiKeyOptions: Record<string, { short: string; description: string }>
     backToSignIn: string

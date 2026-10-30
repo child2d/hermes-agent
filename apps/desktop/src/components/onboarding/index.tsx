@@ -47,6 +47,7 @@ import {
   LocalModelsProviderRow,
   OpenRouterProviderRow,
   ProviderRow,
+  ShaokeAntimageProviderRow,
   sortProviders
 } from './providers'
 
@@ -78,12 +79,26 @@ export interface ApiKeyOption {
   id: string
   name: string
   placeholder?: string
+  /** Provider slug this option belongs to, when it is not derivable from the
+   *  env key (`SHAOKE_ANTIMAGE_API_KEY` strips to `shaoke_antimage`, not to a
+   *  real slug). Forwarded so the model the flow lands on is this provider's,
+   *  instead of whichever provider the backend happens to list first. */
+  providerSlug?: string
   short?: string
 }
 
 // Curated order mirrors CANONICAL_PROVIDERS: Fireworks sits #2 overall (after
 // Nous Portal OAuth), ahead of OpenRouter and the rest of the key catalog.
 const API_KEY_OPTIONS: ApiKeyOption[] = [
+  {
+    // The company's own gateway (a New API relay) — the enterprise default, so
+    // it leads. Base URL comes from the provider profile in the engine.
+    id: 'shaoke-antimage',
+    name: 'Shaoke Antimage',
+    envKey: 'SHAOKE_ANTIMAGE_API_KEY',
+    docsUrl: 'https://anti-mage.shaoke.com/',
+    providerSlug: 'shaoke-antimage'
+  },
   {
     id: 'fireworks',
     name: 'Fireworks AI',
@@ -625,7 +640,17 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
           initialEnvKey={localEndpoint ? 'OPENAI_BASE_URL' : apiKeyInitialEnv}
           onBack={() => setOnboardingMode('oauth')}
           onSave={(envKey, value, name, apiKey, modelName) =>
-            saveOnboardingApiKey(envKey, value, name, ctx, apiKey, modelName)
+            saveOnboardingApiKey(
+              envKey,
+              value,
+              name,
+              ctx,
+              apiKey,
+              modelName,
+              // Options whose env key does not spell their slug pass it explicitly
+              // (see ApiKeyOption.providerSlug).
+              apiKeyOptions.find(o => o.envKey === envKey)?.providerSlug
+            )
           }
           options={apiKeyOptions}
         />
@@ -664,6 +689,9 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
+        {/* The company gateway leads: it is this build's default provider, and
+            a single paste is all it needs (the base URL lives in the profile). */}
+        <ShaokeAntimageProviderRow onClick={() => openKeyForm('SHAOKE_ANTIMAGE_API_KEY')} />
         {/* The no-account path: everything runs on this machine. Shipped
             behind the --local launch flag. */}
         {$localModelsEnabled.get() ? <LocalModelsProviderRow onClick={openLocalModels} /> : null}
