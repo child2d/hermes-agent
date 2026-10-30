@@ -7,6 +7,30 @@ past that); see the **routing table** at the end and read the area file before e
 
 **Never give up on the right solution.**
 
+## Shaoke 分支管理（本 fork 的约定）
+
+本节适用于这个 Hermes / Plankton fork；不要与另一个独立的 Codeup Plankton
+仓库混淆。下文沿用的上游贡献指南中，`main` 指官方主线；本 fork 的分支职责以本节为准。
+
+| 分支 | 职责 |
+| --- | --- |
+| `master` | 官方仓的同步镜像，便于持续 sync 官方功能；不承载我们的业务开发或功能汇总。 |
+| `shaoke/main` | 我们自己的主线，也是初始化开发汇总分支的基线；不能用 `master` 代替。 |
+| `shaoke/dev` | 开发汇总分支，统一接收功能分支的改动；不存在时从 `shaoke/main` 创建。 |
+| `shaoke/feat/*` | 功能分支，默认从 `shaoke/dev` 切出，完成并验证后统一合入 `shaoke/dev`。 |
+
+- **官方同步链路：官方仓 → sync 到 `master` → 通过 MR 合入我们自己的开发分支
+  `shaoke/dev`。** 保留上游同步与自有功能开发的边界，不直接在 `master` 做企业改动。
+- 自有功能走 `shaoke/feat/<功能名>` → `shaoke/dev`。开发汇总不等于已进入
+  `shaoke/main`；是否提升到自有主线另行决定，不擅自合入或推送。
+- `shaoke/dev` 是完整分支名，**不要创建 `shaoke/dev/*` 功能分支**：Git 的 ref
+  命名空间无法同时容纳这两种名称。旧的冲突分支应迁到 `shaoke/feat/*`，保留原提交。
+- 操作前确认仓库、当前分支、工作树状态及本地/远端目标 ref。缺少本地
+  `shaoke/main` 时先查并获取远端，不自行退回 `master` 或其他历史分支。
+- 多会话共享检出时使用独立 worktree，不切换别人的在途工作树、不 stash 别人的改动。
+  从 `origin/shaoke/main` 创建 `shaoke/dev` 时，不保留自动继承的 main upstream；
+  只有远端 `shaoke/dev` 存在后才跟踪它，避免误推到主线。
+
 ## What Hermes Is
 
 Hermes is a personal AI agent that runs the same agent core across a CLI, a messaging
