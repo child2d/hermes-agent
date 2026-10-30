@@ -179,6 +179,10 @@ node scripts/plankton-cli-format.mjs assert --platform "$PACK_OS" --arch "$PACK_
   || { echo "[plankton-pack] ERROR: staged CLI failed format/arch validation (see above)." >&2; exit 1; }
 echo "[plankton-pack] staged CLI: $CLI_DEST (from $CLI_SRC)"
 
+# Official pinned vendor releases join the SAME extraResources directory.
+# Unsupported hosts report an explicit skip; no global package installs.
+node scripts/stage-vendor-clis.mjs "$PACK_ARCH"
+
 # The enterprise plugin payload is committed in-repo; assert it is present so a
 # packaging run cannot silently ship without it (after-pack asserts again).
 # Includes the baymax pack's ONE skill (skills/baymax/SKILL.md): the agent-facing
@@ -187,7 +191,7 @@ echo "[plankton-pack] staged CLI: $CLI_DEST (from $CLI_SRC)"
 # would ship green and only die at plugin load — enumerate it here so the pack
 # stops before that.
 PLUGIN_PAYLOAD="enterprise/plankton-enterprise"
-for required in plugin.yaml __init__.py proposals.py audit_unit.py audit_egress.py audit_wiring.py audit_transport.py dashboard/manifest.json dashboard/plugin_api.py desktop/plugin.js skills/baymax/SKILL.md; do
+for required in plugin.yaml __init__.py proposals.py audit_unit.py audit_egress.py audit_wiring.py audit_transport.py dashboard/manifest.json dashboard/plugin_api.py dashboard/enterprise_clis.py desktop/plugin.js skills/baymax/SKILL.md; do
   if [ ! -s "$PLUGIN_PAYLOAD/$required" ]; then
     echo "[plankton-pack] ERROR: enterprise plugin payload incomplete under $PLUGIN_PAYLOAD (missing/empty: $required)" >&2
     exit 1

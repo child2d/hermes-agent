@@ -130,9 +130,12 @@ const REQUIRED_ENTERPRISE = [
   'enterprise/plankton-enterprise/audit_transport.py',
   'enterprise/plankton-enterprise/dashboard/manifest.json',
   'enterprise/plankton-enterprise/dashboard/plugin_api.py',
+  'enterprise/plankton-enterprise/dashboard/enterprise_clis.py',
   'enterprise/plankton-enterprise/desktop/plugin.js',
   'enterprise/plankton-enterprise/skills/baymax/SKILL.md',
-  'enterprise/cli/darwin-arm64/shaoke-cli'
+  'enterprise/cli/darwin-arm64/shaoke-cli',
+  'enterprise/cli/darwin-arm64/aliyun',
+  'enterprise/cli/darwin-arm64/lark-cli'
 ]
 
 const VALID_PLUGIN_YAML =
@@ -157,6 +160,11 @@ async function seedEnterpriseResources(resources) {
   const contents = {
     'enterprise/plankton-enterprise/plugin.yaml': VALID_PLUGIN_YAML,
     'enterprise/plankton-enterprise/dashboard/manifest.json': VALID_MANIFEST_JSON,
+    // Minimal artifact fixtures satisfying the existing carrier/audit gates.
+    'enterprise/plankton-enterprise/desktop/plugin.js': 'transcript.directives carrierDirectiveContributions createProposalLoader /packs/proposal isProposalBlock',
+    'enterprise/plankton-enterprise/dashboard/plugin_api.py': '@router.post("/packs/proposal")\n@router.get("/audit/profile-id")\n@router.get("/audit/unit")',
+    'enterprise/plankton-enterprise/proposals.py': 'field-tier-not-agent-draftable AGENT_DRAFTABLE_FIELDS plankton_propose_draft',
+    'enterprise/plankton-enterprise/audit_unit.py': 'derive_session_audit_id audit_hygiene_problem resolve_profile_id self-reported',
     'enterprise/model-seed.json': '{"provider":"deepseek"}'
   }
   for (const relative of REQUIRED_ENTERPRISE) {
@@ -164,9 +172,11 @@ async function seedEnterpriseResources(resources) {
     await mkdir(path.dirname(target), { recursive: true })
     await writeFile(target, contents[relative] ?? 'x')
   }
-  const cli = path.join(resources, 'enterprise', 'cli', 'darwin-arm64', 'shaoke-cli')
-  await writeFile(cli, macho('arm64'))
-  await chmod(cli, 0o755)
+  for (const command of ['shaoke-cli', 'aliyun', 'lark-cli']) {
+    const cli = path.join(resources, 'enterprise', 'cli', 'darwin-arm64', command)
+    await writeFile(cli, macho('arm64'))
+    await chmod(cli, 0o755)
+  }
 }
 
 async function enterpriseAppDir(root, name) {

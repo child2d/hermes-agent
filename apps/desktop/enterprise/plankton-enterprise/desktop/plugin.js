@@ -4517,6 +4517,21 @@ const EN = {
     'The approved enterprise skill market (install / uninstall / enable / disable / update, version comparison, hashes) and the local tool catalog (read-only).',
   '企业技能市场': 'Enterprise skill market',
   '企业工具目录': 'Enterprise tool catalog',
+  '内置 CLI': 'Built-in CLIs',
+  '不可用': 'Unavailable',
+  '版本': 'Version',
+  '路径': 'Path',
+  '系统已装则复用，缺失时使用随包版本；安装不等于已授权。': 'Reuse working system installations, otherwise install the bundled version. Installation does not grant authorization.',
+  '重新检测': 'Check again',
+  '正在检测阿里云与飞书 CLI…': 'Checking Alibaba Cloud and Lark CLIs…',
+  '阿里云 CLI': 'Alibaba Cloud CLI',
+  '飞书 / Lark CLI': 'Feishu / Lark CLI',
+  '复用系统安装': 'Using system installation',
+  '使用随包安装': 'Using bundled installation',
+  '阿里云产品与云效 OpenAPI；使用前需配置阿里云身份。': 'Alibaba Cloud and DevOps OpenAPI. Configure your Alibaba Cloud identity before use.',
+  '飞书文档、多维表格、消息与日历；使用前需完成飞书授权。': 'Feishu documents, Base, messages, and calendars. Authorize Lark before use.',
+  'CLI 尚未就绪，请重启应用以重试安装。': 'CLI is not ready. Restart the app to retry installation.',
+  'CLI 检测结果不完整，请重新检测。': 'CLI check returned incomplete results. Check again.',
   '正在读取企业技能市场…': 'Reading the enterprise skill market…',
   '正在读取本机工具目录…': 'Reading the local tool catalog…',
   '读取技能市场失败': 'Could not read the skill market',
@@ -4916,7 +4931,58 @@ function toolRowKey(system, tool) {
   return `${system.name}::${tool.full_name || tool.name}`
 }
 
+// The independent CLI surface must survive a shaoke catalog failure. Keep its
+// request and error state separate rather than combining both into one promise.
+export function EnterpriseCliStatus({ state, onRetry }) {
+  return jsxs('section', { 'data-testid': 'enterprise-cli-catalog', style: { ...S.panel, height: 'auto', flexShrink: 0 }, children: [
+    jsx(PanelHeader, {
+      title: t('内置 CLI'),
+      subtitle: t('系统已装则复用，缺失时使用随包版本；安装不等于已授权。'),
+      actions: jsx(PanelAction, { icon: 'refresh', disabled: state.phase === 'loading', onClick: onRetry, children: t('重新检测') })
+    }),
+    state.phase === 'loading' ? jsx('div', { style: S.meta, role: 'status', children: t('正在检测阿里云与飞书 CLI…') })
+      : state.phase === 'error' ? jsx('div', { style: S.notice, role: 'alert', children: state.message })
+      : jsx('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px' }, children: state.tools.map(cli =>
+          jsxs('section', { 'data-cli-id': cli.id, style: { ...S.detail, flex: '1 1 240px', minWidth: 0 }, children: [
+            jsxs('div', { style: S.rowMeta, children: [
+              jsx('strong', { children: cli.id === 'aliyun-cli' ? t('阿里云 CLI') : t('飞书 / Lark CLI') }),
+              jsx(PanelPill, { tone: cli.available ? 'muted' : 'warn', children: cli.available
+                ? (cli.source === 'system' ? t('复用系统安装') : t('使用随包安装')) : t('不可用') })
+            ] }),
+            jsx('div', { style: S.prose, children: cli.id === 'aliyun-cli'
+              ? t('阿里云产品与云效 OpenAPI；使用前需配置阿里云身份。')
+              : t('飞书文档、多维表格、消息与日历；使用前需完成飞书授权。') }),
+            cli.available ? jsx(PanelMeta, { rows: [
+              { label: t('版本'), value: cli.version },
+              { label: t('路径'), value: jsx('span', { style: { ...S.mono, overflowWrap: 'anywhere' }, children: cli.path }) }
+            ] }) : jsx('div', { style: S.prose, role: 'alert', children: cli.error || t('CLI 尚未就绪，请重启应用以重试安装。') }),
+            jsx('code', { style: S.mono, children: cli.command })
+          ] }, cli.id)
+        ) })
+  ] })
+}
+
 function ToolCatalogTab({ ctx }) {
+  const [cliState, setCliState] = useState({ phase: 'loading' })
+  const loadClis = () => {
+    setCliState({ phase: 'loading' })
+    ctx.rest('/clis').then(data => {
+      const tools = data && data.tools
+      if (!Array.isArray(tools) || !['aliyun-cli', 'lark-cli'].every(id => tools.some(cli => cli && cli.id === id && typeof cli.available === 'boolean'))) {
+        setCliState({ phase: 'error', message: t('CLI 检测结果不完整，请重新检测。') })
+        return
+      }
+      setCliState({ phase: 'ready', tools })
+    }, error => setCliState({ phase: 'error', message: String(error && error.message || error) }))
+  }
+  useEffect(() => { loadClis() }, [])
+  return jsxs('div', { style: { ...S.panel, padding: 0, gap: 0 }, children: [
+    jsx(EnterpriseCliStatus, { state: cliState, onRetry: loadClis }),
+    jsx('div', { style: { flex: '1 0 320px', minHeight: 0 }, children: jsx(ShaokeToolCatalogTab, { ctx }) })
+  ] })
+}
+
+function ShaokeToolCatalogTab({ ctx }) {
   const [state, setState] = useState({ phase: 'loading' })
   const [query, setQuery] = useState('')
   const [selectedKey, setSelectedKey] = useState(null)
