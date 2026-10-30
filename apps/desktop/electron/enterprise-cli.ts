@@ -32,10 +32,13 @@
 //     a real YAML parser, scoped to `plugins.enabled` only (see
 //     mergePluginEnabled), and published atomically (temp-then-rename).
 
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { createHash } from 'node:crypto'
+
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
+
+import { seedEnterpriseVendorClis, type VendorCliResult } from './enterprise-vendor-clis'
 
 export const ENTERPRISE_PLUGIN_ID = 'plankton-enterprise'
 export const ENTERPRISE_CLI_NAME = 'shaoke-cli'
@@ -47,6 +50,8 @@ export type EnterpriseSeedReason = 'not-enterprise' | 'no-resources' | 'seeded' 
 export interface EnterpriseAssetSeedResult {
   seeded: boolean
   reason: EnterpriseSeedReason
+  /** Independent vendor readiness; shaoke-cli/plugin seed semantics stay unchanged. */
+  vendorClis?: VendorCliResult[]
   /** Absolute path to the seeded (or already-present) CLI. */
   cliPath?: string
   cliCopied?: boolean
@@ -145,6 +150,7 @@ export function prependEnterpriseBinToPath(
   const bin = enterpriseBinDir(options.hermesHome, platform)
   const fold = (value: string) => (platform === 'win32' ? value.toLowerCase() : value)
   const want = fold(bin)
+
   const entries = String(pathValue ?? '')
     .split(options.delimiter)
     .filter(entry => entry && fold(entry) !== want)
@@ -182,11 +188,13 @@ export function mergePluginEnabled(
 ): { contents: string; changed: boolean; error?: string } {
   const original = contents ?? ''
   let doc
+
   try {
     doc = parseDocument(original)
   } catch {
     return { contents: original, changed: false, error: 'unparseable' }
   }
+
   if (doc.errors.length > 0) {
     return { contents: original, changed: false, error: 'unparseable' }
   }
@@ -209,6 +217,7 @@ export function mergePluginEnabled(
     // whole key.
     if (plugins === undefined || plugins === null) {
       doc.set('plugins', doc.createNode({ enabled: [pluginId] }))
+
       return { contents: doc.toString(), changed: true }
     }
 
@@ -219,20 +228,25 @@ export function mergePluginEnabled(
 
     if (!plugins.has('enabled')) {
       plugins.set('enabled', doc.createNode([pluginId]))
+
       return { contents: doc.toString(), changed: true }
     }
 
     const enabled = plugins.get('enabled')
+
     if (enabled === null || enabled === undefined || isSeq(enabled)) {
       const seq = enabled as { items: unknown[]; add: (value: unknown) => void } | null
+
       if (seq && seq.items.some(item => (isScalar(item) ? item.value : item) === pluginId)) {
         return { contents: original, changed: false }
       }
+
       if (seq) {
         seq.add(doc.createNode(pluginId))
       } else {
         plugins.set('enabled', doc.createNode([pluginId]))
       }
+
       return { contents: doc.toString(), changed: true }
     }
 
@@ -297,18 +311,24 @@ function resolvePublishPath(fsModule: EnterpriseSeedFs, target: string): string 
   }
 
   let current = path.resolve(target)
+
   for (let hop = 0; hop < 40; hop += 1) {
     let link: string
+
     try {
       link = fsModule.readlinkSync(current)
     } catch {
       throw new Error(`unresolvable-symlink: ${target}`)
     }
+
     const next = path.resolve(path.dirname(current), link)
+
     if (next === current) {
       throw new Error(`symlink-loop: ${target}`)
     }
+
     current = next
+
     try {
       if (!fsModule.lstatSync(current).isSymbolicLink()) {
         return current
@@ -326,6 +346,7 @@ function resolvePublishPath(fsModule: EnterpriseSeedFs, target: string): string 
 /** A permission-class errno where staging beside the link may still succeed. */
 function isPermissionError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | null)?.code
+
   return code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
 }
 
@@ -342,12 +363,14 @@ function publishTemp(fsModule: EnterpriseSeedFs, tmp: string, dest: string): voi
     return
   } catch (error) {
     const code = (error as NodeJS.ErrnoException | null)?.code
+
     if (code !== 'EXDEV' && code !== 'EBUSY' && code !== 'EPERM') {
       throw error
     }
   }
 
   fsModule.copyFileSync(tmp, dest)
+
   try {
     fsModule.unlinkSync(tmp)
   } catch {
@@ -370,18 +393,22 @@ function atomicPublish(
 ): void {
   const stages = resolved === target ? [resolved] : [resolved, target]
   let lastError: unknown
+
   for (const stage of stages) {
     try {
       fsModule.mkdirSync(path.dirname(stage), { recursive: true })
     } catch (error) {
       lastError = error
+
       if (!isPermissionError(error) || stage !== resolved) {
         throw error
       }
+
       continue
     }
 
     const tmp = tempSibling(stage)
+
     try {
       write(tmp)
       publishTemp(fsModule, tmp, resolved)
@@ -393,7 +420,9 @@ function atomicPublish(
       } catch {
         void 0
       }
+
       lastError = error
+
       if (!isPermissionError(error) || stage !== resolved) {
         throw error
       }
@@ -417,6 +446,7 @@ function atomicWriteFile(fsModule: EnterpriseSeedFs, target: string, data: strin
   const resolved = resolvePublishPath(fsModule, target)
   atomicPublish(fsModule, target, resolved, tmp => {
     fsModule.writeFileSync(tmp, data, mode === undefined ? undefined : { mode })
+
     if (mode !== undefined) {
       try {
         fsModule.chmodSync(tmp, mode)
@@ -445,6 +475,7 @@ function copyIfChanged(fsModule: EnterpriseSeedFs, source: string, dest: string,
           void 0
         }
       }
+
       return false
     }
   } catch {
@@ -457,6 +488,7 @@ function copyIfChanged(fsModule: EnterpriseSeedFs, source: string, dest: string,
   const resolvedDest = resolvePublishPath(fsModule, dest)
   atomicPublish(fsModule, dest, resolvedDest, tmp => {
     fsModule.copyFileSync(source, tmp)
+
     if (mode !== undefined) {
       try {
         fsModule.chmodSync(tmp, mode)
@@ -472,9 +504,11 @@ function copyIfChanged(fsModule: EnterpriseSeedFs, source: string, dest: string,
 /** Recursively mirror `sourceDir` into `destDir`, copying only changed files. */
 function mirrorDir(fsModule: EnterpriseSeedFs, sourceDir: string, destDir: string): string[] {
   const written: string[] = []
+
   for (const entry of fsModule.readdirSync(sourceDir, { withFileTypes: true })) {
     const from = path.join(sourceDir, entry.name)
     const to = path.join(destDir, entry.name)
+
     if (entry.isDirectory()) {
       written.push(...mirrorDir(fsModule, from, to))
     } else if (copyIfChanged(fsModule, from, to)) {
@@ -491,6 +525,7 @@ function ensurePluginEnabled(
   pluginId: string
 ): { changed: boolean; contents: string; error?: string } {
   let current = ''
+
   try {
     current = fsModule.readFileSync(configPath, 'utf8')
   } catch (error) {
@@ -509,17 +544,20 @@ function ensurePluginEnabled(
     // reproducible filesystem state; lstat (never following the link) decides.
     const code = (error as NodeJS.ErrnoException | null)?.code
     const absent = (code === 'ENOENT' || code === undefined) && !pathExistsByLstat(fsModule, configPath)
+
     if (!absent) {
       return { changed: false, contents: current, error: 'unreadable' }
     }
   }
 
   const merged = mergePluginEnabled(current, pluginId)
+
   if (merged.error) {
     // Refuse to touch an unparseable / ambiguous config: report it, leave the
     // file exactly as it was. Better a loud no-op than a corrupted config.yaml.
     return { changed: false, contents: current, error: merged.error }
   }
+
   if (!merged.changed) {
     return { changed: false, contents: current }
   }
@@ -588,6 +626,7 @@ export function seedEnterpriseAssets(options: {
 
   // ── 2. Plugin ─────────────────────────────────────────────────────────────
   const pluginSource = p.join(options.resourcesPath, ...enterprisePluginResourceRelative())
+
   if (fsModule.existsSync(pluginSource)) {
     try {
       const pluginDest = p.join(options.hermesHome, 'plugins', ENTERPRISE_PLUGIN_ID)
@@ -598,18 +637,22 @@ export function seedEnterpriseAssets(options: {
         if (entry.name === 'desktop') {
           continue
         }
+
         const from = p.join(pluginSource, entry.name)
         const to = p.join(pluginDest, entry.name)
+
         if (entry.isDirectory()) {
           mirrorDir(fsModule, from, to)
         } else if (copyIfChanged(fsModule, from, to)) {
           notes.push(`plugin file: ${to}`)
         }
       }
+
       result.pluginPath = pluginDest
 
       // Desktop half: the STANDALONE door (marker-free → default-ON).
       const desktopEntry = p.join(pluginSource, 'desktop', 'plugin.js')
+
       if (fsModule.existsSync(desktopEntry)) {
         const desktopFile = p.join(desktopDest, 'plugin.js')
         copyIfChanged(fsModule, desktopEntry, desktopFile)
@@ -622,6 +665,7 @@ export function seedEnterpriseAssets(options: {
       const enabled = ensurePluginEnabled(fsModule, configPath, ENTERPRISE_PLUGIN_ID)
       result.configPath = configPath
       result.configUpdated = enabled.changed
+
       if (enabled.error) {
         notes.push(`plugins.enabled NOT updated (${enabled.error}); ${configPath} left unchanged`)
         result.errors.push(`config: ${enabled.error}`)
@@ -648,6 +692,14 @@ export function seedEnterpriseAssets(options: {
     notes.push(`plugin resource missing: ${pluginSource}`)
     result.reason = result.cliPath ? 'partial' : 'no-resources'
   }
+
+  result.vendorClis = seedEnterpriseVendorClis({
+    hermesHome: options.hermesHome,
+    resourcesPath: options.resourcesPath,
+    platform,
+    arch,
+    log: options.log
+  })
 
   for (const line of notes) {
     options.log?.(`[enterprise] ${line}`)

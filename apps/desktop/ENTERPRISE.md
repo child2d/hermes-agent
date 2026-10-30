@@ -698,6 +698,27 @@ Non-prod builds land in `release/<env>/` so one environment's build can never
 overwrite another's artifact; `PLANKTON_OUTPUT_DIR` still overrides the location
 entirely (`npm run pack` for prod remains the untouched path).
 
+### Bundled Alibaba Cloud and Lark CLIs (macOS)
+
+The Enterprise Tools tab independently displays **aliyun-cli** and **lark-cli**
+with their version, executable path and source. A failed shaoke-cli catalog does
+not hide these entries. The page only runs version checks through the plugin's
+read-only `GET /clis`; it neither executes cloud/Feishu operations nor reads tokens.
+
+The macOS pack stages fixed official release archives (aliyun-cli 3.5.2 and
+lark-cli 1.0.98), checks SHA-256 and carries their independent binaries under
+`Resources/enterprise/cli/<os>-<arch>/`. First launch probes existing system
+installations first. Working system CLIs are reused; otherwise the bundled copy
+is installed into `<HERMES_HOME>/bin`, already on the backend's PATH. System
+binaries and CLI credentials are never overwritten. Installation does **not**
+mean authorization: the user still configures Alibaba Cloud identity / Lark login.
+
+This makes first-launch provisioning offline and independent of Homebrew/npm;
+network access to official GitHub Releases is needed on the **packaging machine**
+when the verified release cache is missing. Each Plankton environment/profile
+keeps its own managed landing. Do not copy another environment's credentials to
+make a CLI check pass.
+
 ### Windows (x64 / arm64)
 
 **A Windows artifact must be packed ON Windows** — the engine payload is staged

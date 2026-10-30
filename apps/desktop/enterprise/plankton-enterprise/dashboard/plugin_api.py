@@ -1,7 +1,8 @@
 """plankton-enterprise dashboard backend — mounted at ``/api/plugins/plankton-enterprise/``.
 
-Two surfaces ship in this batch:
+Local read surfaces and the enterprise skill market:
 
+  * ``GET /clis`` — local aliyun-cli / lark-cli installation and version status.
   * ``GET /tools``  — the local ``shaoke-cli`` tool catalog (read-only listing).
   * ``GET/POST /skills*`` — the enterprise skill market: the approved-skill
     catalog (via ``shaoke-cli skillhub``), install / uninstall / enable /
@@ -310,6 +311,21 @@ def _failure(kind: str, message: str, cli_path: Optional[str], cli_source: str, 
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /tools — read-only local tool catalog
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/clis")
+def list_clis() -> dict:
+    """Read local CLI installation status without inspecting account state."""
+    name = "_plankton_enterprise_clis"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name("enterprise_clis.py"))
+        if spec is None or spec.loader is None:
+            raise RuntimeError("enterprise CLI status module unavailable")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules[name] = module
+    return module.list_clis()
 
 
 @router.get("/tools")

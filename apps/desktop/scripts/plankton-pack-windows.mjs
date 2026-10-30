@@ -225,6 +225,7 @@ for (const required of [
   'audit_transport.py',
   'dashboard/manifest.json',
   'dashboard/plugin_api.py',
+  'dashboard/enterprise_clis.py',
   'desktop/plugin.js',
   'skills/baymax/SKILL.md'
 ]) {

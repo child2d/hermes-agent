@@ -20,6 +20,7 @@ import { runPython } from '../../../scripts/build/python.mjs'
 
 import { assertPackagedBackendReadyArtifact, resolvePackagedAsarPath } from './backend-ready-artifact.mjs'
 import { assertCliBinaryFormat } from './plankton-cli-format.mjs'
+import { assertVendorCliResources } from './stage-vendor-clis.mjs'
 import { batchSignAppTree } from './batch-sign-binaries.mjs'
 import { rehashPayloadDigests } from './payload-digests.mjs'
 import { resolveSigningIdentity, signNestedChromium } from './sign-nested-chromium.mjs'
@@ -107,6 +108,7 @@ export function assertEnterpriseResourcesPresent(
     'enterprise/plankton-enterprise/audit_transport.py',
     'enterprise/plankton-enterprise/dashboard/manifest.json',
     'enterprise/plankton-enterprise/dashboard/plugin_api.py',
+    'enterprise/plankton-enterprise/dashboard/enterprise_clis.py',
     'enterprise/plankton-enterprise/desktop/plugin.js',
     // The baymax pack's ONE skill — the agent-facing carrier of the domain
     // command surface / agent instructions / onboarding (W2, N2 §0.1). It is a
@@ -275,7 +277,8 @@ export function assertEnterpriseResourcesPresent(
     throw new Error('[after-pack] packaged enterprise plugin_api.py lost the W1 audit routes')
   }
 
-  return expected
+  const vendorFiles = assertVendorCliResources({ resourcesPath: resources, platform: electronPlatformName, arch: archName })
+  return [...expected, ...vendorFiles.map(file => path.relative(resources, file))]
 }
 
 /**

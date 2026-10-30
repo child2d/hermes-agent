@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 /**
  * Enterprise (Plankton) tool-catalog acceptance — PACKAGED-ARTIFACT lane.
  *
@@ -32,7 +33,6 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 import { _electron, expect, type Page, test } from '@playwright/test'
@@ -57,8 +57,10 @@ const REPO_ROOT = path.resolve(DESKTOP_ROOT, '..', '..')
 function engineContentHash(dir: string): string {
   const python =
     process.env.HERMES_TEST_PYTHON || path.join(REPO_ROOT, '.venv', 'bin', 'python3')
+
   const script =
     'import sys\nfrom pathlib import Path\nfrom tools.skills_guard import content_hash\nprint(content_hash(Path(sys.argv[1])))\n'
+
   return execFileSync(python, ['-c', script, dir], { cwd: REPO_ROOT, encoding: 'utf8' }).trim()
 }
 
@@ -81,9 +83,11 @@ function writeDeterministicMarketCli(home: string, items: unknown[]): string {
   const realCli = path.join(home, 'bin', 'shaoke-cli')
   const wrapper = path.join(home, 'bin', 'enterprise-shaoke-cli')
   const envelope = JSON.stringify({ ok: true, data: { items, nextCursor: null } })
+
   if (envelope.includes("'")) {
     throw new Error('the fixed catalog must not contain a single quote (shell quoting)')
   }
+
   fs.writeFileSync(
     wrapper,
     '#!/bin/sh\n' +
@@ -95,6 +99,7 @@ function writeDeterministicMarketCli(home: string, items: unknown[]): string {
     'utf8'
   )
   fs.chmodSync(wrapper, 0o755)
+
   return wrapper
 }
 
@@ -107,6 +112,7 @@ function seedInstalledSkill(home: string, name: string, body = '# e2e market ski
   const landing = path.join(home, 'skills', name)
   fs.mkdirSync(landing, { recursive: true })
   fs.writeFileSync(path.join(landing, 'SKILL.md'), body, 'utf8')
+
   return landing
 }
 
@@ -393,6 +399,15 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     await openEnterpriseTab(page, 'tools')
 
     await expect(page.getByText('Enterprise tool catalog', { exact: false }).first()).toBeVisible({ timeout: 30_000 })
+    const cliCatalog = page.getByTestId('enterprise-cli-catalog')
+    await expect(cliCatalog).toBeVisible()
+
+    for (const [id, command] of [['aliyun-cli', 'aliyun --help'], ['lark-cli', 'lark-cli --help']]) {
+      const row = cliCatalog.locator(`[data-cli-id="${id}"]`)
+      await expect(row).toContainText(command, { timeout: 30_000 })
+      await expect(row).toContainText(/Using (system|bundled) installation|复用系统安装|使用随包安装/)
+      await expect(row).not.toContainText(/Unavailable|不可用/)
+    }
 
     const text = await page.locator('body').innerText()
 
@@ -472,6 +487,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
 
     const catalogCard = (name: string) =>
       page.locator('[data-panel-row^="catalog:"]', { hasText: name }).locator('button').first()
+
     const ledgerCard = (name: string) =>
       page.locator('[data-panel-row^="ledger:"]', { hasText: name }).locator('button').first()
 
@@ -484,6 +500,7 @@ test('the packaged Plankton artifact renders the REAL bundled shaoke-cli catalog
     ]) {
       await expect(catalogCard(name), `${name} must render as a catalog card`).toBeVisible()
     }
+
     await expect(ledgerCard('e2e-market-skill'), 'the engine ledger must render').toBeVisible()
 
     // ── F-1: the version comparison, in the selected entry's detail ─────────
