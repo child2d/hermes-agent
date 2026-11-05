@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
 import { ChevronLeft } from '@/lib/icons'
 
-import { type BaymaxIssue, type BaymaxIssueDetail, daysLate, isOpen, isSuspended } from './api'
+import { type BaymaxIssue, type BaymaxIssueDetail, daysLate, isOpen, isSuspended, issueDay } from './api'
 
 function DueLabel({ issue }: { issue: BaymaxIssue }) {
   const { t } = useI18n()
@@ -28,7 +28,7 @@ function DueLabel({ issue }: { issue: BaymaxIssue }) {
     return <span>{t.baymax.dueToday}</span>
   }
 
-  return <time dateTime={issue.estimateEndDate}>{issue.estimateEndDate?.slice(0, 10)}</time>
+  return <time dateTime={issue.estimateEndDate}>{issueDay(issue.estimateEndDate)}</time>
 }
 
 export interface IssueSummaryCardProps {
@@ -78,7 +78,7 @@ export interface IssueDetailCardProps {
 
 export function IssueDetailCard({ issue, projectName, onBack }: IssueDetailCardProps) {
   const { t } = useI18n()
-  const day = (value?: string) => value?.slice(0, 10) ?? '—'
+  const day = issueDay
 
   return (
     <Card className="baymax-ticket" data-testid="baymax-issue-detail-card">

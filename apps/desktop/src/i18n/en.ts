@@ -3470,7 +3470,7 @@ export const en: Translations = {
     identityUnavailable: 'Account details unavailable',
     loadedScope: (loaded, total) => loaded < total
       ? `Counts and filters cover the ${loaded} loaded issues, not all ${total}.`
-      : `Counts and filters cover all ${loaded} loaded issues.`,
+      : `All ${loaded} issues loaded.`,
     title: 'Workbench',
     refresh: 'Refresh',
     refreshing: 'Refreshing',

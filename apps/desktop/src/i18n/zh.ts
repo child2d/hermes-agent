@@ -3498,7 +3498,7 @@ export const zh = defineLocale({
     identityUnavailable: '暂时无法读取账号信息',
     loadedScope: (loaded, total) => loaded < total
       ? `计数与筛选仅涵盖已载入的 ${loaded} 条工单，当前视图共 ${total} 条。`
-      : `当前视图的 ${loaded} 条工单已全部载入，可直接计数与筛选。`,
+      : `已载入全部 ${loaded} 条工单。`,
     title: '工作台',
     refresh: '刷新',
     refreshing: '正在刷新',

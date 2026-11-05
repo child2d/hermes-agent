@@ -174,6 +174,12 @@ export function todayKey(now: Date = new Date()): string {
   return dayKey(now.toISOString()) as string
 }
 
+/** A plan date as the workbench reads it: the SAME local calendar day the
+ *  overdue maths uses, so a card never shows yesterday beside "due today". */
+export function issueDay(iso?: string): string {
+  return dayKey(iso) ?? '—'
+}
+
 /** Whole days past the deadline (0 = due today, negative = still ahead). */
 export function daysLate(issue: BaymaxIssue, now: Date = new Date()): null | number {
   const due = dayKey(issue.estimateEndDate)
