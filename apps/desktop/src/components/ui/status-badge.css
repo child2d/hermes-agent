@@ -1,0 +1,75 @@
+/* Shaoke badge taxonomy on Plankton tokens.
+   Two recipes, as the spec asks: `status` is a blocky marker for lifecycle
+   values, `entity`/`meta` are compact pills for type and count markers.
+   Every colour resolves to a token; no palette of its own. */
+
+.status-badge {
+  --badge-ink: var(--ui-text-secondary);
+  --badge-wash: var(--ui-region-panel);
+  --badge-ring: var(--ui-stroke-tertiary);
+
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--badge-ring);
+  background: var(--badge-wash);
+  color: var(--badge-ink);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge.is-status {
+  border-radius: var(--radius-sm);
+  padding: 0 0.375rem;
+  font-weight: 600;
+}
+
+.status-badge.is-entity,
+.status-badge.is-meta {
+  border-radius: 999px;
+  padding: 0 0.4375rem;
+  font-weight: 500;
+}
+
+.status-badge.is-sm {
+  font-size: 0.75rem;
+}
+
+.status-badge.is-default {
+  padding-block: 0.0625rem;
+}
+
+.status-badge.is-lg {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.status-badge.tone-green {
+  --badge-ink: var(--ui-green);
+  --badge-wash: color-mix(in srgb, var(--ui-green) 10%, transparent);
+  --badge-ring: color-mix(in srgb, var(--ui-green) 28%, transparent);
+}
+
+.status-badge.tone-yellow {
+  --badge-ink: var(--ui-yellow);
+  --badge-wash: color-mix(in srgb, var(--ui-yellow) 12%, transparent);
+  --badge-ring: color-mix(in srgb, var(--ui-yellow) 30%, transparent);
+}
+
+.status-badge.tone-red {
+  --badge-ink: var(--dt-destructive);
+  --badge-wash: color-mix(in srgb, var(--dt-destructive) 8%, transparent);
+  --badge-ring: color-mix(in srgb, var(--dt-destructive) 30%, transparent);
+}
+
+.status-badge.tone-blue {
+  --badge-ink: var(--ui-accent);
+  --badge-wash: color-mix(in srgb, var(--ui-accent) 9%, transparent);
+  --badge-ring: color-mix(in srgb, var(--ui-accent) 26%, transparent);
+}

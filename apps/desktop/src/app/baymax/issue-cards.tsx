@@ -2,6 +2,7 @@ import './workbench.css'
 
 import type { ReactNode } from 'react'
 
+import { StatusBadge } from '@/components/ui/status-badge'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -62,6 +63,7 @@ export interface IssueSummaryCardProps {
   selected?: boolean
 }
 
+
 /** Portable read-only presentation: no query, router, store or chat dependency. */
 export function IssueSummaryCard({ issue, onSelect, selected = false }: IssueSummaryCardProps) {
   const { t } = useI18n()
@@ -83,7 +85,7 @@ export function IssueSummaryCard({ issue, onSelect, selected = false }: IssueSum
         <span aria-hidden="true" className="baymax-card-dot">
           ·
         </span>
-        <span className="baymax-card-status">{issue.status?.name ?? '—'}</span>
+        <StatusBadge label={issue.status?.name ?? '—'} status={statusIntent(issue)} variant="status" />
         <span className="baymax-card-owner">{t.baymax.ownerOf(issue.assigneeName ?? '—')}</span>
       </span>
     </button>
@@ -118,6 +120,17 @@ export interface IssueDetailCardProps {
   issue: BaymaxIssueDetail
 }
 
+/** Intent from what the read door proves: closed is inactive, parked is pending,
+ *  anything still moving is the only live value the taxonomy can carry. The door
+ *  exposes no status category, so a status is never coloured by its name. */
+function statusIntent(issue: BaymaxIssue): 'inactive' | 'info' | 'pending' {
+  if (issue.status?.isClosed) {
+    return 'inactive'
+  }
+
+  return isSuspended(issue) ? 'pending' : 'info'
+}
+
 /** The ticket is ONE sheet: chips, a fact strip and rules — nothing nested. */
 export function IssueDetailCard({ issue }: IssueDetailCardProps) {
   const { t } = useI18n()
@@ -130,9 +143,11 @@ export function IssueDetailCard({ issue }: IssueDetailCardProps) {
       <header className="baymax-dc-head">
         <h1 className="baymax-dc-title">{issue.title}</h1>
         <div className="baymax-chips">
-          {issue.status?.name && <span className="baymax-chip is-state">{issue.status.name}</span>}
-          {issue.priority?.name && <span className="baymax-chip">{issue.priority.name}</span>}
-          {carried && <span className="baymax-chip is-late">{t.baymax.carriedOverDays(late)}</span>}
+          {issue.status?.name && (
+            <StatusBadge label={issue.status.name} status={statusIntent(issue)} variant="status" />
+          )}
+          {issue.priority?.name && <StatusBadge label={issue.priority.name} status="neutral" variant="meta" />}
+          {carried && <StatusBadge label={t.baymax.carriedOverDays(late)} status="error" variant="status" />}
         </div>
       </header>
       <dl className="baymax-facts">

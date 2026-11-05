@@ -542,28 +542,8 @@
   margin-top: 0.5rem;
 }
 
-.baymax-chip {
-  padding: 0.125rem 0.4375rem;
-  border: 1px solid var(--baymax-rule);
-  border-radius: var(--radius-sm);
-  background: var(--baymax-panel);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--baymax-ink-2);
-}
 
-.baymax-chip.is-state {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--baymax-signal) 8%, transparent);
-  color: var(--baymax-signal);
-}
 
-/* Overdue wears the destructive rung, thinned to a wash. */
-.baymax-chip.is-late {
-  border-color: color-mix(in srgb, var(--baymax-danger) 32%, transparent);
-  background: color-mix(in srgb, var(--baymax-danger) 8%, transparent);
-  color: var(--baymax-danger);
-}
 
 .baymax-facts {
   display: grid;
