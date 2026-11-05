@@ -1,17 +1,27 @@
-/* Hallmark · v2.0.0 · scope: app · theme: locked Desktop DESIGN.md · signature: standing queue and single ticket paper */
-/* Critique: reduce competing chrome; keep one coherent ticket perimeter and compact sidebar summaries. */
-/* Waiver: app scope inherits root overflow and font tokens; no global palette or primitive changes. */
+/* Hallmark · v3.0.0 · scope: app · theme: locked Desktop DESIGN.md · signature: card-first follow-up queue and one ticket sheet */
+/* Critique: one card per ticket, one sheet for the detail — rules and a fact strip do the dividing, never a card inside a card. */
+/* Waiver: the shell owns the three-region frame; this file paints only what sits inside the list column and the main pane. */
 :root {
-  --baymax-paper: var(--card);
-  --baymax-floor: var(--ui-sidebar-panel-background);
+  /* Every value is a rung or a surface the app already owns; the theme flips them. */
+  --baymax-paper: var(--dt-card);
+  --baymax-floor: var(--ui-region-transcript);
+  --baymax-panel: var(--ui-region-panel);
+  --baymax-chrome: var(--ui-region-chrome);
   --baymax-ink: var(--ui-text-primary);
-  --baymax-muted: var(--ui-text-secondary);
+  --baymax-ink-2: var(--ui-text-secondary);
+  --baymax-ink-3: var(--ui-text-tertiary);
   --baymax-rule: var(--ui-stroke-tertiary);
+  --baymax-rule-strong: var(--ui-stroke-secondary);
   --baymax-hover: var(--ui-control-hover-background);
-  --baymax-selected: var(--ui-control-active-background, var(--ui-control-hover-background));
   --baymax-signal: var(--ui-accent);
   --baymax-danger: var(--dt-destructive);
+  --baymax-warn: var(--ui-yellow);
+  --baymax-lift: var(--shadow-sm);
+  --baymax-lift-hover: var(--shadow-md);
 }
+
+/* ── queue column ─────────────────────────────────────────────────────────── */
+
 .baymax-queue {
   display: flex;
   flex-direction: column;
@@ -19,257 +29,760 @@
   min-height: 0;
   min-width: 0;
   color: var(--baymax-ink);
-  container: baymax-queue / inline-size;
 }
+
 .baymax-queue-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-}
-.baymax-queue-header h2 {
-  text-wrap: balance;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-.baymax-queue-controls {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0 0.75rem 0.75rem;
+  padding: 0.75rem 0.75rem 0.625rem;
 }
-.baymax-queue-controls [data-slot='select-trigger'] {
+
+.baymax-queue-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.baymax-queue-title h2 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.baymax-queue-count {
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.baymax-refresh {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: auto;
+  border-radius: var(--radius-sm);
+  color: var(--baymax-ink-3);
+  cursor: pointer;
+}
+
+.baymax-refresh:hover:not(:disabled) {
+  background: var(--baymax-hover);
+  color: var(--baymax-ink);
+}
+
+.baymax-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.baymax-refresh svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.baymax-scopes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.375rem;
+}
+
+.baymax-scopes [data-slot='select-trigger'] {
   width: 100%;
   min-width: 0;
 }
-.baymax-queue-controls [data-slot='select-value'] {
+
+.baymax-scopes [data-slot='select-value'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.baymax-focus {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.25rem;
-}
-.baymax-focus-button {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.25rem;
-  padding: 0.375rem 0.5rem;
-  border-radius: var(--radius-md);
+
+.baymax-queue-search {
+  width: 100%;
   font-size: 0.75rem;
-  color: var(--baymax-muted);
+}
+
+.baymax-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+}
+
+.baymax-tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.1875rem;
+  min-height: 1.5rem;
+  padding: 0.1875rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
-.baymax-focus-button[aria-pressed='true'] {
-  background: var(--baymax-selected);
-  color: var(--baymax-ink);
-  font-weight: 600;
+
+.baymax-tab b {
+  font-weight: 500;
+  color: var(--baymax-ink-3);
 }
-.baymax-focus-button:disabled {
+
+.baymax-tab:hover:not(:disabled) {
+  background: var(--baymax-hover);
+  color: var(--baymax-ink);
+}
+
+.baymax-tab[aria-pressed='true'] {
+  background: var(--baymax-paper);
+  border-color: var(--baymax-rule);
+  box-shadow: var(--baymax-lift);
+  color: var(--baymax-ink);
+}
+
+.baymax-tab[aria-pressed='true'] b {
+  color: var(--baymax-ink);
+}
+
+.baymax-tab:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.baymax-coverage {
-  color: var(--baymax-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
+
 .baymax-list {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 0.375rem;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 0.5rem 0.5rem;
+  padding: 0.125rem 0.625rem 1rem;
 }
-.baymax-list ol {
+
+.baymax-list-empty,
+.baymax-group-empty {
   display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-.baymax-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  width: 100%;
-  padding: 0.5rem;
-  text-align: start;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.baymax-summary[aria-pressed='true'] {
-  background: var(--baymax-selected);
-  box-shadow: inset 2px 0 var(--baymax-signal);
-}
-.baymax-summary:hover,
-.baymax-summary:active,
-.baymax-focus-button:active:not(:disabled),
-.baymax-focus-button:hover:not(:disabled) {
-  background: var(--baymax-hover);
-}
-.baymax-summary-meta {
-  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  min-width: 0;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0.5rem 0.125rem 0.625rem;
   font-size: 0.75rem;
-  line-height: 1.4;
-  color: var(--baymax-muted);
+  line-height: 1.6;
+  color: var(--baymax-ink-3);
+}
+
+.baymax-group-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* Group head: 12px above, 6px below — the queue's only section rule. */
+.baymax-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.0625rem 0.375rem;
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+  letter-spacing: 0.02em;
+}
+
+.baymax-group b {
+  font-weight: 600;
+  color: var(--baymax-ink-2);
+}
+
+.baymax-group-count {
   font-variant-numeric: tabular-nums;
 }
-.baymax-summary-meta > * {
-  min-width: 0;
+
+.baymax-group .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--baymax-rule);
 }
-.baymax-summary-title {
+
+.baymax-group-hint {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.baymax-link {
+  font-size: 0.75rem;
+  color: var(--baymax-signal);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* ── the row card ─────────────────────────────────────────────────────────── */
+
+.baymax-card {
+  position: relative;
+  /* Title owns the full row: at a 292px column a side-by-side time label
+     squeezes it to ~160px and leaves one character on the second line. */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1875rem 0.5rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  text-align: start;
+  background: var(--baymax-paper);
+  border: 1px solid var(--baymax-rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--baymax-lift);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.baymax-card:hover {
+  border-color: var(--baymax-rule-strong);
+  box-shadow: var(--baymax-lift-hover);
+}
+
+/* Selected is a ring on the same card — never a shift. */
+.baymax-card[aria-selected='true'] {
+  border-color: var(--baymax-signal);
+  box-shadow:
+    0 0 0 1px var(--baymax-signal),
+    var(--baymax-lift);
+}
+
+.baymax-card[aria-selected='true'] .baymax-card-title {
+  font-weight: 600;
+}
+
+.baymax-card-title {
+  flex: 1 0 100%;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
-  font-size: 0.875rem;
-  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 0.8125rem;
+  line-height: 1.45;
 }
-.baymax-identity {
-  padding: 0.5rem 1rem;
+
+.baymax-card-when {
+  order: 2;
+  white-space: nowrap;
+  font-family: var(--dt-font-mono);
   font-size: 0.75rem;
-  color: var(--baymax-muted);
+  color: var(--baymax-ink-3);
+  font-variant-numeric: tabular-nums;
 }
+
+.baymax-card-when.is-late {
+  color: var(--baymax-danger);
+}
+
+.baymax-card-when.is-today {
+  color: var(--baymax-warn);
+}
+
+.baymax-card-meta {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 0.375rem;
+  min-width: 0;
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+}
+
+.baymax-card-key {
+  font-family: var(--dt-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.baymax-card-dot {
+  color: var(--baymax-rule-strong);
+}
+
+.baymax-card-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.baymax-card-owner {
+  padding-left: 0.5rem;
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--baymax-ink-2);
+}
+
+.baymax-queue-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.75rem;
+  border-top: 1px solid var(--baymax-rule);
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── states ───────────────────────────────────────────────────────────────── */
+
+.baymax-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 0.75rem;
+  background: var(--baymax-paper);
+  border: 1px solid var(--baymax-rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--baymax-lift);
+}
+
+.baymax-state.is-error {
+  border-color: color-mix(in srgb, var(--baymax-danger) 40%, transparent);
+}
+
+.baymax-state-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--baymax-ink);
+}
+
+.baymax-state-code {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--dt-font-mono);
+  font-size: 0.75rem;
+  color: var(--baymax-danger);
+}
+
+.baymax-state-desc {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--baymax-ink-3);
+}
+
+.baymax-skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.baymax-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--baymax-paper);
+  border: 1px solid var(--baymax-rule);
+  border-radius: var(--radius-lg);
+}
+
+/* Skeleton lines keep the row height of a real card, so switching projects
+   never jumps. */
+.baymax-skeleton-line {
+  display: block;
+  height: 0.5625rem;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(90deg, var(--baymax-panel) 25%, var(--baymax-chrome) 37%, var(--baymax-panel) 63%);
+  background-size: 400% 100%;
+  animation: baymax-shimmer 1.4s linear infinite;
+}
+
+.baymax-skeleton-line.is-title {
+  width: 84%;
+}
+
+.baymax-skeleton-line.is-meta {
+  width: 44%;
+}
+
+.baymax-skeleton-line.is-body {
+  width: 92%;
+}
+
+/* ── detail pane ──────────────────────────────────────────────────────────── */
+
 .baymax-main {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
   background: var(--baymax-floor);
   color: var(--baymax-ink);
-  padding: 1.5rem;
-  container: baymax-detail / inline-size;
 }
-.baymax-ticket {
-  width: 100%;
-  max-width: 40rem;
-  margin-inline: auto;
-  overflow: hidden;
-}
-.baymax-ticket h1 {
-  text-wrap: balance;
-  font-size: 1.25rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-.baymax-ticket-status {
+
+.baymax-main-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.75rem;
-  color: var(--baymax-muted);
-}
-.baymax-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.25rem 2rem;
-  margin-block: 1.5rem;
-  font-size: 0.875rem;
-}
-.baymax-facts dt {
-  color: var(--baymax-muted);
-  margin-bottom: 0.375rem;
-}
-.baymax-facts dd {
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-}
-.baymax-ticket-tabs {
-  gap: 1.25rem;
-}
-.baymax-ticket-tabs [data-slot='tabs-list'] {
-  padding-block-end: 0.75rem;
+  gap: 0.5rem;
+  padding: 0.6875rem 1.125rem;
   border-bottom: 1px solid var(--baymax-rule);
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
 }
-.baymax-comment-count {
-  color: var(--baymax-muted);
+
+.baymax-main-key {
+  font-family: var(--dt-font-mono);
+  color: var(--baymax-ink-2);
   font-variant-numeric: tabular-nums;
 }
-.baymax-description,
-.baymax-comments p {
-  font-size: 0.875rem;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+
+.baymax-main-sep {
+  color: var(--baymax-rule-strong);
 }
-.baymax-comments {
+
+.baymax-main-project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.baymax-main-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  margin-left: auto;
+  padding: 0.3125rem 0.5rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  color: var(--baymax-ink-2);
+  cursor: pointer;
+}
+
+.baymax-main-back:hover {
+  background: var(--baymax-panel);
+  color: var(--baymax-ink);
+}
+
+.baymax-main-back svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.baymax-work {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.125rem clamp(1rem, 3vw, 2.125rem) 1.625rem;
+}
+
+.baymax-work-inner {
+  max-width: 45rem;
+  margin-inline: auto;
+  container-type: inline-size;
+}
+
+/* one sheet: header + fact strip + rules, no nested cards */
+.baymax-dc {
+  overflow: hidden;
+  background: var(--baymax-paper);
+  border: 1px solid var(--baymax-rule);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--baymax-lift);
+  animation: baymax-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.baymax-dc.is-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.375rem 1.25rem;
+}
+
+.baymax-dc.is-skeleton {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 1.125rem 1.25rem;
 }
-.baymax-comment-author {
+
+.baymax-dc-empty-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.baymax-dc-head {
+  padding: 1.125rem 1.25rem 0.875rem;
+}
+
+.baymax-dc-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.baymax-chips {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.75rem;
-  font-size: 0.875rem;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
 }
-.baymax-comment-author time {
+
+.baymax-chip {
+  padding: 0.125rem 0.4375rem;
+  border: 1px solid var(--baymax-rule);
+  border-radius: var(--radius-sm);
+  background: var(--baymax-panel);
   font-size: 0.75rem;
-  color: var(--baymax-muted);
+  line-height: 1.5;
+  color: var(--baymax-ink-2);
 }
-.baymax-comments p {
-  margin-top: 0.375rem;
+
+.baymax-chip.is-state {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--baymax-signal) 8%, transparent);
+  color: var(--baymax-signal);
 }
-.baymax-comments li {
-  padding: 0.75rem 0.875rem;
-  border-radius: var(--radius-md);
-  background: var(--baymax-well);
-}
-.baymax-muted {
-  color: var(--baymax-muted);
-  font-size: 0.75rem;
-}
-.baymax-late {
+
+/* Overdue wears the destructive rung, thinned to a wash. */
+.baymax-chip.is-late {
+  border-color: color-mix(in srgb, var(--baymax-danger) 32%, transparent);
+  background: color-mix(in srgb, var(--baymax-danger) 8%, transparent);
   color: var(--baymax-danger);
 }
-.baymax-loading {
+
+.baymax-facts {
   display: grid;
-  gap: 1.5rem;
-  padding: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--baymax-rule);
+  border-bottom: 1px solid var(--baymax-rule);
+  background: color-mix(in srgb, var(--baymax-panel) 55%, var(--baymax-paper));
 }
-.baymax-detail-state {
-  max-width: 40rem;
-  margin-inline: auto;
+
+.baymax-facts > div {
+  min-width: 0;
+  padding: 0.625rem 0.875rem;
 }
+
+.baymax-facts > div + div {
+  border-left: 1px solid var(--baymax-rule);
+}
+
+.baymax-facts dt {
+  margin-bottom: 0.1875rem;
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+}
+
+.baymax-facts dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.baymax-facts dd.is-mono {
+  font-family: var(--dt-font-mono);
+}
+
+.baymax-facts dd.is-hot {
+  color: var(--baymax-danger);
+}
+
+.baymax-dc-body {
+  padding: 1rem 1.25rem 0.625rem;
+}
+
+.baymax-sec + .baymax-sec {
+  margin-top: 1.125rem;
+}
+
+.baymax-sec h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--baymax-ink-2);
+}
+
+.baymax-sec h2 .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--baymax-rule);
+}
+
+.baymax-prose {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  color: var(--baymax-ink-2);
+  text-wrap: pretty;
+}
+
+.baymax-prose.is-muted {
+  color: var(--baymax-ink-3);
+}
+
+.baymax-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.baymax-log li {
+  display: grid;
+  grid-template-columns: 3.75rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.5625rem 0;
+  border-top: 1px solid var(--baymax-rule);
+}
+
+.baymax-log li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.baymax-log time {
+  font-family: var(--dt-font-mono);
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.baymax-log-who {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--baymax-ink-2);
+}
+
+.baymax-tag {
+  padding: 0 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--baymax-signal) 28%, transparent);
+  border-radius: var(--radius-xs);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--baymax-signal);
+}
+
+.baymax-log p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.baymax-dc-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  border-top: 1px solid var(--baymax-rule);
+  background: color-mix(in srgb, var(--baymax-panel) 45%, var(--baymax-paper));
+  font-size: 0.75rem;
+  color: var(--baymax-ink-3);
+}
+
+.baymax-dc-foot .sp {
+  flex: 1;
+}
+
+.baymax-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+}
+
+.baymax-dc-foot kbd {
+  padding: 0 0.25rem;
+  border: 1px solid var(--baymax-rule);
+  border-radius: var(--radius-xs);
+  background: var(--baymax-paper);
+  font-family: var(--dt-font-kbd);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--baymax-ink-2);
+}
+
+/* A narrow sheet drops the fact strip to two columns. */
+@container (max-width: 560px) {
+  .baymax-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .baymax-facts > div:nth-child(3) {
+    border-left: 0;
+  }
+
+  .baymax-facts > div:nth-child(n + 3) {
+    border-top: 1px solid var(--baymax-rule);
+  }
+}
+
+/* ── focus & motion ───────────────────────────────────────────────────────── */
+
 .baymax-queue :focus-visible,
 .baymax-main :focus-visible,
 .baymax-main:focus-visible {
   outline: 2px solid var(--baymax-signal);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
-@container baymax-detail (max-width:420px) {
-  .baymax-facts {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
+
+@keyframes baymax-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.1875rem);
   }
-  .baymax-ticket [data-slot='card-header'] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .baymax-ticket [data-slot='card-action'] {
-    grid-column: 1;
-    grid-row: auto;
-    justify-self: start;
+
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
-@media (max-width: 760px) {
-  .baymax-main {
-    padding: 0.75rem;
+
+@keyframes baymax-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0 0;
   }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .baymax-queue *,
   .baymax-main * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .baymax-work {
+    padding: 0.75rem;
   }
 }

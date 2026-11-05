@@ -2,149 +2,199 @@ import './workbench.css'
 
 import type { ReactNode } from 'react'
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
-import { ChevronLeft } from '@/lib/icons'
+import { cn } from '@/lib/utils'
 
-import { type BaymaxIssue, type BaymaxIssueDetail, daysLate, isOpen, isSuspended, issueDay } from './api'
+import { type BaymaxIssue, type BaymaxIssueDetail, daysLate, isOpen, issueDay, isSuspended } from './api'
 
-function DueLabel({ issue }: { issue: BaymaxIssue }) {
-  const { t } = useI18n()
+type BaymaxCopy = ReturnType<typeof useI18n>['t']['baymax']
+
+/** The plan year is already on the ticket; a row reads the calendar day. */
+function shortDay(iso?: string): string {
+  const day = issueDay(iso)
+
+  return day.length === 10 ? day.slice(5) : day
+}
+
+interface When {
+  hot?: boolean
+  text: string
+  warm?: boolean
+}
+
+/** One relative fact per card: how long, or which disposition. Never a guess. */
+function whenOf(issue: BaymaxIssue, t: BaymaxCopy): When {
   const late = daysLate(issue)
 
+  if (!isOpen(issue)) {
+    return { text: shortDay(issue.estimateEndDate) }
+  }
+
+  if (isSuspended(issue)) {
+    return { text: t.groupSuspended }
+  }
+
   if (late === null) {
-    return <span>{t.baymax.noDeadline}</span>
+    return { text: t.groupUndated }
   }
 
-  if (isOpen(issue) && !isSuspended(issue) && late > 0) {
-    return <span className="baymax-late">{t.baymax.overdueDays(late)}</span>
+  if (late > 0) {
+    return { hot: true, text: t.carriedOverDays(late) }
   }
 
-  if (isOpen(issue) && !isSuspended(issue) && late === 0) {
-    return <span>{t.baymax.dueToday}</span>
+  return late === 0 ? { text: t.dueToday, warm: true } : { text: shortDay(issue.estimateEndDate) }
+}
+
+function planSpan(issue: BaymaxIssue): string {
+  const start = shortDay(issue.estimateStartDate)
+  const end = shortDay(issue.estimateEndDate)
+
+  if (start === '—' && end === '—') {
+    return '—'
   }
 
-  return <time dateTime={issue.estimateEndDate}>{issueDay(issue.estimateEndDate)}</time>
+  return start === '—' ? end : `${start} → ${end}`
 }
 
 export interface IssueSummaryCardProps {
   issue: BaymaxIssue
-  selected?: boolean
   onSelect: (issue: BaymaxIssue) => void
+  selected?: boolean
 }
 
 /** Portable read-only presentation: no query, router, store or chat dependency. */
-export function IssueSummaryCard({ issue, selected = false, onSelect }: IssueSummaryCardProps) {
+export function IssueSummaryCard({ issue, onSelect, selected = false }: IssueSummaryCardProps) {
+  const { t } = useI18n()
+  const when = whenOf(issue, t.baymax)
+
   return (
     <button
       aria-controls="baymax-detail"
-      aria-pressed={selected}
-      className="baymax-summary"
+      aria-selected={selected}
+      className="baymax-card"
       data-issue-id={issue.id}
       onClick={() => onSelect(issue)}
       type="button"
     >
-      <span className="baymax-summary-meta">
-        <span>{issue.issueKey}</span>
-        <DueLabel issue={issue} />
-      </span>
-      <span className="baymax-summary-title">{issue.title}</span>
-      <span className="baymax-summary-meta">
-        <span className="truncate">{issue.assigneeName ?? '—'}</span>
-        <span className="truncate">{issue.status?.name}</span>
+      <span className="baymax-card-title">{issue.title}</span>
+      <span className={cn('baymax-card-when', when.hot && 'is-late', when.warm && 'is-today')}>{when.text}</span>
+      <span className="baymax-card-meta">
+        <span className="baymax-card-key">{issue.issueKey}</span>
+        <span aria-hidden="true" className="baymax-card-dot">
+          ·
+        </span>
+        <span className="baymax-card-status">{issue.status?.name ?? '—'}</span>
+        <span className="baymax-card-owner">{t.baymax.ownerOf(issue.assigneeName ?? '—')}</span>
       </span>
     </button>
   )
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+function Fact({
+  children,
+  hot = false,
+  label,
+  mono = false
+}: {
+  children?: ReactNode
+  hot?: boolean
+  label: string
+  mono?: boolean
+}) {
+  const empty = children === undefined || children === null || children === ''
+  const value = empty ? '—' : children
+
   return (
     <div>
       <dt>{label}</dt>
-      <dd>{children ?? '—'}</dd>
+      <dd className={cn(mono && 'is-mono', hot && 'is-hot')} title={typeof value === 'string' ? value : undefined}>
+        {value}
+      </dd>
     </div>
   )
 }
 
 export interface IssueDetailCardProps {
   issue: BaymaxIssueDetail
-  projectName?: string
-  onBack?: () => void
 }
 
-export function IssueDetailCard({ issue, projectName, onBack }: IssueDetailCardProps) {
+/** The ticket is ONE sheet: chips, a fact strip and rules — nothing nested. */
+export function IssueDetailCard({ issue }: IssueDetailCardProps) {
   const { t } = useI18n()
-  const day = issueDay
+  const late = daysLate(issue)
+  const carried = isOpen(issue) && !isSuspended(issue) && late !== null && late > 0
+  const comments = issue.comments ?? []
 
   return (
-    <Card className="baymax-ticket" data-testid="baymax-issue-detail-card">
-      <CardHeader>
-        <CardDescription>{issue.issueKey}</CardDescription>
-        <CardTitle>
-          <h1>{issue.title}</h1>
-        </CardTitle>
-        {onBack && (
-          <CardAction>
-            <Button onClick={onBack} size="sm" variant="ghost">
-              <ChevronLeft aria-hidden="true" />
-              {t.baymax.backToQueue}
-            </Button>
-          </CardAction>
-        )}
-      </CardHeader>
-      <Separator />
-      <CardContent>
-        <div className="baymax-ticket-status">
-          <div className="flex flex-wrap gap-2">
-            {issue.status?.name && <Badge variant="secondary">{issue.status.name}</Badge>}
-            {issue.priority?.name && <Badge variant="outline">{issue.priority.name}</Badge>}
-          </div>
-          <DueLabel issue={issue} />
+    <article className="baymax-dc" data-testid="baymax-issue-detail-card">
+      <header className="baymax-dc-head">
+        <h1 className="baymax-dc-title">{issue.title}</h1>
+        <div className="baymax-chips">
+          {issue.status?.name && <span className="baymax-chip is-state">{issue.status.name}</span>}
+          {issue.priority?.name && <span className="baymax-chip">{issue.priority.name}</span>}
+          {carried && <span className="baymax-chip is-late">{t.baymax.carriedOverDays(late)}</span>}
         </div>
-        <dl className="baymax-facts">
-          <Fact label={t.baymax.project}>{projectName}</Fact>
-          <Fact label={t.baymax.colOwner}>{issue.assigneeName}</Fact>
-          <Fact label={t.baymax.planStart}>{day(issue.estimateStartDate)}</Fact>
-          <Fact label={t.baymax.planEnd}>{day(issue.estimateEndDate)}</Fact>
-          <Fact label={t.baymax.actualWorkload}>{issue.actualWorkload}</Fact>
-          <Fact label={t.baymax.lastUpdated}>{day(issue.updatedAt)}</Fact>
-        </dl>
-        <Tabs className="baymax-ticket-tabs" defaultValue="details">
-          <TabsList aria-label={t.baymax.details}>
-            <TabsTrigger value="details">{t.baymax.details}</TabsTrigger>
-            <TabsTrigger value="comments">
-              {t.baymax.comments} <span className="baymax-comment-count">{issue.comments?.length ?? 0}</span>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="details">
-            <p className="baymax-description">{issue.description || t.baymax.noDescription}</p>
-          </TabsContent>
-          <TabsContent value="comments">
-            {issue.comments?.length ? (
-              <ol className="baymax-comments">
-                {issue.comments.map(comment => (
-                  <li key={comment.id}>
-                    <div className="baymax-comment-author">
-                      <strong>{comment.authorName ?? '—'}</strong>
-                      <time dateTime={comment.createdAt}>{day(comment.createdAt)}</time>
+      </header>
+      <dl className="baymax-facts">
+        <Fact label={t.baymax.colOwner}>{issue.assigneeName}</Fact>
+        <Fact label={t.baymax.planSpan} mono>
+          {planSpan(issue)}
+        </Fact>
+        <Fact label={t.baymax.lastUpdated} mono>
+          {issue.updatedAt ? issueDay(issue.updatedAt) : undefined}
+        </Fact>
+        <Fact label={t.baymax.actualWorkload} mono>
+          {issue.actualWorkload ?? undefined}
+        </Fact>
+      </dl>
+      <div className="baymax-dc-body">
+        <section className="baymax-sec">
+          <h2>
+            {t.baymax.sectionDescription}
+            <span aria-hidden="true" className="rule" />
+          </h2>
+          <p className={cn('baymax-prose', !issue.description && 'is-muted')}>
+            {issue.description || t.baymax.noDescription}
+          </p>
+        </section>
+        <section className="baymax-sec">
+          <h2>
+            {`${t.baymax.sectionProgress} · ${comments.length}`}
+            <span aria-hidden="true" className="rule" />
+          </h2>
+          {comments.length ? (
+            <ul className="baymax-log">
+              {comments.map((comment, index) => (
+                <li key={comment.id}>
+                  <time dateTime={comment.createdAt}>{shortDay(comment.createdAt)}</time>
+                  <div>
+                    <div className="baymax-log-who">
+                      {comment.authorName ?? '—'}
+                      {index === 0 && <span className="baymax-tag">{t.baymax.latestTag}</span>}
                     </div>
                     <p>{comment.content}</p>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="baymax-muted">{t.baymax.noComments}</p>
-            )}
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-      <CardFooter>
-        <p className="baymax-muted">{t.baymax.detailHint}</p>
-      </CardFooter>
-    </Card>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="baymax-prose is-muted">{t.baymax.noComments}</p>
+          )}
+        </section>
+      </div>
+      <footer className="baymax-dc-foot">
+        <span>{t.baymax.readOnlyNote}</span>
+        <span className="sp" />
+        <span className="baymax-keys">
+          <kbd>↑</kbd>
+          <kbd>↓</kbd>
+          {t.baymax.keyboardSwitch}
+        </span>
+        <span className="baymax-keys">
+          <kbd>/</kbd>
+          {t.baymax.keyboardSearch}
+        </span>
+      </footer>
+    </article>
   )
 }

@@ -2884,12 +2884,17 @@ export interface Translations {
 
   baymax: {
     searchIssues: string
+    searchPlaceholder: string
     noDescription: string
+    noComments: string
     intro: string
     allLoaded: string
     scenes: string
     queue: string
+    queueHeading: string
+    countLabel: (count: number) => string
     focus: string
+    filterAll: string
     details: string
     backToQueue: string
     chooseIssue: string
@@ -2899,9 +2904,25 @@ export interface Translations {
     project: string
     identityUnavailable: string
     loadedScope: (loaded: number, total: number) => string
+    todayFooter: (day: string) => string
+    readOnlyNote: string
+    keyboardSwitch: string
+    keyboardSearch: string
     title: string
     refresh: string
     refreshing: string
+    groupOverdue: string
+    groupToday: string
+    groupUpcoming: string
+    groupUndated: string
+    groupSuspended: string
+    groupOverdueHint: string
+    groupTodayHint: string
+    groupUpcomingHint: string
+    groupUndatedHint: string
+    groupSuspendedHint: string
+    groupEmptyOther: string
+    viewAll: string
     statTodo: string
     statDueToday: string
     statOverdue: string
@@ -2914,13 +2935,18 @@ export interface Translations {
     noDeadline: string
     dueToday: string
     overdueDays: (days: number) => string
+    carriedOverDays: (days: number) => string
+    ownerOf: (name: string) => string
     colOwner: string
+    planSpan: string
     planStart: string
     planEnd: string
     actualWorkload: string
     lastUpdated: string
     comments: string
-    noComments: string
+    sectionDescription: string
+    sectionProgress: string
+    latestTag: string
     detailHint: string
     emptyTitle: string
     noProjectTitle: string
