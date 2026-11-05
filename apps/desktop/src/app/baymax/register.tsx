@@ -11,7 +11,7 @@
  * resolves its own icon family from that name (`nav-rail.tsx`).
  */
 
-import { BAYMAX_ROUTE, BaymaxView } from '@/app/baymax'
+import { BAYMAX_ROUTE, BaymaxListPane, BaymaxView } from '@/app/baymax'
 import {
   type RouteContribution,
   ROUTES_AREA,
@@ -33,7 +33,7 @@ export function registerBaymaxPage(): void {
     {
       id: 'baymax.page',
       area: ROUTES_AREA,
-      data: { path: BAYMAX_ROUTE } satisfies RouteContribution,
+      data: { path: BAYMAX_ROUTE, list: { render: () => <BaymaxListPane /> } } satisfies RouteContribution,
       render: () => <BaymaxView />
     },
     {

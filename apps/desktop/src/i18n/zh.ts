@@ -3481,6 +3481,24 @@ export const zh = defineLocale({
   },
 
   baymax: {
+    searchIssues: '搜索工单',
+    noDescription: '暂无描述。',
+    intro: '找到下一件要跟进的事，保留完整上下文。',
+    allLoaded: '全部已载入',
+    scenes: '工单视图',
+    queue: '工单队列',
+    focus: '聚焦筛选',
+    details: '工单详情',
+    backToQueue: '返回队列',
+    chooseIssue: '选择一条工单，展开上下文',
+    chooseIssueHint: '在队列旁查看计划、负责人和最新进展。',
+    clearFocusHint: '选择「全部已载入」查看当前视图的其他工单。',
+    retry: '重试',
+    project: '项目',
+    identityUnavailable: '暂时无法读取账号信息',
+    loadedScope: (loaded, total) => loaded < total
+      ? `计数与筛选仅涵盖已载入的 ${loaded} 条工单，当前视图共 ${total} 条。`
+      : `当前视图的 ${loaded} 条工单已全部载入，可直接计数与筛选。`,
     title: '工作台',
     refresh: '刷新',
     refreshing: '正在刷新',
@@ -3503,7 +3521,7 @@ export const zh = defineLocale({
     lastUpdated: '最近更新',
     comments: '进展评论',
     noComments: '还没有进展评论',
-    detailHint: '只读视图 — 写回工单请在对话里让 Hermes 代写、你确认',
+    detailHint: '只读视图，不会向 Baymax 提交任何更改。',
     emptyTitle: '这一组没有工单',
     noProjectTitle: '还没有可用的项目',
     noProjectDesc: '项目清单读取失败，或这个账号没有项目',

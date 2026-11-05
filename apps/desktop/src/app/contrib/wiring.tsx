@@ -24,8 +24,7 @@ import { GatewayConnectingOverlay } from '@/components/gateway-connecting-overla
 import { NotificationStack } from '@/components/notifications'
 import { DesktopOnboardingOverlay } from '@/components/onboarding'
 import { OnboardingChatGate } from '@/components/onboarding-chat/gate'
-import { findGroupOfPane } from '@/components/pane-shell/tree/model'
-import { $layoutTree, $newSessionTabAction, registerPaneCloser, setTreeGroupMinimized } from '@/components/pane-shell/tree/store'
+import { $newSessionTabAction, registerPaneCloser } from '@/components/pane-shell/tree/store'
 import {
   $workspaceMode,
   $workspaceNewSessionTarget,
@@ -51,7 +50,7 @@ import { $cronReviewRequest, setCronFocusJobId } from '@/store/cron'
 import { requestGatewayForProfile } from '@/store/gateway'
 import { reconnectGateway } from '@/store/gateway-reconnect'
 import { $interfaceMode, shownInMode } from '@/store/interface-mode'
-import { $pinnedSessionIds, pinSession, restoreWorktree, revealPaneColumn, unpinSession } from '@/store/layout'
+import { $pinnedSessionIds, pinSession, restoreWorktree, unpinSession } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
 import { $poolLimitsSettingsRequest } from '@/store/pool-limits'
 import { $previewTarget } from '@/store/preview'
@@ -117,8 +116,6 @@ import { resetProjectTreeState } from '../right-sidebar/files/use-project-tree'
 import { PersistentTerminal } from '../right-sidebar/terminal/persistent'
 import { closeAllTerminals } from '../right-sidebar/terminal/terminals'
 import {
-  $routesVersion,
-  contributedRoutes,
   CRON_ROUTE,
   navigateToWorkspacePage,
   routeSessionId,
@@ -175,16 +172,10 @@ import { useOnboardingHandoff } from './onboarding-handoff'
 import { useOnboardingKickoff } from './onboarding-kickoff'
 import { $restartPreviewServer, useTitlebarToolContributions } from './panes'
 import { type AmbientGatewayRequest, createSessionRpcDispatcher } from './session-rpc-dispatcher'
-import { sidebarRouteStep } from './sidebar-route-step'
 import { ChatRoutesSurface, SidebarSurface, StatusbarSurface, TerminalSurface } from './surfaces'
 import type { WiringActions, WiringApi } from './types'
+import { useSidebarRouteColumn } from './use-sidebar-route-column'
 import { POOL_LIMITS_SETTINGS_ROUTE } from './wiring-routing'
-
-/** Set while the sidebar is folded because the current view brings no sidebar
- *  of its own (see VIEWS_WITH_SIDEBAR). Module-scope, not a ref: it is not
- *  reactive state — just a note-to-self so returning to chat undoes OUR fold and
- *  leaves a fold the user made by hand alone. */
-let sidebarFoldedByRoute = false
 
 // Overlay views the controller mounts over the shell — lazy, load on demand.
 // The workspace-route full-page views (skills/messaging/artifacts) are the
@@ -208,7 +199,6 @@ const HANDOFF_CREATE_LEG_METHODS = new Set(['config.set', 'session.close', 'sess
 export function ContribWiring({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const location = useLocation()
-  const routesVersion = useStore($routesVersion)
   const navigate = useNavigate()
 
   const busyRef = useRef(false)
@@ -1263,31 +1253,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // so a sidebar the user collapsed by hand stays collapsed — until they switch
   // to a view whose column is a list of its own. The rule itself is a table in
   // `sidebar-route-step.ts`, where it is unit-tested.
-  useEffect(() => {
-    const tree = $layoutTree.get()
-    const group = tree ? findGroupOfPane(tree, 'sessions') : null
-
-    if (!group) {
-      return
-    }
-
-    const hasContributedList = contributedRoutes().some(route => route.path === location.pathname && route.list)
-
-    const step = sidebarRouteStep(currentView, {
-      foldedByRoute: sidebarFoldedByRoute,
-      minimized: group.minimized
-    }, hasContributedList)
-
-    sidebarFoldedByRoute = step.foldedByRoute
-
-    if (step.action === 'fold') {
-      setTreeGroupMinimized(group.id, true)
-    } else if (step.action === 'reveal') {
-      revealPaneColumn('sessions')
-    } else if (step.action === 'unfold') {
-      setTreeGroupMinimized(group.id, false)
-    }
-  }, [currentView, location.pathname, routesVersion])
+  useSidebarRouteColumn()
 
   const sidebarNode = useMemo(
     () => <SidebarSurface actions={actions} currentView={currentView} />,

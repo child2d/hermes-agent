@@ -3453,6 +3453,24 @@ export const en: Translations = {
   },
 
   baymax: {
+    searchIssues: 'Search issues',
+    noDescription: 'No description provided.',
+    intro: 'Find the next issue. Keep the context.',
+    allLoaded: 'All loaded',
+    scenes: 'Work views',
+    queue: 'Issue queue',
+    focus: 'Focus filters',
+    details: 'Issue details',
+    backToQueue: 'Back to queue',
+    chooseIssue: 'Choose an issue to read',
+    chooseIssueHint: 'Read its dates, owner and progress beside the queue.',
+    clearFocusHint: 'Choose All loaded to see the rest of this view.',
+    retry: 'Retry',
+    project: 'Project',
+    identityUnavailable: 'Account details unavailable',
+    loadedScope: (loaded, total) => loaded < total
+      ? `Counts and filters cover the ${loaded} loaded issues, not all ${total}.`
+      : `Counts and filters cover all ${loaded} loaded issues.`,
     title: 'Workbench',
     refresh: 'Refresh',
     refreshing: 'Refreshing',
@@ -3475,7 +3493,7 @@ export const en: Translations = {
     lastUpdated: 'Last updated',
     comments: 'Progress comments',
     noComments: 'No progress comments yet',
-    detailHint: 'Read-only — ask Hermes to write back, then confirm the card',
+    detailHint: 'Read-only view. No changes are sent to Baymax.',
     emptyTitle: 'Nothing in this group',
     noProjectTitle: 'No project available',
     noProjectDesc: 'The project list could not be read, or this account has none',

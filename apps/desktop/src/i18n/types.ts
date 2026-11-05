@@ -2883,6 +2883,22 @@ export interface Translations {
   }
 
   baymax: {
+    searchIssues: string
+    noDescription: string
+    intro: string
+    allLoaded: string
+    scenes: string
+    queue: string
+    focus: string
+    details: string
+    backToQueue: string
+    chooseIssue: string
+    chooseIssueHint: string
+    clearFocusHint: string
+    retry: string
+    project: string
+    identityUnavailable: string
+    loadedScope: (loaded: number, total: number) => string
     title: string
     refresh: string
     refreshing: string
