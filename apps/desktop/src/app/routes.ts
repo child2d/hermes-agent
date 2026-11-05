@@ -94,6 +94,10 @@ export interface RouteContribution {
   /** Optional roster hosted by the standing list column, not another pane. */
   list?: {
     render: () => ReactNode
+    /** Main pane stays the conversation beside this roster. Bot Mode's roster
+     *  opens bot chats, so the chat must survive beside it; a route whose main
+     *  pane is its own page (Baymax) leaves this off and keeps its page. */
+    keepChat?: boolean
     /** Keep this roster beside chats owned by this workspace. */
     workspaceMode?: 'sessions' | 'bots'
   }

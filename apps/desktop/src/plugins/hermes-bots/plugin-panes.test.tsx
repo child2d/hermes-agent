@@ -182,7 +182,7 @@ describe('the roster surface', () => {
     const page = harness.find('page')!
     expect(page.area).toBe('routes')
     expect(page.data!.path).toBe('/bots')
-    expect(page.data!.list).toEqual({ render: expect.any(Function), workspaceMode: 'bots' })
+    expect(page.data!.list).toEqual({ keepChat: true, render: expect.any(Function), workspaceMode: 'bots' })
 
     const nav = harness.find('nav')!
     expect(nav.area).toBe('sidebar.nav')

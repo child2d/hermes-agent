@@ -219,7 +219,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
         <Route
           element={page(
             <>
-              {route.list ? chatView : null}
+              {route.list?.keepChat ? chatView : null}
               <ContribBoundary id={route.key}>
                 <ContribRender render={route.render} />
               </ContribBoundary>

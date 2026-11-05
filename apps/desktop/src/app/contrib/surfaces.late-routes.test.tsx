@@ -42,11 +42,11 @@ afterEach(() => {
 })
 
 describe('ChatRoutesSurface late-registered plugin routes', () => {
-  it('keeps the conversation in main when the route supplies a list-column roster', () => {
+  it('keeps the conversation in main when the roster asks to keep chat', () => {
     const dispose = registry.register({
       area: 'routes',
       id: 'bots-list:page',
-      data: { path: '/bots', list: { render: () => <div data-testid="bot-roster" /> } },
+      data: { path: '/bots', list: { keepChat: true, render: () => <div data-testid="bot-roster" /> } },
       render: () => <div data-testid="bot-route-lifecycle" />
     })
 
@@ -59,6 +59,27 @@ describe('ChatRoutesSurface late-registered plugin routes', () => {
       expect(screen.getByTestId('chat-view')).toBeTruthy()
       expect(screen.getByTestId('bot-route-lifecycle')).toBeTruthy()
       expect(screen.queryByTestId('bot-roster')).toBeNull()
+    } finally {
+      dispose()
+    }
+  })
+
+  it('shows the route page in main when a roster does not keep chat', () => {
+    const dispose = registry.register({
+      area: 'routes',
+      id: 'roster-only-page:page',
+      data: { path: '/roster-page', list: { render: () => <div data-testid="issue-roster" /> } },
+      render: () => <div data-testid="issue-page" />
+    })
+
+    try {
+      render(
+        <MemoryRouter initialEntries={['/roster-page']}>
+          <ChatRoutesSurface actions={{} as unknown as WiringActions} />
+        </MemoryRouter>
+      )
+      expect(screen.getByTestId('issue-page')).toBeTruthy()
+      expect(screen.queryByTestId('chat-view')).toBeNull()
     } finally {
       dispose()
     }

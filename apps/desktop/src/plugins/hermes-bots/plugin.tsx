@@ -464,7 +464,7 @@ export default {
       area: ROUTES_AREA,
       data: {
         path: BOTS_PATH,
-        list: { render: () => <BotsPane />, workspaceMode: 'bots' }
+        list: { keepChat: true, render: () => <BotsPane />, workspaceMode: 'bots' }
       } satisfies RouteContribution,
       render: () => <BotsPage />
     })
