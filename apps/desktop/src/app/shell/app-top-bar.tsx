@@ -32,8 +32,15 @@ export function AppTopBar({ children }: { children?: React.ReactNode }) {
 
   return (
     <BandRowContext.Provider value={row}>
+      {/* THE TOP ISLAND. Its surface has to be the rung its own subtree paints
+          through: a zone's portaled band still wears `--ui-region-chrome`
+          (tree-group.tsx) and would otherwise punch a gray bar through the
+          middle of a white island — a white rim around a chrome-colored row.
+          Rebinding that rung HERE keeps every band (and anything it nests) on
+          the island's own surface, from the container, without touching the
+          band; no extra painter, same one fill. */}
       <div
-        className="relative flex shrink-0 items-stretch bg-(--ui-region-chrome)"
+        className="relative flex shrink-0 items-stretch rounded-(--island-radius) bg-(--island-surface) [--ui-region-chrome:var(--island-surface)] [box-shadow:var(--island-cast)]"
         data-slot="app-top-bar"
         style={{ height: `var(${BAND_HEIGHT_VAR}, ${APP_BAND_FALLBACK_HEIGHT}px)` }}
       >

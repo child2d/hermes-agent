@@ -1342,8 +1342,10 @@ export function ContribWiring({ children }: { children: ReactNode }) {
             // Centered in the LIVE top band, not the 34px minimum: a lone
             // session keeps a 44px title band, and a fixed 5px top would leave
             // every control in the row 5px high against it.
+            // ...plus the shell's own sea padding: the cluster is FIXED to the
+            // window, while the band it must sit in moved down by that inset.
             '--titlebar-controls-top':
-              'calc((var(--pane-titleband-height, 34px) - var(--titlebar-control-size, 24px)) / 2)',
+              'calc((var(--pane-titleband-height, 34px) - var(--titlebar-control-size, 24px)) / 2 + var(--shell-island-inset, 0px))',
             '--titlebar-controls-width': leftToolsWidth,
             '--titlebar-controls-y-nudge': titlebarControlsYNudge(titlebarChrome),
             '--titlebar-tools-right': titlebarToolsRight,

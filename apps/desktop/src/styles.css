@@ -453,6 +453,24 @@
        the sidebar/editor aliases are `transparent` — which is exactly why the
        list and the rail used to be the same pixels. */
     --ui-sidebar-panel-background: var(--ui-region-panel);
+    /* THE ISLANDS — the shell's four surfaces (top bar, rail, content card,
+       statusbar) float on a "sea" instead of the window being one chrome field.
+       Literal values, overridden in `:root.dark`: the shell's painters read these
+       variables AT THE CALL SITE (`bg-(--island-sea)`,
+       `[box-shadow:var(--island-cast)]`) and never through `@theme`, because a
+       `shadow-*` utility bakes its value into the built CSS — a light-mode cast
+       would survive into dark. */
+    --island-gap: 0.5rem;
+    /* How far the shell's own padding pushes the top band down. The caption
+       clusters are `fixed` to the WINDOW, so they have to add this back; shells
+       without islands (the browser popout) leave it at 0. */
+    --shell-island-inset: 0px;
+    /* One rung above `rounded-xl` at the default 0.8 scalar (≈14.4px): the
+       islands read as cards in the window, not as clipped panels. */
+    --island-radius: calc(var(--radius-scalar) * 1.125rem);
+    --island-sea: #e8eaee;
+    --island-surface: #ffffff;
+    --island-cast: 0 1px 2px rgba(16, 24, 40, 0.05), 0 10px 26px -20px rgba(16, 24, 40, 0.35);
     /* The four surfaces the app paints are derived in ONE place —
        `surfaceRamp()` in themes/context.tsx writes `--dt-surface-*` from the
        theme seeds, per mode, as concrete values: `raised` (the composer card,
@@ -758,6 +776,13 @@
     --ui-region-transcript: #030712; /* gray-950 */
     --ui-region-panel: #111827; /* gray-900 */
     --ui-region-chrome: #1f2937; /* gray-800 */
+    /* Islands, dark: the sea goes BELOW the window's floor — a well the islands
+       sit in — and each surface takes the light rung, so the gap (not a
+       hairline) is what separates them. The inset hairline is the only top edge
+       a near-black surface can show. */
+    --island-sea: #08090b;
+    --island-surface: #14161a;
+    --island-cast: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 1px 1px rgba(0, 0, 0, 0.45), 0 14px 34px -24px #000;
     --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 12%, transparent);
     --composer-ring-strength: 1.3;
     --backdrop-invert-mul: 0;

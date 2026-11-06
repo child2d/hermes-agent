@@ -51,18 +51,19 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
   useEffect(publishWorkspaceGeometry, [])
 
   return (
-    // THE CARD: the content area owns the geometry (radius + the left/top cast),
-    // and its children are just content inside it — so the top-left corner is
-    // the SAME corner whether the list column is showing or has folded and the
-    // chat spans the whole width. It has to be this box: it starts at the
-    // activity bar's right edge and the top bar's lower edge, exactly the two
-    // edges the cast lands on. `overflow-hidden` clips whatever pane is leftmost
-    // / topmost into the corner; the shadow is the box's own, so it is never
-    // clipped by that and needs no clip margin.
+    // THE CARD: the content area is one of the window's four islands — it owns
+    // the geometry (radius + cast on all four sides) and its children are just
+    // content inside it, so every corner is the SAME corner whether the list
+    // column is showing or has folded and the chat spans the whole width. It has
+    // to be this box: it floats on the sea like the rail and the band. The cast
+    // is the island's own (`--island-cast`, literal per mode — a `shadow-*`
+    // utility would bake the light value in), so the box never clips it;
+    // `overflow-hidden` clips whatever pane is leftmost / topmost into the
+    // corner.
     <div
       className={cn(
-        'relative flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-tl-2xl',
-        '[box-shadow:-0.125rem_0_0.375rem_-0.125rem_var(--ui-panel-cast),0_-0.125rem_0.375rem_-0.125rem_var(--ui-band-cast)]'
+        'relative flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-(--island-radius)',
+        '[box-shadow:var(--island-cast)]'
       )}
       data-slot="content-card"
     >

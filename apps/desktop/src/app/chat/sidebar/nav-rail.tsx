@@ -49,8 +49,8 @@ function railIcon(item: SidebarNavItem) {
   return { Icon: lucide ?? item.icon, svg: Boolean(lucide) }
 }
 
-/** The rail itself: the window's chrome surface at full window height, with one
- *  hairline on the list's side. Two things make it read as a COLUMN instead of
+/** The rail itself: one of the window's four ISLANDS (a rounded surface on the
+ *  sea, cast onto it). Two things make it read as a COLUMN instead of
  *  dissolving into the list beside it:
  *
  *  ① it spans the whole window — it starts at y=0 (beside the top band) and runs
@@ -58,17 +58,17 @@ function railIcon(item: SidebarNavItem) {
  *     (controller.tsx). Before, it began under the titlebar and ended above the
  *     statusbar, so an element inspection found chrome above and below it that
  *     belonged to nobody.
- *  ② it PAINTS. It wore `--ui-sidebar-surface-background`, which under
- *     `data-hermes-glass` is `transparent` (styles.css) — the exact value the
- *     session list beside it wears, so the two were literally the same pixels.
- *     The frame surface is the ramp's darkest rung (`raised > page > transcript >
- *     frame`), which is where Codex puts its activity bar.
+ *  ② it PAINTS its own island surface (`--island-surface`) and floats on the
+ *     sea: the gap between this column and the content card is background, not
+ *     a border. Before the island shell it wore `--ui-region-chrome`, the same
+ *     rung as the band and the zone gutters, so the whole window read as one
+ *     chrome field with a hairline drawn through it.
  *
  * Its WIDTH is restated in two core places that must move with it:
  * `tree-group.tsx` (the collapsed strip's `w-*`) and `track-model.ts`
  * (`MINIMIZED_RAIL_TRACK`). */
 const RAIL_COLUMN =
-  'flex w-13 shrink-0 flex-col bg-(--ui-region-chrome) max-[47.5rem]:hidden'
+  'flex w-13 shrink-0 flex-col overflow-hidden rounded-(--island-radius) bg-(--island-surface) max-[47.5rem]:hidden [box-shadow:var(--island-cast)]'
 
 /** The icon column's own rhythm, a child of RAIL_COLUMN so the paint can cover
  *  the full height while the glyphs still start below the top band. */

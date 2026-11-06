@@ -880,31 +880,31 @@ export function ContribController() {
       <ContribWiring>
         <AppContextMenu />
         <div
-          className="flex h-screen min-h-0 w-screen flex-col bg-(--ui-region-chrome) text-(--ui-text-primary)"
+          className="flex h-screen min-h-0 w-screen flex-col gap-(--island-gap) bg-(--island-sea) p-(--island-gap) text-(--ui-text-primary)"
           // Window-glass hook: this div and the sidebar-wrapper above it are
           // the app shell's two full-window opaque painters; the
           // [data-hermes-glass] rules in styles.css clear them so the tint
           // painted by <body> is the only thing between the page and the
-          // vibrancy material.
+          // vibrancy material. With islands the cleared painter is the SEA, so
+          // under glass the gaps between the four surfaces show the window
+          // material — the intended look, not a leak.
           data-contrib-shell=""
-          style={{ '--titlebar-height': '0px' } as CSSProperties}
+          style={{ '--shell-island-inset': 'var(--island-gap)', '--titlebar-height': '0px' } as CSSProperties}
         >
           {/* L1: the window's top bar — ONE element across the whole window, above
               the rail as well as above the panes. Zones hand their bands to it
               (app-top-bar.tsx) instead of drawing the row themselves.
               L2: everything under it splits rail | A zone; A zone holds the pane
-              tree and the statusbar. */}
+              tree and the statusbar. Each of the four is an island (its own
+              radius + cast) and the sea is what shows in the gaps. */}
           <AppTopBar>
-            <div className="flex min-h-0 min-w-0 flex-1">
+            <div className="flex min-h-0 min-w-0 flex-1 gap-(--island-gap)">
               <AppRail />
-              {/* The surface the content card's corner shows THROUGH: the card
-                  clips its own children (the zones' chrome background included),
-                  so the notch between its square corner and its rounded one has
-                  to be backed one level up — otherwise glass mode's cleared shell
-                  painters leave the window material showing there, and the corner
-                  reads as a stray light wedge instead of chrome. Same rung as the
-                  band and the rail, for the same reason. */}
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--ui-region-chrome)">
+              {/* The column paints NOTHING: the content card's rounded corners
+                  are backed by the window's sea one level up, the same way the
+                  gaps between the islands are. Painting it would close the
+                  corners with a second full-height surface. */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-(--island-gap)">
                 <LayoutTreeRoot titlebar />
 
                 {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
@@ -913,8 +913,17 @@ export function ContribController() {
                 {/* The REAL statusbar (model pill, command center, agents, …) with
                   statusBar.left/right contributions merged in. Unmounted — not
                   just hidden — while toggled off, so its 15s status poll and the
-                  per-turn readouts stop with it. */}
-                {statusbarVisible && <WiredPane part="statusbar" />}
+                  per-turn readouts stop with it.
+
+                  Its island wraps the contribution; the component keeps painting
+                  `--ui-sidebar-surface-background`, which this wrapper rebinds to
+                  the island surface so the bar is ONE tone instead of a gray
+                  strip inside a rounded white box. */}
+                {statusbarVisible && (
+                  <div className="shrink-0 overflow-hidden rounded-(--island-radius) bg-(--island-surface) [--ui-sidebar-surface-background:var(--island-surface)] [box-shadow:var(--island-cast)]">
+                    <WiredPane part="statusbar" />
+                  </div>
+                )}
               </div>
             </div>
           </AppTopBar>
