@@ -155,6 +155,78 @@ export function enterpriseHermesHomeFor(
  */
 export type EnterpriseHomeDiscardReason = 'personal-root' | 'other-environment'
 
+/**
+ * Variables an enterprise build must never inherit from the process that
+ * launched it.
+ *
+ * `HERMES_HOME` is only the first half of the isolation story
+ * (`enterpriseHomeSelection` above). A desktop app started from another
+ * environment's agent shell — the normal way these builds get exercised —
+ * inherits that PARENT's session identity and engine pointers too, and those
+ * make an isolated install behave as if it were the other one:
+ *
+ * - `HERMES_SESSION_*` / `HERMES_UI_SESSION_ID` name the parent's session, and
+ *   the spawned backend opens on that id instead of minting its own.
+ * - `HERMES_PARENT_PID` / `HERMES_PARENT_NONCE` / `HERMES_PARENT_START_MARKER` /
+ *   `HERMES_SPAWN` tie the child to the parent's watchdog lineage; this app
+ *   publishes its own for its own backend.
+ * - `HERMES_SITE` / `HERMES_RUNTIME_DIR` / `HERMES_WEB_DIST` /
+ *   `HERMES_SERVE_HEADLESS` point at the other app's bundle (a test build that
+ *   inherited `/Applications/Plankton` loaded the production runtime) or at
+ *   another environment's engine home.
+ *
+ * Everything here is either re-supplied by this app (engine pointers at spawn
+ * time, the watchdog lineage, per-turn session ids) or describes a session that
+ * is not this process's. `HERMES_DESKTOP_*` is deliberately absent: those are
+ * how a dev run, a sandbox launch and a multi-instance rehearsal aim the shell.
+ */
+export const ENTERPRISE_INHERITED_ENV_KEYS: readonly string[] = Object.freeze([
+  // Parent session identity.
+  'HERMES_CRON_SESSION',
+  'HERMES_GATEWAY_SESSION',
+  'HERMES_SESSION_CHAT_ID',
+  'HERMES_SESSION_CHAT_NAME',
+  'HERMES_SESSION_CHAT_TYPE',
+  'HERMES_SESSION_ID',
+  'HERMES_SESSION_KEY',
+  'HERMES_SESSION_MESSAGE_ID',
+  'HERMES_SESSION_PARENT_CHAT_ID',
+  'HERMES_SESSION_PLATFORM',
+  'HERMES_SESSION_PROFILE',
+  'HERMES_SESSION_SCOPE_ID',
+  'HERMES_SESSION_SOURCE',
+  'HERMES_SESSION_THREAD_ID',
+  'HERMES_SESSION_USER_ID',
+  'HERMES_SESSION_USER_ID_ALT',
+  'HERMES_SESSION_USER_NAME',
+  'HERMES_UI_SESSION_ID',
+  // Parent watchdog lineage (this app publishes its own, see
+  // parent-process-identity.ts).
+  'HERMES_PARENT_NONCE',
+  'HERMES_PARENT_PID',
+  'HERMES_PARENT_START_MARKER',
+  'HERMES_SPAWN',
+  // Engine pointers that name another app bundle or another environment's home.
+  'HERMES_RUNTIME_DIR',
+  'HERMES_SERVE_HEADLESS',
+  'HERMES_SITE',
+  'HERMES_WEB_DIST'
+])
+
+/** The inherited keys present in `env`, for an enterprise identity. Empty for
+ *  every other build, so upstream resolution stays bit-for-bit unchanged.
+ *  Pure: the caller removes them, which keeps the decision behavior-testable. */
+export function enterpriseAmbientEnvScrub(
+  env: NodeJS.ProcessEnv,
+  identity: EnterpriseIdentity | null | undefined
+): string[] {
+  if (!identity?.enterprise || !env) {
+    return []
+  }
+
+  return ENTERPRISE_INHERITED_ENV_KEYS.filter(key => Object.prototype.hasOwnProperty.call(env, key))
+}
+
 /** The product root every environment's engine home lives under:
  *  `~/.plankton` (POSIX) / `%LOCALAPPDATA%\plankton` (Windows). */
 export function enterpriseProductRoot(options: {

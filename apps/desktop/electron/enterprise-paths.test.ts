@@ -5,6 +5,7 @@ import { test } from 'vitest'
 import { resolveDesktopHermesHome } from './data-paths'
 import {
   ENTERPRISE_HOME_SEGMENTS,
+  enterpriseAmbientEnvScrub,
   ENTERPRISE_WINDOWS_HOME_SEGMENTS,
   enterpriseHermesHomeFor,
   enterpriseHomeIsolationIssue,
@@ -432,4 +433,81 @@ test('windows: an inherited %LOCALAPPDATA%\\hermes is discarded too', () => {
   assert.equal(got.discarded, 'C:\\Users\\u\\AppData\\Local\\hermes')
   assert.equal(got.home, 'C:\\Users\\u\\AppData\\Local\\plankton\\engine\\home')
   assert.equal(got.isolationIssue, null)
+})
+
+test('an enterprise build drops the parent environment session identity', () => {
+  const env = {
+    HERMES_SESSION_ID: '20261105_084714_57b764',
+    HERMES_SESSION_KEY: '20261105_084714_57b764',
+    HERMES_SESSION_PROFILE: 'default',
+    HERMES_SESSION_SOURCE: 'desktop',
+    HERMES_UI_SESSION_ID: '24cf713b',
+    HERMES_GATEWAY_SESSION: '1',
+    HERMES_CRON_SESSION: '',
+    HERMES_DESKTOP: '1',
+    HERMES_DESKTOP_DEV_SERVER: 'http://127.0.0.1:5174'
+  }
+
+  const scrubbed = enterpriseAmbientEnvScrub(env, { enterprise: true })
+
+  assert.deepEqual(scrubbed.sort(), [
+    'HERMES_CRON_SESSION',
+    'HERMES_GATEWAY_SESSION',
+    'HERMES_SESSION_ID',
+    'HERMES_SESSION_KEY',
+    'HERMES_SESSION_PROFILE',
+    'HERMES_SESSION_SOURCE',
+    'HERMES_UI_SESSION_ID'
+  ])
+})
+
+test('an enterprise build drops the parent watchdog lineage and foreign engine pointers', () => {
+  const env = {
+    HERMES_PARENT_NONCE: 'n',
+    HERMES_PARENT_PID: '36428',
+    HERMES_PARENT_START_MARKER: 'winms:1',
+    HERMES_SPAWN: 'v1:-:serve:36428:-',
+    HERMES_RUNTIME_DIR: '/Applications/Plankton',
+    HERMES_SERVE_HEADLESS: '1',
+    HERMES_SITE: '/Applications/Plankton',
+    HERMES_WEB_DIST: '/Users/u/.plankton/dev/engine/home/hermes-agent/hermes_cli/web_dist',
+    PATH: '/usr/bin',
+    HERMES_DESKTOP_USER_DATA_DIR: '/tmp/rehearsal'
+  }
+
+  const scrubbed = enterpriseAmbientEnvScrub(env, { enterprise: true })
+
+  // Engine pointers and lineage go; PATH and the DESKTOP_* knobs stay (they are
+  // how a sandbox launch or a multi-instance rehearsal aims the shell).
+  assert.deepEqual(scrubbed.sort(), [
+    'HERMES_PARENT_NONCE',
+    'HERMES_PARENT_PID',
+    'HERMES_PARENT_START_MARKER',
+    'HERMES_RUNTIME_DIR',
+    'HERMES_SERVE_HEADLESS',
+    'HERMES_SITE',
+    'HERMES_SPAWN',
+    'HERMES_WEB_DIST'
+  ])
+  assert.ok(!scrubbed.includes('PATH'))
+  assert.ok(!scrubbed.includes('HERMES_DESKTOP_USER_DATA_DIR'))
+})
+
+test('non-enterprise variants scrub nothing, and an already-clean env reports nothing', () => {
+  const env = { HERMES_SESSION_ID: 'parent', HERMES_SITE: '/Applications/Plankton' }
+
+  assert.deepEqual(enterpriseAmbientEnvScrub(env, { enterprise: false }), [])
+  assert.deepEqual(enterpriseAmbientEnvScrub(env, null), [])
+  assert.deepEqual(enterpriseAmbientEnvScrub({ PATH: '/usr/bin' }, { enterprise: true }), [])
+})
+
+test('scrubbing leaves the env object usable and does not invent keys', () => {
+  const env: NodeJS.ProcessEnv = { HERMES_SESSION_ID: 'parent', KEEP: '1' }
+
+  for (const key of enterpriseAmbientEnvScrub(env, { enterprise: true })) {
+    delete env[key]
+  }
+
+  assert.deepEqual(env, { KEEP: '1' })
+  assert.deepEqual(enterpriseAmbientEnvScrub(env, { enterprise: true }), [])
 })
