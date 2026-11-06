@@ -1,37 +1,24 @@
 /**
- * The avatar editor shared by Edit Profile and New Bot: shape grid + color
- * swatches, the Generate and Upload tabs, and the petdex Pet tab.
+ * The avatar editor shared by Edit Profile and New Bot: character portraits,
+ * the Generate and Upload tabs, and the petdex Pet tab.
  */
 
 import {
   Button,
+  CHARACTER_AVATARS,
   cn,
   Codicon,
-  ColorSwatches,
+  defaultCharacterAvatar,
   GlyphSpinner,
   host,
-  PROFILE_SWATCHES,
   RowButton,
   SegmentedControl,
   Textarea,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
+  useI18n,
   useValue
 } from '@hermes/plugin-sdk'
 import { useState } from 'react'
 
-import {
-  AVATAR_PICKER_SHAPES,
-  avatarColor,
-  BLOB_KINDS,
-  blobatarSvg,
-  blobShapeString,
-  BotFace,
-  defaultShapeFor,
-  isBlobShape,
-  parseBlobShape
-} from './avatar'
 import {
   $imagenAvailable,
   generateAvatarImage,
@@ -55,8 +42,9 @@ interface AvatarPickerProps {
   shape: string
 }
 
-/** Shape grid + color swatches, shared by Edit Profile and New Bot. */
-export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generateSeed }: AvatarPickerProps) {
+/** Approved character portraits, shared by Edit Profile and New Bot. */
+export function AvatarPicker({ image, onShape, onImage, generateSeed }: AvatarPickerProps) {
+  const { locale } = useI18n()
   const b = useBots()
   const pickerName = generateSeed?.name || 'agent'
   const imagen = useValue($imagenAvailable)
@@ -135,114 +123,41 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
         value={tab}
       />
       {image && tab !== 'generate' ? (
-        <Button onClick={() => onImage(null)} size="sm" type="button" variant="ghost">
+        <Button
+          onClick={() => {
+            onShape('character')
+            onImage(null)
+          }}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
           {b.avatar.removeImage}
         </Button>
       ) : null}
       {tab === 'bot' ? (
-        isBlobShape(shape) && blobatarSvg ? (
-          (() => {
-            const { seedPart, kind } = parseBlobShape(shape, pickerName)
-            const locked = Boolean(seedPart)
-
-            return (
-              <div className="grid justify-items-center gap-3">
-                {/* Silhouette pins: Auto (name decides) + the six blob kinds. */}
-                <div className="grid grid-cols-4 justify-items-center gap-1.5">
-                  {['', ...BLOB_KINDS].map(k => (
-                    <Tooltip><TooltipTrigger asChild>
-                      <RowButton
-                        aria-label={k || b.editor.autoHint}
-                        className={cn(
-                          'flex size-11 items-center justify-center rounded-md transition-colors hover:bg-(--chrome-action-hover)',
-                          k === kind && !image && 'ring-1 ring-(--ui-accent)'
-                        )}
-                        onClick={() => {
-                          onImage(null)
-                          onShape(blobShapeString(seedPart, k))
-                        }}
-                      >
-                        {k ? (
-                          <BotFace
-                            color={avatarColor(color, pickerName)}
-                            name={pickerName}
-                            shape={blobShapeString(seedPart, k)}
-                            size={32}
-                          />
-                        ) : (
-                          <span className="text-2xs text-(--ui-text-tertiary)">{b.editor.auto}</span>
-                        )}
-                      </RowButton>
-                    </TooltipTrigger><TooltipContent>{k || b.editor.autoHint}</TooltipContent></Tooltip>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    onClick={() => {
-                      onImage(null)
-                      onShape(blobShapeString(Math.random().toString(36).slice(2, 10), kind))
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Codicon className="mr-1 text-sm" name="refresh" />
-                    {b.avatar.randomize}
-                  </Button>
-                  <Button
-                    onClick={() => onShape(blobShapeString(locked ? '' : pickerName, kind))}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Codicon className="mr-1 text-sm" name={locked ? 'unlock' : 'lock'} />
-                    {locked ? b.editor.unlock : b.editor.lockFace}
-                  </Button>
-                </div>
-                <div className="text-center text-2xs text-(--ui-text-quaternary)">
-                  {locked ? b.editor.lockedHint : b.editor.unlockedHint}
-                </div>
-                <Button
-                  className="text-(--ui-text-tertiary)"
-                  onClick={() => onShape(defaultShapeFor(pickerName))}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  {b.avatar.classicShapes}
-                </Button>
-              </div>
-            )
-          })()
-        ) : (
-          <div className="grid justify-items-center gap-3">
-            <div className="grid grid-cols-4 justify-items-center gap-1.5">
-              {(blobatarSvg ? ['blobatar', ...AVATAR_PICKER_SHAPES] : AVATAR_PICKER_SHAPES).map(s => (
-                <Tooltip><TooltipTrigger asChild>
-                  <RowButton
-                    aria-label={s === 'blobatar' ? b.avatar.blobFromName : s}
-                    className={cn(
-                      'flex size-11 items-center justify-center rounded-md transition-colors hover:bg-(--chrome-action-hover)',
-                      s === shape && !image && 'ring-1 ring-(--ui-accent)'
-                    )}
-                    onClick={() => {
-                      onImage(null)
-                      onShape(s)
-                    }}
-                  >
-                    <BotFace color={avatarColor(color, pickerName)} name={pickerName} shape={s} size={32} />
-                  </RowButton>
-                </TooltipTrigger><TooltipContent>{s === 'blobatar' ? b.avatar.blobFromName : undefined}</TooltipContent></Tooltip>
-              ))}
-            </div>
-            <ColorSwatches
-              clearLabel={b.avatar.matchTheName}
-              onChange={onColor}
-              swatches={PROFILE_SWATCHES}
-              value={color}
-            />
-          </div>
-        )
+        <div className="grid grid-cols-6 justify-items-center gap-1.5" data-testid="character-avatar-picker">
+          {CHARACTER_AVATARS.map(avatar => (
+            <RowButton
+              aria-label={locale.startsWith('zh') ? avatar.zh : avatar.en}
+              aria-pressed={image === avatar.image || (!image && defaultCharacterAvatar(pickerName).id === avatar.id)}
+              className={cn(
+                'flex size-11 items-center justify-center rounded-md transition-colors hover:bg-(--chrome-action-hover)',
+                (image === avatar.image || (!image && defaultCharacterAvatar(pickerName).id === avatar.id)) &&
+                  'ring-1 ring-(--ui-accent)'
+              )}
+              data-character-avatar={avatar.id}
+              key={avatar.id}
+              onClick={() => {
+                onShape('character')
+                onImage(avatar.image)
+              }}
+              type="button"
+            >
+              <img alt="" className="size-10 object-contain" height={40} src={avatar.image} width={40} />
+            </RowButton>
+          ))}
+        </div>
       ) : null}
       {tab === 'generate' ? (
         imagen ? (

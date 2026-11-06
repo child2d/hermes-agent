@@ -243,6 +243,15 @@ Notes:
 `warn`, `destructive`, `outline`, `solid` (primary fill — icon-corner counts).
 Sizes: `default`, `xs`, `overlay` (titlebar glyph counts).
 
+## Character avatars
+
+Bot creation and Edit Profile offer the same approved character catalog. Profile
+identity marks read the same persisted avatar asset, falling back to stable
+name-derived character art. Uploaded, generated, and pet images take precedence;
+reset restores the name-derived default without writing it as a custom image.
+Portraits retain their transparent canvas (`object-fit: contain`), not a colored
+shape or a clipped photo mask. Catalog labels are maintained in English/Chinese.
+
 ## Profile rail
 
 The profile rail keeps its create/import actions outside the scrolling squares.

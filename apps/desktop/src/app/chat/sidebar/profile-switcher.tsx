@@ -56,7 +56,6 @@ import { sortConnectionsForDisplay } from '@/lib/connection-display'
 import { triggerHaptic } from '@/lib/haptics'
 import { Loader2 } from '@/lib/icons'
 import { PROFILE_SWATCHES, profileColorSoft, resolveProfileColor } from '@/lib/profile-color'
-import { profileShortLabel } from '@/lib/profile-short-label'
 import {
   REORDER_DRAG_TRANSITION_CSS,
   REORDER_RAIL_TRANSITION,
@@ -1043,8 +1042,8 @@ function RestDropdownItem({
           <ProfileGlyph
             aria-hidden="true"
             color={resolveProfileColor(agent.profile, colors)}
-            isDefault={agent.isDefault}
-            name={agent.profile}
+            connectionId={agent.connectionId}
+            isDefault={agent.isDefault} name={agent.profile}
           />
           <span className="truncate">{agent.profile}</span>
           {summary && <ProfileStatusDot summary={summary} />}
@@ -1306,7 +1305,7 @@ function RestSquare({
                     {pending ? (
                       <Loader2 aria-hidden="true" className="size-3 animate-spin" />
                     ) : (
-                      profileShortLabel(agent.profile)
+                      <ProfileGlyph color={color} connectionId={agent.connectionId} isDefault={agent.isDefault} name={agent.profile} />
                     )}
                     {summary && (
                       <span className="absolute -bottom-0.5 -right-0.5">
@@ -1534,7 +1533,7 @@ function ProfileSquare({
                     onPointerMove={notePointerMove}
                     onPointerUp={clearPress}
                   >
-                    {profileShortLabel(label)}
+                    <ProfileGlyph color={color} connectionId={connectionId} isDefault={false} name={name} />
                     {/* The "remote" badge: a tiny globe pinned to the corner of an
                         overridden profile's square, so which profiles leave this
                         machine is visible at a glance (#91349). */}

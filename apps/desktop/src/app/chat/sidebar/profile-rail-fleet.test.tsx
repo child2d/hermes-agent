@@ -661,6 +661,6 @@ describe('ProfileRail fleet mode', () => {
     expect(localDevice.querySelector('.codicon-home')).toBeNull()
 
     const gatewayBHome = screen.getByRole('menuitem', { name: 'default · Gateway B' })
-    expect(gatewayBHome.querySelector('.codicon-home')).toBeTruthy()
+    expect(gatewayBHome.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/png;base64,/)
   })
 })
