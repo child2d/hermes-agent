@@ -7,7 +7,7 @@
  */
 
 import * as sdk from '@hermes/plugin-sdk'
-import { profileColor } from '@hermes/plugin-sdk'
+import { profileColor, resolveCharacterAvatar } from '@hermes/plugin-sdk'
 
 import type { AvatarAppearance, AvatarShape, BotMeta, FaceMood } from './types'
 
@@ -994,24 +994,19 @@ interface BotFaceProps {
  * the clock can move them (a baked PNG cannot).
  */
 export function BotFace({ shape, color, image, size = 36, name = 'agent', mood = 'idle' }: BotFaceProps) {
-  startFaceClock()
-
-  if (image) {
+  if (shape === 'character' || image) {
     return (
       <img
         alt=""
         aria-hidden
-        src={image}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: '22%',
-          objectFit: 'cover',
-          display: 'block'
-        }}
+        data-hb-mood={mood}
+        src={resolveCharacterAvatar(name, image)}
+        style={{ width: size, height: size, objectFit: 'contain', display: 'block' }}
       />
     )
   }
+
+  startFaceClock()
 
   // Blobatar shapes: the library draws the whole face (body + eyes + its own
   // name-derived palette). Inline SVG via innerHTML so the roster PNG
@@ -1132,25 +1127,8 @@ export function avatarColor(color: null | string | undefined, name: string): str
 }
 
 export function botAppearance(name: string, meta: BotMeta | null | undefined): AvatarAppearance {
-  // The primary profile is literally named "default"; the SDK's profileColor
-  // can hand it a near-black that renders as an ugly black square, and any
-  // auto-seeded color in local bot-meta would otherwise stick. Give the
-  // primary a nice fixed generic look (a friendly violet squircle). A user's
-  // EXPLICIT customization still wins: an uploaded/generated/pet image, or a
-  // shape/color they set via the editor (tracked by meta.custom === true).
-  const isPrimary = (name || '').trim().toLowerCase() === 'default'
-  const userCustomized = Boolean(meta?.custom)
-
-  if (isPrimary && !userCustomized) {
-    return {
-      shape: 'squircle',
-      color: PRIMARY_AVATAR_COLOR,
-      image: meta?.image || null
-    }
-  }
-
   return {
-    shape: meta?.shape || defaultShapeFor(name),
+    shape: 'character',
     color: meta?.color || profileColor(name),
     image: meta?.image || null
   }

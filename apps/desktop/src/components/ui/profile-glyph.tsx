@@ -1,44 +1,82 @@
-import { profileColorSoft } from '@/lib/profile-color'
-import { profileShortLabel } from '@/lib/profile-short-label'
+import { useStore } from '@nanostores/react'
+import { useQuery } from '@tanstack/react-query'
+
+import { isBackfilledFacePng, resolveCharacterAvatar } from '@/lib/character-avatars'
+import { queryClient } from '@/lib/query-client'
 import { cn } from '@/lib/utils'
+import { $gateway, requestGatewayForAgent } from '@/store/gateway'
+import { $connection } from '@/store/session'
 
-import { Codicon } from './codicon'
+interface ProfileAvatarAsset {
+  found?: boolean
+  data?: string
+}
 
-/** A profile's mark, in one place: the default profile is the `home` icon (it
- *  has no color of its own and an initial would read as just another named
- *  profile); every other profile is a soft tint of its color carrying its
- *  initial. Presentational — callers resolve the color from `$profileColors`. */
+/** Bot and Profile surfaces read the same profile asset, never a renderer-only
+ * selection id. The source is part of the cache key: same-name remote profiles
+ * must not borrow art from this device. Read assets through the source's default
+ * backend, not one newly spawned backend per profile in a rail. */
 export function ProfileGlyph({
   className,
-  color,
-  isDefault,
+  color: _color,
+  isDefault: _isDefault,
+  connectionId,
   name,
   ...props
 }: Omit<React.ComponentProps<'span'>, 'color'> & {
   color: null | string
+  connectionId?: null | string
   isDefault: boolean
   name: string
 }) {
-  if (isDefault) {
-    return (
-      <span className={cn('grid size-4 shrink-0 place-items-center', className)} {...props}>
-        <Codicon className="text-(--ui-text-quaternary)" name="home" size="0.75rem" />
-      </span>
-    )
-  }
+  const gateway = useStore($gateway)
+  const connection = useStore($connection)
+  const source = connectionId || connection?.connectionId || connection?.baseUrl || ''
+  const remote = Boolean(connectionId && connectionId !== connection?.connectionId)
 
-  const initial = profileShortLabel(name)
+  const { data } = useQuery<ProfileAvatarAsset>(
+    {
+      queryKey: ['profile-avatar', source, name],
+      enabled: Boolean(name && (remote || gateway)),
+      queryFn: async () => {
+        const request = <T,>(method: string, params: Record<string, unknown>) =>
+          remote
+            ? requestGatewayForAgent<T>(connectionId!, 'default', method, params)
+            : gateway!.request<T>(method, params)
+
+        const asset = await request<ProfileAvatarAsset>('profiles.get_asset', { name, asset: 'avatar' })
+
+        if (!isBackfilledFacePng(asset.data)) {
+          return asset
+        }
+
+        // Old desktops wrote a 160px copy of their geometric face as an asset.
+        // Consult its provenance before replacing it: a real uploaded picture
+        // can have exactly the same dimensions. Cache the list per source.
+        const roster = await queryClient.fetchQuery({
+          queryKey: ['profile-avatar-provenance', source],
+          queryFn: () =>
+            request<{
+              profiles?: Array<{ name: string; ui_meta?: Record<string, { imageKind?: string; pet?: unknown }> }>
+            }>('profiles.list', {})
+        })
+
+        const meta = roster.profiles?.find(profile => profile.name === name)?.ui_meta?.['hermes-bots']
+
+        return meta?.imageKind === 'photo' || meta?.pet ? asset : { found: false }
+      },
+      retry: false
+    },
+    queryClient
+  )
 
   return (
-    <span
-      className={cn(
-        'grid size-4 shrink-0 place-items-center rounded-sm text-[0.5rem] font-semibold uppercase leading-none',
-        className
-      )}
-      style={{ backgroundColor: profileColorSoft(color ?? 'var(--ui-text-quaternary)', 22), color: color ?? undefined }}
-      {...props}
-    >
-      {initial}
+    <span className={cn('grid size-4 shrink-0 place-items-center', className)} {...props}>
+      <img
+        alt=""
+        className="size-full object-contain"
+        src={resolveCharacterAvatar(name, data?.found ? data.data : null)}
+      />
     </span>
   )
 }

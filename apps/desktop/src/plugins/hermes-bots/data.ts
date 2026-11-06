@@ -404,7 +404,7 @@ export async function saveBotMeta(owner: RosterRow | string, patch: StoredBotMet
               clear: true
             })
 
-      req.catch(() => undefined)
+      req.then(() => queryClient.invalidateQueries({ queryKey: ['profile-avatar'] })).catch(() => undefined)
     } catch {
       /* older gateway */
     }

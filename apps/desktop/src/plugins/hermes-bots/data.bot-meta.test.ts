@@ -18,8 +18,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// eslint-disable-next-line no-restricted-imports -- test uses the real catalog while mocking the SDK host boundary
+import { CHARACTER_AVATARS } from '@/lib/character-avatars'
+
 import { $botMeta, botMetaWriteAt, saveBotMeta } from './data'
-import { mergeServerMeta } from './profile-ops'
+import { mergeServerMeta, pullServerAvatars } from './profile-ops'
 import type { RosterRow } from './types'
 
 const { hostMock, storageMock } = vi.hoisted(() => ({
@@ -74,6 +77,43 @@ beforeEach(() => {
   storageMock.set.mockResolvedValue(undefined)
   storageMock.remove.mockResolvedValue(undefined)
   recordRequests()
+})
+
+describe('catalog image asset round trip', () => {
+  it('persists every pick as a portable asset and reads it after losing the local cache', async () => {
+    const assets = new Map<string, string>()
+    hostMock.request.mockImplementation(async (method: string, params: Record<string, unknown>) => {
+      const name = String(params.name)
+
+      if (method === 'profiles.set_asset') {
+        if (params.clear) {assets.delete(name)}
+        else {assets.set(name, String(params.data))}
+
+        return { ok: true }
+      }
+
+      if (method === 'profiles.get_asset') {return { found: assets.has(name), data: assets.get(name) }}
+
+      return { applied: { ui_meta: true } }
+    })
+
+    for (const avatar of CHARACTER_AVATARS) {
+      const name = `catalog-${avatar.id}`
+      await saveBotMeta(name, { image: avatar.image, imageKind: 'photo', shape: 'character', groups: ['keepers'] })
+      expect(assets.get(name)).toBe(avatar.image)
+    }
+
+    $botMeta.set({})
+    pullServerAvatars(CHARACTER_AVATARS.map(avatar => ({ name: `catalog-${avatar.id}`, has_avatar: true })))
+    await vi.waitFor(() => {
+      for (const avatar of CHARACTER_AVATARS) {
+        expect($botMeta.get()[`catalog-${avatar.id}`]?.image).toBe(avatar.image)
+      }
+    })
+    const name = `catalog-${CHARACTER_AVATARS[0].id}`
+    await saveBotMeta(name, { image: null })
+    expect(assets.has(name)).toBe(false)
+  })
 })
 
 describe('a save reports what the SERVER did, not just what the screen shows', () => {

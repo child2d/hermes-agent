@@ -55,8 +55,8 @@ export function FleetGatewayMenuGroup({ group, onSelect, slot, wrapRow }: FleetG
                 <ProfileGlyph
                   aria-hidden="true"
                   color={resolveProfileColor(agent.profile, colors)}
-                  isDefault={agent.isDefault}
-                  name={agent.profile}
+                  connectionId={agent.connectionId}
+                  isDefault={agent.isDefault} name={agent.profile}
                 />
               )}
               <span className="truncate">{agent.profile}</span>

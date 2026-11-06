@@ -133,25 +133,4 @@ export async function generateAvatarImage(
   return res.image_data || res.image
 }
 
-/** The roster backfill draws the live SVG at 160x160. Pets are 96x104
- *  and uploads are 256. Use that to tell a still face-copy from a real picture. */
-export function isBackfilledFacePng(dataUrl: null | string | undefined) {
-  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) {
-    return false
-  }
-
-  try {
-    const bin = atob(dataUrl.slice('data:image/png;base64,'.length).slice(0, 48))
-
-    if (bin.length < 24) {
-      return false
-    }
-
-    const w = (bin.charCodeAt(16) << 24) | (bin.charCodeAt(17) << 16) | (bin.charCodeAt(18) << 8) | bin.charCodeAt(19)
-    const h = (bin.charCodeAt(20) << 24) | (bin.charCodeAt(21) << 16) | (bin.charCodeAt(22) << 8) | bin.charCodeAt(23)
-
-    return w === 160 && h === 160
-  } catch {
-    return false
-  }
-}
+export { isBackfilledFacePng } from '@hermes/plugin-sdk'
