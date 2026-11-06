@@ -889,7 +889,7 @@ export function ContribController() {
           // under glass the gaps between the four surfaces show the window
           // material — the intended look, not a leak.
           data-contrib-shell=""
-          style={{ '--shell-island-inset': 'var(--island-gap)', '--titlebar-height': '0px' } as CSSProperties}
+          style={{ '--titlebar-height': '0px' } as CSSProperties}
         >
           {/* L1: the window's top bar — ONE element across the whole window, above
               the rail as well as above the panes. Zones hand their bands to it

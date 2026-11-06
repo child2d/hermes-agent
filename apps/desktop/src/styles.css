@@ -460,7 +460,7 @@
        `[box-shadow:var(--island-cast)]`) and never through `@theme`, because a
        `shadow-*` utility bakes its value into the built CSS — a light-mode cast
        would survive into dark. */
-    --island-gap: 0.75rem;
+    --island-gap: 0.5rem;
     /* How far the shell's own padding pushes the top band down. The caption
        clusters are `fixed` to the WINDOW, so they have to add this back; shells
        without islands (the browser popout) leave it at 0. */
