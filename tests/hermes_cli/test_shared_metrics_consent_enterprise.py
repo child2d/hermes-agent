@@ -82,7 +82,11 @@ def test_enterprise_respects_an_explicit_existing_answer(home, monkeypatch):
         "telemetry:\n  shared_metrics:\n    enabled: false\n    send: false\n", encoding="utf-8"
     )
     assert consent.apply_enterprise_consent_default() == "decided"
-    assert _shared_metrics() == {"enabled": False, "send": False}
+    # The old "No thanks" keeps its answer AND gets sealed at the current offer version, so the
+    # public `decided` latch (what the CLI/dashboard offer reads) agrees with this function's
+    # verdict instead of queuing a re-ask on another surface.
+    assert _shared_metrics() == {"enabled": False, "send": False, "offer_version": consent.OFFER_VERSION}
+    assert consent.consent_state(read_raw_config())["decided"] is True
 
 
 def test_enterprise_default_is_idempotent(home, monkeypatch):

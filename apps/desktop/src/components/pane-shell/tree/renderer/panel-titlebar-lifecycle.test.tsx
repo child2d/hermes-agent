@@ -192,8 +192,8 @@ describe('titlebar reservation lifecycle', () => {
 
     rightEdge = 700
     act(chromeChanged)
-    // panel.right (800) - cluster.left (700); no extra pad (#131729)
-    expect(reservation('right')).toBe('100')
+    // panel.right (800) - cluster.left (700) + Plankton's 24px island clearance
+    expect(reservation('right')).toBe('124')
   })
 
   it('remeasures through real chat, contributed-page and overlay navigation', () => {

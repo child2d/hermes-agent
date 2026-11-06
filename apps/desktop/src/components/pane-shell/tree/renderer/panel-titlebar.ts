@@ -64,10 +64,10 @@ export function usePanelTitlebar(
     }
 
     const left = Math.min(rect.width, Math.max(0, leftControls.right + 12 - rect.left))
-    // No extra pad on the right: a +N here is a dead strip (the spacer has no
-    // app-region) flush against Settings. The 48px data-window-drag-handle is
-    // the clearance (#131729).
-    const right = Math.min(rect.width - left, Math.max(0, rect.right - rightControls.left))
+    // Plankton's island top bar keeps its own 24px clearance on the right; the
+    // zone band (tree-group) asserts the same number, so this is layout state
+    // this fork owns, not upstream's #131729 gutter fix.
+    const right = Math.min(rect.width - left, Math.max(0, rect.right - rightControls.left + 24))
     setReservation(previous => (previous?.left === left && previous.right === right ? previous : { left, right }))
     setBelowControls(minimized || rect.width - left - right < 120)
   }, [enabled, minimized, ref])

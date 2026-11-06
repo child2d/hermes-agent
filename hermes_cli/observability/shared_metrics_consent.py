@@ -118,15 +118,27 @@ def apply_enterprise_consent_default(config: dict | None = None) -> str:
 
     from hermes_cli.config import read_raw_config
 
-    # Upstream replaced `consent_decided()` with a state dict that also reports `reask` (an "off"
-    # answer from before OFFER_VERSION that may never have been seen). This build never asks, so a
-    # reaskable answer IS this profile's answer: re-seeding would flip a deliberate "No thanks" back
-    # to collection-on, and the only thing `reask` gates is a question that does not exist here.
+    # Upstream replaced `consent_decided()` with a state dict that also reports `reask`: an "off"
+    # answer recorded before OFFER_VERSION reads undecided so every surface asks once more. This
+    # build never asks, so a reaskable answer IS this profile's answer — and it has to be RE-SEALED
+    # at the current OFFER_VERSION, not just returned: `offer_consent_if_undecided` and
+    # `offer_consent_before_chat` read `decided` alone, so leaving the old row untouched would keep
+    # the "Help improve Hermes" question queued for the CLI and dashboard. The recorded answer is
+    # rewritten verbatim (never flipped to collection-on), only its offer_version moves.
     state = consent_state(read_raw_config())
-    answered = state["decided"] or state["reask"]
 
-    if answered:
+    if state["decided"]:
         logger.info("Enterprise shared metrics: explicit consent kept as %s", state)
+        return "decided"
+
+    if state["reask"]:
+        save_consent(state["enabled"], state["send"], config)
+        logger.info(
+            "Enterprise shared metrics: kept the recorded %s answer and settled it at offer_version %s; "
+            "the send-to-Nous question is not offered on this build.",
+            "local-only" if state["enabled"] else "No thanks",
+            OFFER_VERSION,
+        )
         return "decided"
 
     save_consent(ENTERPRISE_DEFAULT_ENABLED, ENTERPRISE_DEFAULT_SEND, config)

@@ -96,20 +96,6 @@ export function ReviewPane() {
                 says "review", so the zone header hides it (styles.css). */}
             <SidebarPanelLabel data-pane-self-label="">{c.review}</SidebarPanelLabel>
           </div>
-          <SegmentedControl<HermesReviewScope>
-            className="mr-1"
-            onChange={id => {
-              $reviewScope.set(id)
-              clearReviewSelection()
-              void refreshReview()
-            }}
-            options={[
-              { id: 'uncommitted', label: c.scopeUncommitted },
-              { id: 'branch', label: c.scopeBranch },
-              { id: 'lastTurn', label: c.scopeLastTurn }
-            ]}
-            value={scope}
-          />
           <Tooltip><TooltipTrigger asChild>
             <Button
               aria-label={treeMode === 'tree' ? c.viewAsList : c.viewAsTree}

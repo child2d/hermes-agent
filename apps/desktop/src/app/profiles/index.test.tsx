@@ -41,9 +41,13 @@ vi.mock('@/store/notifications', () => ({
   notifyError: vi.fn()
 }))
 
-vi.mock('@/store/gateway', () => ({
-  retireLocalProfileGateways: vi.fn()
-}))
+vi.mock('@/store/gateway', async () => {
+  const { atom } = await import('nanostores')
+
+  // The profile rows render their character portrait (ProfileGlyph), which reads
+  // the live gateway to fetch the profile's avatar asset.
+  return { $gateway: atom(null), requestGatewayForAgent: vi.fn(), retireLocalProfileGateways: vi.fn() }
+})
 
 const {
   $activeGatewayProfile: activeGateway,
