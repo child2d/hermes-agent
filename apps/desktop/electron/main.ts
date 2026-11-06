@@ -218,7 +218,12 @@ import { resolveDashboardWebDist } from './dashboard-web-dist'
 import { resolveDesktopHermesHome, resolveDesktopUserData } from './data-paths'
 import { seedEnterpriseModelConfig } from './enterprise-model-seed'
 import { seedEnterpriseAssets } from './enterprise-cli'
-import { enterpriseHermesHomeFor, enterpriseHomeIsolationIssue, enterpriseHomeSelection } from './enterprise-paths'
+import {
+  enterpriseAmbientEnvScrub,
+  enterpriseHermesHomeFor,
+  enterpriseHomeIsolationIssue,
+  enterpriseHomeSelection
+} from './enterprise-paths'
 import { createPlanktonAuth, planktonConfigResolver, type PlanktonAuth } from './plankton-auth'
 import { planktonGateDecision } from './plankton-session-gate'
 import { loadOrCreateInstallationId, sshOwnershipId } from './desktop-installation'
@@ -1322,6 +1327,30 @@ if (
   (ENTERPRISE_HOME_SELECTION.discardedAmbientRoot || !process.env.HERMES_HOME)
 ) {
   process.env.HERMES_HOME = HERMES_HOME
+}
+
+// The home is only HALF of the isolation story. A build started from another
+// environment's agent shell also inherits that parent's session identity and
+// engine pointers, and those make an isolated install behave as the other one:
+// a test app opened the dev session (`HERMES_SESSION_ID`) and loaded the
+// production runtime (`HERMES_SITE`/`HERMES_RUNTIME_DIR`) simply because the
+// shell it was launched from belonged to the dev app. Everything in the list is
+// either re-supplied by this app before its backend spawns or describes a
+// session that is not this process's, so drop it here — before any session is
+// resolved or any backend is spawned.
+if (PRODUCT_IDENTITY.enterprise) {
+  const inheritedEnv = enterpriseAmbientEnvScrub(process.env, PRODUCT_IDENTITY)
+
+  for (const key of inheritedEnv) {
+    delete process.env[key]
+  }
+
+  if (inheritedEnv.length) {
+    console.log(
+      `[hermes] ignoring inherited ${inheritedEnv.join(', ')} ` +
+        '(they describe the launching process, not this environment)'
+    )
+  }
 }
 
 // Enterprise isolation SELF-CHECK (fail loud AND fail closed).
