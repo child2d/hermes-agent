@@ -920,7 +920,7 @@ export function ContribController() {
                   the island surface so the bar is ONE tone instead of a gray
                   strip inside a rounded white box. */}
                 {statusbarVisible && (
-                  <div className="shrink-0 overflow-hidden rounded-(--island-radius) bg-(--island-surface) [--ui-sidebar-surface-background:var(--island-surface)] [box-shadow:var(--island-cast)]">
+                  <div className="shrink-0 overflow-hidden rounded-(--island-radius) bg-(--island-chrome) [--ui-sidebar-surface-background:var(--island-chrome)] [box-shadow:var(--island-cast-quiet)]">
                     <WiredPane part="statusbar" />
                   </div>
                 )}

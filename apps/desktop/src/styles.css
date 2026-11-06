@@ -460,7 +460,7 @@
        `[box-shadow:var(--island-cast)]`) and never through `@theme`, because a
        `shadow-*` utility bakes its value into the built CSS — a light-mode cast
        would survive into dark. */
-    --island-gap: 0.5rem;
+    --island-gap: 0.75rem;
     /* How far the shell's own padding pushes the top band down. The caption
        clusters are `fixed` to the WINDOW, so they have to add this back; shells
        without islands (the browser popout) leave it at 0. */
@@ -468,9 +468,16 @@
     /* One rung above `rounded-xl` at the default 0.8 scalar (≈14.4px): the
        islands read as cards in the window, not as clipped panels. */
     --island-radius: calc(var(--radius-scalar) * 1.125rem);
-    --island-sea: #e8eaee;
+    --island-sea: #dfe3e8;
     --island-surface: #ffffff;
+    /* Chrome islands sit a rung BELOW the paper: the rail, the band and the
+       statusbar are containers, not reading surfaces — left at pure white they
+       out-shone the content they frame and the window read as one bright field. */
+    --island-chrome: color-mix(in srgb, var(--island-surface) 62%, var(--island-sea));
     --island-cast: 0 1px 2px rgba(16, 24, 40, 0.05), 0 10px 26px -20px rgba(16, 24, 40, 0.35);
+    /* Chrome islands keep only the hairline: a second float competing with the
+       content card is what made the composer read as a tray under another tray. */
+    --island-cast-quiet: 0 1px 2px rgba(16, 24, 40, 0.04);
     /* The four surfaces the app paints are derived in ONE place —
        `surfaceRamp()` in themes/context.tsx writes `--dt-surface-*` from the
        theme seeds, per mode, as concrete values: `raised` (the composer card,
@@ -783,6 +790,7 @@
     --island-sea: #08090b;
     --island-surface: #14161a;
     --island-cast: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 1px 1px rgba(0, 0, 0, 0.45), 0 14px 34px -24px #000;
+    --island-cast-quiet: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 1px rgba(0, 0, 0, 0.4);
     --sidebar-edge-border: color-mix(in srgb, var(--ui-base) 12%, transparent);
     --composer-ring-strength: 1.3;
     --backdrop-invert-mul: 0;
@@ -892,6 +900,14 @@
   :root[data-hermes-glass] [data-contrib-shell],
   :root[data-hermes-glass] [data-slot='sidebar-wrapper'] {
     background-color: transparent !important;
+  }
+
+  /* The island shell's SEA must survive glass: cleared, the gaps between the
+     four surfaces show the window's own white and the whole app collapses into
+     one bright field — the islands lose their edge and the screen reads as
+     "too much white". */
+  :root[data-hermes-glass] [data-contrib-shell] {
+    background-color: color-mix(in srgb, var(--island-sea) 92%, transparent) !important;
   }
 
   /* Surfaces that MASK sibling content must stay filled under glass — a

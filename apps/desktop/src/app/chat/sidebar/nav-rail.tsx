@@ -68,7 +68,7 @@ function railIcon(item: SidebarNavItem) {
  * `tree-group.tsx` (the collapsed strip's `w-*`) and `track-model.ts`
  * (`MINIMIZED_RAIL_TRACK`). */
 const RAIL_COLUMN =
-  'flex w-13 shrink-0 flex-col overflow-hidden rounded-(--island-radius) bg-(--island-surface) max-[47.5rem]:hidden [box-shadow:var(--island-cast)]'
+  'flex w-13 shrink-0 flex-col overflow-hidden rounded-(--island-radius) bg-(--island-chrome) max-[47.5rem]:hidden [box-shadow:var(--island-cast-quiet)]'
 
 /** The icon column's own rhythm, a child of RAIL_COLUMN so the paint can cover
  *  the full height while the glyphs still start below the top band. */

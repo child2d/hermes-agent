@@ -40,7 +40,7 @@ export function AppTopBar({ children }: { children?: React.ReactNode }) {
           the island's own surface, from the container, without touching the
           band; no extra painter, same one fill. */}
       <div
-        className="relative flex shrink-0 items-stretch rounded-(--island-radius) bg-(--island-surface) [--ui-region-chrome:var(--island-surface)] [box-shadow:var(--island-cast)]"
+        className="relative flex shrink-0 items-stretch rounded-(--island-radius) bg-(--island-chrome) [--ui-region-chrome:var(--island-chrome)] [box-shadow:var(--island-cast-quiet)]"
         data-slot="app-top-bar"
         style={{ height: `var(${BAND_HEIGHT_VAR}, ${APP_BAND_FALLBACK_HEIGHT}px)` }}
       >
