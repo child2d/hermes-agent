@@ -3,6 +3,7 @@ import { type FC, useEffect, useState } from 'react'
 
 import { messageContentText } from '@/components/assistant-ui/thread/content'
 import { AGENT_MESSAGE_RE, agentAvatarCache, resolveAgentAvatar } from '@/components/assistant-ui/thread/user-message'
+import { characterAvatarSources } from '@/lib/character-avatars'
 
 // Sender-side inter-agent delivery: `hermes -p <agent> chat … -q "Message
 // from 🤖 <sender>…"` run through the terminal tool IS the messaging
@@ -139,7 +140,7 @@ const AgentGlyph: FC<{ handle: string }> = ({ handle }) => {
   }, [handle])
 
   return avatar ? (
-    <img alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" src={avatar} />
+    <img alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" {...characterAvatarSources(handle, avatar, 16)} />
   ) : (
     <span aria-hidden className="text-sm leading-none">
       🤖

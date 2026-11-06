@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // eslint-disable-next-line no-restricted-imports -- test uses the real catalog while mocking the SDK host boundary
-import { CHARACTER_AVATARS, defaultCharacterAvatar } from '@/lib/character-avatars'
+import { CHARACTER_AVATARS, characterAvatarSources, defaultCharacterAvatar } from '@/lib/character-avatars'
 
 vi.mock('@hermes/plugin-sdk', async () => {
   const { atom } = await import('nanostores')
@@ -11,7 +11,7 @@ vi.mock('@hermes/plugin-sdk', async () => {
     atom,
     CHARACTER_AVATARS,
     defaultCharacterAvatar,
-    resolveCharacterAvatar: (name: string, image?: string) => image || defaultCharacterAvatar(name).image,
+    characterAvatarSources,
     profileColor: () => '#8b5cf6',
     useI18n: () => ({ locale: 'zh' }),
     useValue: (store: { get: () => unknown }) => store.get(),
@@ -50,12 +50,32 @@ import { AvatarPicker } from './avatar-picker'
 afterEach(cleanup)
 
 describe('shared bot character art', () => {
+  it('uses native-size display art in BotFace and picker without changing persisted picks', () => {
+    for (const size of [16, 22, 32, 36, 40, 48, 64, 80, 256, 300, 512]) {
+      const image = CHARACTER_AVATARS[0].image
+      const { container, unmount } = render(<BotFace color="#aaa" image={image} name="other" shape="character" size={size} />)
+      const img = container.querySelector('img')!
+      const sources = characterAvatarSources('other', image, size)
+      expect(img.getAttribute('src')).toBe(sources.src)
+      expect(img.getAttribute('srcset')).toBe(sources.srcSet)
+      expect(img.getAttribute('sizes')).toBe(`${size}px`)
+      expect(img.style.width).toBe(`${size}px`)
+      unmount()
+    }
+
+    const { container } = render(<AvatarPicker color={null} image={null} onColor={() => {}} onImage={() => {}} onShape={() => {}} shape="character" />)
+
+    for (const [index, img] of [...container.querySelectorAll('[data-character-avatar] img')].entries()) {
+      expect(img.getAttribute('sizes')).toBe('40px')
+      expect(img.getAttribute('srcset')).toBe(characterAvatarSources('', CHARACTER_AVATARS[index].image, 40).srcSet)
+    }
+  })
   it('replaces legacy appearances with stable art while keeping custom images', () => {
     for (const name of ['default', 'scout']) {
       for (const meta of [undefined, { shape: 'blobatar' }, { shape: 'triangle', custom: true }]) {
         const look = botAppearance(name, meta)
         const { container, unmount } = render(<BotFace {...look} color="#aaa" name={name} />)
-        expect(container.querySelector('img')?.getAttribute('src')).toBe(defaultCharacterAvatar(name).image)
+        expect(container.querySelector('img')?.getAttribute('src')).toBe(characterAvatarSources(name, null, 36).src)
         expect(container.querySelector('svg')).toBeNull()
         unmount()
       }

@@ -7,7 +7,7 @@
  */
 
 import * as sdk from '@hermes/plugin-sdk'
-import { profileColor, resolveCharacterAvatar } from '@hermes/plugin-sdk'
+import { characterAvatarSources, profileColor } from '@hermes/plugin-sdk'
 
 import type { AvatarAppearance, AvatarShape, BotMeta, FaceMood } from './types'
 
@@ -1000,7 +1000,7 @@ export function BotFace({ shape, color, image, size = 36, name = 'agent', mood =
         alt=""
         aria-hidden
         data-hb-mood={mood}
-        src={resolveCharacterAvatar(name, image)}
+        {...characterAvatarSources(name, image, size)}
         style={{ width: size, height: size, objectFit: 'contain', display: 'block' }}
       />
     )

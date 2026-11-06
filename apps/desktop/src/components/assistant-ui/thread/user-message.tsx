@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
+import { characterAvatarSources } from '@/lib/character-avatars'
 import { triggerHaptic } from '@/lib/haptics'
 import { Pencil, StopFilled } from '@/lib/icons'
 import { LruCache } from '@/lib/lru-cache'
@@ -223,7 +224,7 @@ const AgentMessageNote: FC<{ text: string }> = ({ text }) => {
     >
       <span className="flex items-center justify-center gap-1.5">
         {avatar ? (
-          <img alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" src={avatar} />
+          <img alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" {...characterAvatarSources(handle, avatar, 16)} />
         ) : (
           <span aria-hidden className="text-sm leading-none">
             🤖
