@@ -63,6 +63,12 @@ export function LayoutTreeRoot({ children, titlebar = false }: { children?: Reac
     <div
       className={cn(
         'relative flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-(--island-radius)',
+        // Every island rebinds the rung its own subtree paints, so the card reads
+        // as ONE surface: a zone root still wears `--ui-region-chrome` and would
+        // otherwise fill the card with the window's grey ladder (in dark, clearly
+        // lighter and bluer than the rail beside it, and at the corners it reads
+        // as the sea leaking through).
+        '[--ui-region-chrome:var(--island-surface)]',
         '[box-shadow:var(--island-cast)]'
       )}
       data-slot="content-card"
