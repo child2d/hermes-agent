@@ -77,6 +77,17 @@ Navigation must preserve context. A background session finishing, a tool result
 arriving, or a project refresh may update badges and cached data; it must not
 replace the foreground transcript or steal focus.
 
+## Character avatar resolution
+
+Bot and Profile use the same catalog identity and `characterAvatarSources`
+resolver. Keep canonical 64px inline PNGs for portable persistence; render
+32/64/256/512px variants according to CSS size with `srcSet`/`sizes` for density.
+Large variants stay external lossless WebP files. Recognize persisted catalog
+picks by exact image identity, never dimensions; uploads and pets remain intact.
+`BotFace.size` and `ProfileGlyph.size` describe the CSS display width (the latter
+is 16 by default and must accompany a class-based size override). Resolution
+selection must never change layout or backend storage contracts.
+
 ## Surfaces & elevation
 
 Floating panels (base `Dialog`, route overlays, boot/install/update surfaces,

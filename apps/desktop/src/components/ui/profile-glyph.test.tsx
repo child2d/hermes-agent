@@ -1,7 +1,7 @@
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { defaultCharacterAvatar } from '@/lib/character-avatars'
+import { CHARACTER_AVATARS, characterAvatarSources } from '@/lib/character-avatars'
 import { queryClient } from '@/lib/query-client'
 
 const { request, remote } = vi.hoisted(() => ({ request: vi.fn(), remote: vi.fn() }))
@@ -25,6 +25,15 @@ afterEach(() => {
 })
 
 describe('ProfileGlyph', () => {
+  it('upgrades persisted portable art by identity and supplies density-aware sources', async () => {
+    const image = CHARACTER_AVATARS[0].image
+    request.mockResolvedValue({ found: true, data: image })
+    const { container } = render(<ProfileGlyph className="size-16" color={null} isDefault={false} name="not-napoleon" size={64} />)
+    const sources = characterAvatarSources('not-napoleon', image, 64)
+    await waitFor(() => expect(container.querySelector('img')?.getAttribute('src')).toBe(sources.src))
+    expect(container.querySelector('img')?.getAttribute('srcset')).toBe(sources.srcSet)
+    expect(container.querySelector('img')?.getAttribute('sizes')).toBe('64px')
+  })
   it('shares stable character defaults across scripts and preserves native span props', async () => {
     request.mockResolvedValue({ found: false })
 
@@ -33,7 +42,7 @@ describe('ProfileGlyph', () => {
         <ProfileGlyph aria-hidden="true" color={null} isDefault={name === 'default'} name={name} />
       )
 
-      expect(container.querySelector('img')?.getAttribute('src')).toBe(defaultCharacterAvatar(name).image)
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(characterAvatarSources(name, null, 16).src)
       expect(container.firstElementChild?.getAttribute('aria-hidden')).toBe('true')
       unmount()
     }
@@ -61,7 +70,7 @@ describe('ProfileGlyph', () => {
     const legacy = render(<ProfileGlyph color={null} isDefault={false} name="legacy" />)
     const photo = render(<ProfileGlyph color={null} isDefault={false} name="photo" />)
     await waitFor(() => expect(photo.container.querySelector('img')?.getAttribute('src')).toBe(image))
-    expect(legacy.container.querySelector('img')?.getAttribute('src')).toBe(defaultCharacterAvatar('legacy').image)
+    expect(legacy.container.querySelector('img')?.getAttribute('src')).toBe(characterAvatarSources('legacy', null, 16).src)
   })
 
   it('reads each source separately and honors persisted custom art after remount', async () => {
@@ -77,6 +86,6 @@ describe('ProfileGlyph', () => {
     await waitFor(() =>
       expect(remote).toHaveBeenCalledWith('remote', 'default', 'profiles.get_asset', { name: 'scout', asset: 'avatar' })
     )
-    expect(other.container.querySelector('img')?.getAttribute('src')).toBe(defaultCharacterAvatar('scout').image)
+    expect(other.container.querySelector('img')?.getAttribute('src')).toBe(characterAvatarSources('scout', null, 16).src)
   })
 })

@@ -1,6 +1,31 @@
-import { describe, expect, it } from 'vitest'
+import { type ToolCallMessagePartProps } from '@assistant-ui/react'
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { deliveryTargetFromCommand, replyTextFromResult } from './agent-delivery'
+import { CHARACTER_AVATARS, characterAvatarSources } from '@/lib/character-avatars'
+
+import { AgentDeliveryNotice, deliveryTargetFromCommand, replyTextFromResult } from './agent-delivery'
+import { agentAvatarCache } from './user-message'
+
+afterEach(() => { cleanup(); agentAvatarCache.delete('scout') })
+
+it('uses size-aware persisted catalog art in outgoing delivery and reply notices', () => {
+  const image = CHARACTER_AVATARS[0].image
+  agentAvatarCache.set('scout', { at: Date.now(), url: image })
+
+  const { container } = render(<AgentDeliveryNotice {...({
+    args: { command: 'hermes -p scout chat -q "Message from Hermes: hello"' },
+    result: { output: 'reply' }
+  } as ToolCallMessagePartProps)} />)
+
+  const images = [...container.querySelectorAll('img')]
+  expect(images).toHaveLength(2)
+
+  for (const img of images) {
+    expect(img.getAttribute('src')).toBe(characterAvatarSources('scout', image, 16).src)
+    expect(img.getAttribute('sizes')).toBe('16px')
+  }
+})
 
 // Sender-side inter-agent deliveries render as "Messaged X" / "Message from
 // X" notices instead of terminal transcript rows. This pins the detection

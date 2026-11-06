@@ -29,6 +29,8 @@ import image24 from '../assets/character-avatars/venus.png?inline'
 import image29 from '../assets/character-avatars/william-shakespeare.png?inline'
 import image8 from '../assets/character-avatars/yayoi-kusama.png?inline'
 
+import { CHARACTER_AVATAR_VARIANTS } from './character-avatar-variants'
+
 export interface CharacterAvatar {
   id: string
   image: string
@@ -104,7 +106,28 @@ export function isBackfilledFacePng(dataUrl: null | string | undefined) {
   }
 }
 
-/** Explicit uploaded/generated/pet/catalog art always wins; reset is render-only. */
+/** Exact portable-image identity, never dimensions: a user's 64px upload is not
+ * catalog art. Keep persistence independent of build-specific display URLs. */
+const characterByImage = new Map(CHARACTER_AVATARS.map(avatar => [avatar.image, avatar]))
+
+export function characterAvatarSources(name: string, image: null | string | undefined, size: number) {
+  const avatar = image ? characterByImage.get(image) : defaultCharacterAvatar(name)
+
+  if (!avatar) {
+    return { src: image!, srcSet: undefined, sizes: undefined }
+  }
+
+  const variants = CHARACTER_AVATAR_VARIANTS[avatar.id]
+  const src = size <= 32 ? variants[32] : size <= 64 ? avatar.image : size <= 256 ? variants[256] : variants[512]
+
+  return {
+    src,
+    srcSet: `${variants[32]} 32w, ${avatar.image} 64w, ${variants[256]} 256w, ${variants[512]} 512w`,
+    sizes: `${size}px`
+  }
+}
+
+/** Portable asset for writes and existing non-display callers. */
 export function resolveCharacterAvatar(name: string, image?: null | string): string {
   return image || defaultCharacterAvatar(name).image
 }

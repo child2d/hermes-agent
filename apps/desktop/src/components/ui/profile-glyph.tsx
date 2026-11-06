@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 
-import { isBackfilledFacePng, resolveCharacterAvatar } from '@/lib/character-avatars'
+import { characterAvatarSources, isBackfilledFacePng } from '@/lib/character-avatars'
 import { queryClient } from '@/lib/query-client'
 import { cn } from '@/lib/utils'
 import { $gateway, requestGatewayForAgent } from '@/store/gateway'
@@ -22,12 +22,15 @@ export function ProfileGlyph({
   isDefault: _isDefault,
   connectionId,
   name,
+  size = 16,
   ...props
 }: Omit<React.ComponentProps<'span'>, 'color'> & {
   color: null | string
   connectionId?: null | string
   isDefault: boolean
   name: string
+  /** CSS display width; keep in sync when className overrides size-4. */
+  size?: number
 }) {
   const gateway = useStore($gateway)
   const connection = useStore($connection)
@@ -75,7 +78,7 @@ export function ProfileGlyph({
       <img
         alt=""
         className="size-full object-contain"
-        src={resolveCharacterAvatar(name, data?.found ? data.data : null)}
+        {...characterAvatarSources(name, data?.found ? data.data : null, size)}
       />
     </span>
   )

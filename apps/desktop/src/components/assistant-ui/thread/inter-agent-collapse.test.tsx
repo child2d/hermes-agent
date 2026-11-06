@@ -16,6 +16,10 @@ import { AssistantRuntimeProvider, type ThreadMessage, useExternalStoreRuntime }
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { CHARACTER_AVATARS, characterAvatarSources } from '@/lib/character-avatars'
+
+import { agentAvatarCache } from './user-message'
+
 import { Thread } from '.'
 
 const createdAt = new Date('2026-05-01T00:00:00.000Z')
@@ -40,6 +44,7 @@ Element.prototype.animate = function animate() {
 
 afterEach(() => {
   cleanup()
+  agentAvatarCache.delete('hermes')
 })
 
 const assistantMetadata = { unstable_state: null, unstable_annotations: [], unstable_data: [], steps: [], custom: {} }
@@ -103,6 +108,14 @@ function dispatch(id: string, target: string): ThreadMessage {
 }
 
 describe('inter-agent collapse gate', () => {
+  it('uses 16px density-aware catalog art in incoming agent message notices', () => {
+    const image = CHARACTER_AVATARS[0].image
+    agentAvatarCache.set('hermes', { at: Date.now(), url: image })
+    const { container } = render(<Harness messages={[user('portrait-note', DELIVERY)]} />)
+    const img = container.querySelector('[data-slot="aui_agent-message-note"] img')!
+    expect(img.getAttribute('src')).toBe(characterAvatarSources('hermes', image, 16).src)
+    expect(img.getAttribute('sizes')).toBe('16px')
+  })
   it('keeps the report after a relayed answer to this bot\u2019s own dispatch expanded', async () => {
     // Bot Mode round trip seen from the DISPATCHING bot: it messaged @hermes,
     // the answer came back as an inbound "Message from" row, and the next

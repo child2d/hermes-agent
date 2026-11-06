@@ -285,6 +285,7 @@ function GatewayProfileGroup({
                 color={group.color ?? null}
                 isDefault={group.profile === 'default'}
                 name={group.profile}
+                size={14}
               />
             ) : (
               <Codicon name="remote" size="0.875rem" />

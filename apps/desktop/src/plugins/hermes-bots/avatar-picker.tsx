@@ -6,6 +6,7 @@
 import {
   Button,
   CHARACTER_AVATARS,
+  characterAvatarSources,
   cn,
   Codicon,
   defaultCharacterAvatar,
@@ -154,7 +155,7 @@ export function AvatarPicker({ image, onShape, onImage, generateSeed }: AvatarPi
               }}
               type="button"
             >
-              <img alt="" className="size-10 object-contain" height={40} src={avatar.image} width={40} />
+              <img alt="" className="size-10 object-contain" height={40} {...characterAvatarSources(pickerName, avatar.image, 40)} width={40} />
             </RowButton>
           ))}
         </div>

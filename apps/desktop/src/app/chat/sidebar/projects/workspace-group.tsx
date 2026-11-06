@@ -207,6 +207,7 @@ export function SidebarWorkspaceGroup({
                 color={group.color ?? null}
                 isDefault={group.id === 'default'}
                 name={group.label}
+                size={14}
               />
             </SidebarRowLead>
           }

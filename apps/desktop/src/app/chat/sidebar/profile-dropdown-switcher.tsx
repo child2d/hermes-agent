@@ -194,6 +194,7 @@ export function ProfileSwitcher({ compact = false }: { compact?: boolean }) {
                   color={resolveProfileColor(active.name, colors)}
                   isDefault={active.is_default}
                   name={active.name}
+                  size={12}
                 />
               )}
               <span className="truncate">{triggerLabel}</span>

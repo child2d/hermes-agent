@@ -1952,7 +1952,7 @@ export {
 export { type BudgetedLoop, type BudgetedLoopOptions, createBudgetedLoop } from '@/lib/budgeted-loop'
 /** Deterministic soft-body avatars from any string (name → face). String
  *  renderer for rasterization; React component for live rendering. */
-export { CHARACTER_AVATARS, defaultCharacterAvatar, isBackfilledFacePng, resolveCharacterAvatar } from '@/lib/character-avatars'
+export { CHARACTER_AVATARS, characterAvatarSources, defaultCharacterAvatar, isBackfilledFacePng, resolveCharacterAvatar } from '@/lib/character-avatars'
 /** The blank transcript as a contribution area: claim the sessions you own and
  *  render what stands in the gap. Core's own splash keeps a fresh draft. */
 export { CHAT_EMPTY_AREA, type ChatEmptyContribution, type ChatEmptyProps } from '@/lib/chat-empty'
