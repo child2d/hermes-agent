@@ -35,7 +35,12 @@ def test_upstream_build_is_untouched(home, monkeypatch):
     assert consent.enterprise_identity() is False
     assert consent.apply_enterprise_consent_default() == "not-enterprise"
     # Undecided stays undecided — the upstream first-run offer still exists.
-    assert consent.consent_state(read_raw_config()) == {"enabled": False, "send": False, "decided": False}
+    assert consent.consent_state(read_raw_config()) == {
+        "enabled": False,
+        "send": False,
+        "decided": False,
+        "reask": False,
+    }
     assert _shared_metrics() == {}
 
 
@@ -45,10 +50,15 @@ def test_enterprise_default_is_local_only_and_never_asks(home, monkeypatch):
 
     assert consent.apply_enterprise_consent_default() == "seeded"
 
-    assert consent.consent_state(read_raw_config()) == {"enabled": True, "send": False, "decided": True}
+    assert consent.consent_state(read_raw_config()) == {
+        "enabled": True,
+        "send": False,
+        "decided": True,
+        "reask": False,
+    }
     # `decided` is exactly the latch the composer strip and the CLI offer read: the question
     # (and with it the "Send to Nous" choice) never appears on any surface.
-    assert consent.consent_decided() is True
+    assert consent.consent_state(read_raw_config())["decided"] is True
     # And the transmission policy resolves to collection on, upload off.
     resolved = resolve_send_config(read_raw_config())
     assert resolved.enabled is True
@@ -81,7 +91,7 @@ def test_enterprise_default_is_idempotent(home, monkeypatch):
 
     assert consent.apply_enterprise_consent_default() == "seeded"
     assert consent.apply_enterprise_consent_default() == "decided"
-    assert _shared_metrics() == {"enabled": True, "send": False}
+    assert _shared_metrics() == {"enabled": True, "send": False, "offer_version": 2}
 
 
 def test_enterprise_seals_the_send_port_even_when_config_says_send_true(home, monkeypatch, caplog):

@@ -17,6 +17,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { useI18n } from '@/i18n'
 import { displayPath, pathLeaf } from '@/lib/display-path'
+import { statusBarGatewayHealth } from '@/lib/gateway-health-pill'
 import {
   Activity,
   AlertCircle,
@@ -30,7 +31,7 @@ import {
   Terminal,
   Zap
 } from '@/lib/icons'
-import { runtimeReadinessDisplay, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
+import { type RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { resolveSessionTimerSince } from '@/lib/session-timer-since'
 import {
   cacheHitLabel,
@@ -45,10 +46,9 @@ import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { resolveVersionStatus } from '@/lib/version-status'
 import { copyFilePath, revealFile, shouldOfferLocalReveal } from '@/store/file-actions'
-import { $freeTierStatus, FREE_TIER_MODEL } from '@/store/free-tier'
+import { $freeTierSignInOpen, $freeTierStatus, FREE_TIER_MODEL } from '@/store/free-tier'
 import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
 import { revealFileInTree } from '@/store/layout'
-import { $onboardingGate, guidedOnboardingActive } from '@/store/onboarding-gate'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $profileRailVisible } from '@/store/profile-rail-prefs'
 import { $projectTree, projectNameForCwd } from '@/store/projects'
@@ -161,12 +161,10 @@ export function useStatusbarItems({
   // Backend truth for the free-tier chip. Refreshed on the ambient status
   // cadence (use-status-snapshot), never polled from here.
   const freeTier = useStore($freeTierStatus)
-  // The chip is a standing invitation to sign in. During the guided first
-  // launch that invitation lives on the guide's own ready screen; a second
-  // one in the statusbar is a distraction from the chat they are in. The
-  // subscription is what makes the check reactive.
-  useStore($onboardingGate)
-  const guideOwnsSignIn = guidedOnboardingActive()
+  // The chip is the standing invitation to sign in. It rests while a guided
+  // setup is running, so the chat the user is in has no second call to action,
+  // and comes back when the setup ends.
+  const freeTierSignInOpen = useStore($freeTierSignInOpen)
   const updateStatus = useStore($updateStatus)
   const updateApply = useStore($updateApply)
   const backendUpdateStatus = useStore($backendUpdateStatus)
@@ -342,22 +340,33 @@ export function useStatusbarItems({
     [gatewayState, inferenceStatus, openCommandCenterSection, statusSnapshot]
   )
 
+  const botsShowing = useStore($paneVisible('hermes-bots:pane'))
   const gatewayOpen = gatewayState === 'open'
   const gatewayConnecting = gatewayState === 'connecting'
-  const inferenceReady = gatewayOpen && inferenceStatus?.ready === true
-  const gatewayDegraded = gatewayOpen || gatewayConnecting
-  const readinessDisplay = runtimeReadinessDisplay(inferenceStatus)
 
-  const gatewayDetail = gatewayOpen
-    ? {
-        checking: copy.gatewayChecking,
-        needs_setup: copy.gatewayNeedsSetup,
-        ready: copy.gatewayReady,
-        unavailable: copy.gatewayUnavailable
-      }[readinessDisplay]
-    : gatewayConnecting
-      ? copy.gatewayConnecting
-      : copy.gatewayOffline
+  const gatewayHealth = statusBarGatewayHealth({
+    connectionState: gatewayState,
+    copy: {
+      backend: copy.backend,
+      checking: copy.gatewayChecking,
+      connecting: copy.gatewayConnecting,
+      messagingDegraded: copy.messagingDegraded,
+      messagingStopped: copy.messagingStopped,
+      needsSetup: copy.gatewayNeedsSetup,
+      offline: copy.gatewayOffline,
+      ready: copy.gatewayReady,
+      restarting: copy.gatewayRestarting,
+      unavailable: copy.gatewayUnavailable
+    },
+    inferenceStatus,
+    messagingRunning: statusSnapshot?.gateway_running,
+    messagingState: statusSnapshot?.gateway_state,
+    platforms: statusSnapshot?.gateway_platforms,
+    restarting: gatewayRestarting
+  })
+
+  const inferenceReady = gatewayOpen && inferenceStatus?.ready === true && !gatewayHealth.degraded
+  const gatewayDegraded = gatewayOpen || gatewayConnecting || gatewayHealth.degraded
 
   const gatewayClassName = inferenceReady
     ? undefined
@@ -481,7 +490,8 @@ export function useStatusbarItems({
       },
       {
         className: gatewayRestarting ? undefined : gatewayClassName,
-        detail: gatewayRestarting ? copy.gatewayRestarting : gatewayDetail,
+        detail: gatewayRestarting ? copy.gatewayRestarting : gatewayHealth.detail,
+        hidden: botsShowing,
         icon: gatewayRestarting ? (
           <GlyphSpinner ariaLabel={copy.gatewayRestarting} className="size-3" />
         ) : inferenceReady ? (
@@ -490,12 +500,12 @@ export function useStatusbarItems({
           <AlertCircle className="size-3" />
         ),
         id: 'gateway-health',
-        label: copy.gateway,
+        label: gatewayHealth.label,
         menuClassName: 'w-72',
         menuContent: gatewayMenuContent,
-        // Tip only when there's a real status reason — not "gateway status" restating the label.
-        title: inferenceStatus?.reason || undefined,
-        toggleLabel: copy.gateway,
+        // Tip only when there's a real status reason — not a restatement of the label.
+        title: gatewayHealth.title || inferenceStatus?.reason || undefined,
+        toggleLabel: copy.backend,
         variant: 'menu'
       },
       {
@@ -517,7 +527,7 @@ export function useStatusbarItems({
         // Shown while a free-tier identity exists and the tier is on: it names the
         // identity that carries the connectors (and inference when nothing else
         // does), and it is the persistent way in to the sign-in.
-        hidden: !freeTier?.available || guideOwnsSignIn,
+        hidden: !freeTierSignInOpen,
         icon: <Codicon name="account" size="0.75rem" />,
         id: 'free-tier',
         label: freeTierCopy.providerName,
@@ -622,12 +632,11 @@ export function useStatusbarItems({
       fileMenu.revealFileManager,
       fileMenu.revealInSidebar,
       offerLocalReveal,
-      freeTier?.available,
       freeTier?.model,
-      guideOwnsSignIn,
+      freeTierSignInOpen,
       gatewayMenuContent,
       gatewayClassName,
-      gatewayDetail,
+      gatewayHealth,
       gatewayRestarting,
       inferenceReady,
       inferenceStatus?.reason,

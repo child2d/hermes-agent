@@ -14,6 +14,7 @@ import {
   useState
 } from 'react'
 
+import { ProviderStatusChip } from '@/components/provider-status-chip'
 import { Badge } from '@/components/ui/badge'
 import { Codicon } from '@/components/ui/codicon'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
@@ -41,6 +42,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { isSubmitEnter } from '@/lib/ime'
 import { catalogProviderMatches, modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { displayModelName, modelDisplayParts } from '@/lib/model-status-label'
+import { accountResetMs, formatReset, modelResetMs } from '@/lib/provider-limit'
 import { reasoningEffortLabel } from '@/lib/reasoning-effort'
 import { foldIncludes, normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
@@ -134,6 +136,7 @@ export interface ModelChoice {
   /** Level the route actually sends for `effort` (`session.info.reasoning_effort_wire`); '' = unknown. */
   effortWire?: string
   fast: boolean
+  serviceTier?: string
   model: string
   provider: string
 }
@@ -147,18 +150,23 @@ export interface ModelChoice {
  * Returning `{}` is fine — the row then shows Hermes' defaults.
  */
 export interface ModelMenuController {
+  /** Detached task pickers can edit effort but have no speed write path. */
+  allowSpeed?: boolean
   /** Restore a model's remembered settings after it is selected. Separate from
    *  `setOptions` because it is one atomic "apply this model's preset" write,
    *  not a user editing one control — surfaces that write through to a session
    *  need to batch it. Values are already capability-gated by the menu. */
-  applyPreset: (preset: { effort?: string; fast?: boolean }, row: { model: string; provider: string }) => void
+  applyPreset: (
+    preset: { effort?: string; fast?: boolean; serviceTier?: string },
+    row: { model: string; provider: string }
+  ) => void
   current: ModelChoice
-  presetFor: (provider: string, model: string) => { effort?: string; fast?: boolean }
+  presetFor: (provider: string, model: string) => { effort?: string; fast?: boolean; serviceTier?: string }
   /** Commit a model row. Return false to abort (a failed session switch). */
   select: (model: string, provider: string) => Promise<boolean | void> | void
   /** Edit ONE option on a row. `isActive` says whether it's the current model. */
   setOptions: (
-    patch: { effort?: string; fast?: boolean },
+    patch: { effort?: string; fast?: boolean; serviceTier?: string },
     row: { isActive: boolean; model: string; provider: string }
   ) => void
 }
@@ -421,10 +429,21 @@ export function ModelCatalogMenu({
       return false
     }
 
+    const rememberedTier = preset.serviceTier ?? (preset.fast ? 'priority' : 'normal')
+
+    const tier =
+      rememberedTier === 'ultrafast'
+        ? caps?.ultrafast
+          ? 'ultrafast'
+          : 'normal'
+        : rememberedTier === 'priority' && caps?.fast
+          ? 'priority'
+          : 'normal'
+
     controller.applyPreset(
       {
         effort: (caps?.reasoning ?? true) ? (preset.effort ?? defaultEffort) : undefined,
-        fast: (caps?.fast ?? false) ? (preset.fast ?? false) : undefined
+        ...(controller.allowSpeed !== false ? { serviceTier: tier, fast: tier !== 'normal' } : {})
       },
       { model: family.id, provider: provider.slug }
     )
@@ -778,6 +797,7 @@ export function ModelCatalogMenu({
                     open={!collapsed}
                     size="0.625rem"
                   />
+                  <ProviderStatusChip className="ml-auto mr-0.5" provider={group.provider} />
                 </DropdownMenuItem>
                 {!collapsed &&
                   group.families.map(family => (
@@ -995,6 +1015,7 @@ function ModelFamilyRow({
   const { name, tag } = modelDisplayParts(family.id)
   const decoration = useModelMenuRowDecoration({ label: name, model: family.id, provider: provider.slug })
   const caps = provider.capabilities?.[family.id]
+  const limit = familyLimit(provider, family, isCurrent)
 
   // Live per-model $/Mtok pricing (Nous Portal and other providers that ship
   // it). A `-fast` sibling shares the base id's price: the collapsed row
@@ -1011,13 +1032,12 @@ function ModelFamilyRow({
   const preset = controller.presetFor(provider.slug, family.id)
   const effEffort = isCurrent ? current.effort : (preset.effort ?? '')
   const effFast = isCurrent ? current.fast : (preset.fast ?? false)
+  const effTier = isCurrent ? current.serviceTier : preset.serviceTier
 
-  const fastControl: FastControl = resolveFastControl(
-    activeId ?? family.id,
-    provider.models ?? [],
-    caps?.fast ?? false,
-    effFast
-  )
+  const fastControl: FastControl =
+    controller.allowSpeed === false
+      ? { kind: 'none' }
+      : resolveFastControl(activeId ?? family.id, provider.models ?? [], caps?.fast ?? false, effFast)
 
   // Identity on the left, settings on the right. The name and its variant tag
   // (`…-flash`, `…-preview`: WHICH model) lead; fast and effort are how this
@@ -1027,7 +1047,11 @@ function ModelFamilyRow({
   // be the same chip on every row, so it shows only on the active model and
   // on a row whose remembered preset chose one.
   const settings = [
-    fastControl.kind !== 'none' && fastControl.on ? copy.fast : null,
+    fastControl.kind !== 'none' && fastControl.on && !(fastControl.kind === 'param' && fastControl.canEnable === false)
+      ? effTier === 'ultrafast'
+        ? t.shell.modelOptions.ultrafast
+        : copy.fast
+      : null,
     (caps?.reasoning ?? true) && (isCurrent ? !current.effortPending : Boolean(effEffort))
       ? reasoningEffortLabel(effEffort || defaultEffort, isCurrent ? current.effortWire : undefined)
       : null
@@ -1114,6 +1138,7 @@ function ModelFamilyRow({
             </Badge>
           ) : null}
         </span>
+        <ModelResetBadge time={limit.reset} />
         {loadProgress ? (
           <span className="flex shrink-0 items-center gap-1.5" title={copyPicker.loadingIntoMemory}>
             <span className="h-1 w-14 overflow-hidden rounded-full bg-(--ui-bg-tertiary)">
@@ -1147,6 +1172,8 @@ function ModelFamilyRow({
         }
         provider={provider.slug}
         reasoning={caps?.reasoning ?? true}
+        serviceTier={effTier}
+        ultrafastSupported={controller.allowSpeed !== false && (caps?.ultrafast ?? false)}
       />
     </DropdownMenuSub>
   )
@@ -1182,6 +1209,35 @@ function ModelChip({ children, setting = false }: { children: ReactNode; setting
       {children}
     </Badge>
   )
+}
+
+/** A limited provider stays pickable: the account-wide case dims every row
+ *  (the group heading says why), the per-model case dims and tags only the
+ *  rows cooling down, so a sibling reads as the way to keep working. The
+ *  current row stays bright so the selection still reads. */
+function familyLimit(
+  provider: ModelOptionProvider,
+  family: ModelFamily,
+  isCurrent: boolean
+): { reset: null | string; tone?: string } {
+  const ms = modelResetMs(provider, family.id) ?? (family.fastId ? modelResetMs(provider, family.fastId) : null)
+  const reset = ms === null ? null : formatReset(ms)
+  const dim = !isCurrent && (reset !== null || accountResetMs(provider) !== null)
+
+  return { reset, tone: dim ? 'text-(--ui-text-tertiary)' : undefined }
+}
+
+function ModelResetBadge({ time }: { time: null | string }): null | ReactElement {
+  const { t } = useI18n()
+  const copy = t.shell.modelMenu
+
+  return time ? (
+    <Tooltip><TooltipTrigger asChild>
+      <Badge className="shrink-0 px-1.5 text-2xs tabular-nums text-amber-600 dark:text-amber-400" variant="secondary">
+        {copy.modelResets(time)}
+      </Badge>
+    </TooltipTrigger><TooltipContent>{copy.modelLimitedTip(time)}</TooltipContent></Tooltip>
+  ) : null
 }
 
 // A model still downloading: visible so the user knows it's coming (and

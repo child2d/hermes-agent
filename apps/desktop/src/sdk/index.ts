@@ -47,6 +47,7 @@ import { onGatewayEvent } from '@/contrib/events'
 import { registry } from '@/contrib/registry'
 import type { WorkspaceMode } from '@/contrib/types'
 import { deleteProfile, getLogs, getStatus, hermesApi, type HermesGateway } from '@/hermes'
+import { traceIdentityChange } from '@/lib/identity-trace'
 import { completeMcpDesktopOAuth } from '@/lib/mcp-dashboard-oauth'
 import {
   $gateway,
@@ -113,7 +114,8 @@ import { planPluginOpenSession } from './plugin-open-session-plan'
 import { sessionsHost } from './sessions'
 import { desktopSettings } from './settings'
 
-export type { DesktopSettingKey, DesktopSettingValues } from './settings'
+/** Pane, status bar and titlebar slots; see `./areas` for the mount rules. */
+export { PANES_AREA, STATUSBAR_AREAS, TITLEBAR_AREAS } from './areas'
 
 // -- state: readonly views over the app's live atoms -------------------------
 
@@ -1635,6 +1637,10 @@ export const host = {
    *  active instance changes on a profile swap. */
   getGateway: (): HermesGateway | null => $gateway.get(),
 
+  /** Change-only desktop.log line for multi-connection identity diagnostics
+   *  (`[category win=…] tag detail`). Call as `host.traceIdentityChange?.(…)`. */
+  traceIdentityChange,
+
   composer: composerHost,
 
   /** Language packs: `host.i18n.registerAppLocale(id, { endonym, rtl?,
@@ -1644,6 +1650,8 @@ export const host = {
 }
 
 // -- react bridge -------------------------------------------------------------
+
+export type { DesktopSettingKey, DesktopSettingValues } from './settings'
 
 /** THE whole Capabilities surface (the Skills / Tools / MCP / Plugins tabs,
  *  installed lists, full-skill detail pane, profile scope selector, plus every
@@ -1755,13 +1763,13 @@ export {
   type SidebarNavContribution,
   WORKSPACE_PAGE_HEADER_AREA
 } from '@/app/routes'
+
 /** Appearance settings' plugin seam: register a render contribution at
  *  `APPEARANCE_AREAS.extra` to add controls at the end of the Appearance page.
  *  `ColorSwatches` is the app's own swatch grid (profile rail / project dialog
  *  look) — use it for colour picking instead of driving app widgets through
  *  React internals; pair it with `host.sessions.setColor` for session colours. */
 export { APPEARANCE_AREAS } from '@/app/settings/appearance-contrib'
-
 /** THE settings rows: `ListRow` is label + description with the control beside
  *  it (wide) or under it (narrow); `ToggleRow` is the one on/off row — a Switch,
  *  never an Off/On pill pair. Use them for preference rows in plugin panes and
@@ -1903,6 +1911,8 @@ export type {
   PluginNotificationAction,
   PluginOs,
   PluginRestOptions,
+  PluginSettingsPage,
+  PluginSettingsSubpage,
   PluginStorage
 } from '@/contrib/plugin'
 /** Mount-scoped contribution: while the rendering component is mounted, its
@@ -1914,6 +1924,8 @@ export { Contribute, type ContributeProps } from '@/contrib/react/contribute'
 
 // -- contracts ----------------------------------------------------------------
 
+/** Settings ▸ Plugins entries (`ctx.registerSettingsPage`); `pluginSettingsHref` deep-links one. */
+export { pluginSettingsHref, SETTINGS_PLUGINS_AREA } from '@/contrib/settings-pages'
 export type { Contribution } from '@/contrib/types'
 /** The live gateway instance type — for typing the `gateway` prop `ConnectorsTab`
  *  takes; obtain the instance from `host.getGateway()`. */
@@ -1997,14 +2009,6 @@ export { PROFILE_SWATCHES, profileColor, profileColorSoft } from '@/lib/profile-
  *  `ctx.socket` frame invalidating a query). Inside components keep using
  *  `useQueryClient`. */
 export { queryClient } from '@/lib/query-client'
-
-export const PANES_AREA = 'panes'
-export const STATUSBAR_AREAS = { left: 'statusBar.left', right: 'statusBar.right' } as const
-/** Titlebar slots are PERMANENT mount points: a component registered here
- *  stays mounted across chat ↔ page navigation, so `useEffect` setup/cleanup
- *  runs once per registration, not once per route. Page-owned controls that
- *  should exist only while a page is up go to `WORKSPACE_PAGE_HEADER_AREA`. */
-export const TITLEBAR_AREAS = { center: 'titleBar.center', left: 'titleBar.left', right: 'titleBar.right' } as const
 
 /** Compact labels for the reasoning levels exported from @hermes/shared, so a
  *  plugin surfacing a thinking depth uses the same spelling as the app. */

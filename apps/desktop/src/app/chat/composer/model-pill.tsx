@@ -1,4 +1,5 @@
 import { useStore } from '@nanostores/react'
+import { atom } from 'nanostores'
 import { useEffect, useRef, useState } from 'react'
 
 import { useSessionView } from '@/app/chat/session-view'
@@ -27,6 +28,8 @@ import type { ChatBarState } from './types'
 // it absorbs the squeeze between collapse stages — hence `shrink`, with a
 // truncating label and no `max-w-*` cap: a long model name only truncates when
 // the row is genuinely out of room (#49340), not at an arbitrary 160px.
+const UNKNOWN_TIER = atom('')
+
 const PILL = cn(CONTROL_PILL, 'shrink')
 
 /**
@@ -57,6 +60,7 @@ export function ModelPill({
   const currentModel = model.model || viewModel
   const currentProvider = model.provider || viewProvider
   const fastMode = useStore(view.$fast)
+  const serviceTier = useStore(view.$serviceTier ?? UNKNOWN_TIER)
   const reasoningEffort = useStore(view.$reasoningEffort)
   const modelSource = useStore($currentModelSource)
   const runtimeId = useStore(view.$runtimeId)
@@ -136,7 +140,7 @@ export function ModelPill({
   ) : (
     <>
       {currentModel.trim() ? (
-        <span className="truncate">{pillLabel ?? formatModelPillLabel(currentModel, { fastMode })}</span>
+        <span className="truncate">{pillLabel ?? formatModelPillLabel(currentModel, { fastMode, serviceTier })}</span>
       ) : (
         <GlyphSpinner className="opacity-50" spinner="braille" />
       )}

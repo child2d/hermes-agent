@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { DocsLink } from '@/components/onboarding/flow'
 import { useI18n } from '@/i18n'
@@ -14,7 +14,8 @@ import {
   readSharedMetricsConsent,
   saveSharedMetricsConsent,
   SHARED_METRICS_DOCS_URL,
-  type SharedMetricsConsent
+  type SharedMetricsConsent,
+  sharedMetricsProfileRequester
 } from '@/store/shared-metrics'
 
 import { ToggleRow } from './primitives'
@@ -38,11 +39,15 @@ export function SharedMetricsSettings() {
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const request = useCallback(
-    <T,>(method: string, params: Record<string, unknown> = {}) =>
-      requestGatewayForAgent<T>(connectionId, scopeProfile, method, params, undefined, undefined, {
-        spawnPriority: 'foreground'
-      }),
+  const request = useMemo(
+    () =>
+      sharedMetricsProfileRequester(
+        <T,>(method: string, params: Record<string, unknown> = {}) =>
+          requestGatewayForAgent<T>(connectionId, scopeProfile, method, params, undefined, undefined, {
+            spawnPriority: 'foreground'
+          }),
+        scopeProfile
+      ),
     [connectionId, scopeProfile]
   )
 

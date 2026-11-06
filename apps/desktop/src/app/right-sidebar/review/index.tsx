@@ -44,6 +44,7 @@ import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import { PaneEmptyState, RightSidebarSectionHeader } from '../index'
 
 import { ReviewFileTree } from './file-tree'
+import { ReviewScopeRow } from './scope-row'
 import { ReviewShipBar } from './ship-bar'
 
 // Compact header/diff action buttons — micro hit targets packed tight, matching
@@ -69,6 +70,8 @@ export function ReviewPane() {
 
   const selectedFile = files.find(file => file.path === selectedPath)
   const hasFiles = files.length > 0
+  // A repo (or a load that may reveal one) gets the header + scope chrome.
+  const showChrome = loading || isRepo
   // `{ path: null }` → revert all; `{ path: '…' }` → revert one file.
   const revertingAll = revertTarget?.path == null
   // Delay the skeletons so fast loads (most project switches) just blank → content
@@ -86,7 +89,7 @@ export function ReviewPane() {
           : 'border-l shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
       )}
     >
-      {(loading || isRepo) && (
+      {showChrome && (
         <RightSidebarSectionHeader data-suppress-pane-reveal-side="">
           <div className="flex min-w-0 flex-1">
             {/* Pure self-naming label — redundant under a zone tab that already
@@ -160,7 +163,9 @@ export function ReviewPane() {
         </RightSidebarSectionHeader>
       )}
 
-      {loading || isRepo ? (
+      {showChrome && <ReviewScopeRow />}
+
+      {showChrome ? (
         hasFiles ? (
           <ReviewFileTree />
         ) : showTreeSkeleton ? (
