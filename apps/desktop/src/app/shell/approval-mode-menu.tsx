@@ -19,10 +19,48 @@ import {
 } from '@/store/approval-mode'
 import { requestGatewayForProfile } from '@/store/gateway'
 
-/** The menu's box, shared by its two openings (the statusbar item's popover and
- *  the composer chip's dropdown) so the three-option list cannot be laid out two
- *  different ways. */
+/**
+ * The menu's box, shared by its two openings (the statusbar item's popover and
+ * the composer chip's dropdown) so the three-option list cannot be laid out two
+ * different ways. */
 export const APPROVAL_MENU_CLASS = 'w-72 p-1'
+
+export function useApprovalModeStatusbarItem(
+  profile: string,
+  requestGateway: ApprovalModeRequester = (method, params) => requestGatewayForProfile(profile, method, params),
+  gatewayState = 'open',
+  // Identity of the route the profile is served on (the active socket): a
+  // move between gateways that serve the same profile name re-reads the mode.
+  routeIdentity?: unknown
+): StatusbarItem {
+  const copy = useI18n().t.shell.approvalMode
+  const { labels, mode, setMode } = useApprovalModeControl(profile)
+
+  // The shell (and this chip) mount before the gateway socket opens at boot, and
+  // a sync issued that early rejects with "Hermes gateway unavailable" — the
+  // swallow would leave the item on its optimistic 'smart' default until some
+  // later session event reconciles it. Gate on the open socket and re-run when it
+  // opens (or a reconnect lands), the same way useStatusSnapshot does.
+  useEffect(() => {
+    if (gatewayState !== 'open') {
+      return
+    }
+
+    void syncApprovalModeForProfile(requestGateway, profile).catch(() => undefined)
+  }, [gatewayState, profile, requestGateway, routeIdentity])
+
+  return {
+    className: mode === 'off' ? 'bg-(--chrome-action-hover) text-foreground' : undefined,
+    icon: mode === 'off' ? <ZapFilled className="size-3.5" /> : <Zap className="size-3.5 opacity-70" />,
+    id: 'approval-mode',
+    label: labels[mode],
+    menuAlign: 'end',
+    menuClassName: APPROVAL_MENU_CLASS,
+    menuContent: <ApprovalModeMenuItems mode={mode} onValueChange={setMode} />,
+    title: copy.ariaLabel(labels[mode]),
+    variant: 'menu'
+  }
+}
 
 /** The three mode labels — ONE map for the surfaces that show the setting (the
  *  statusbar item's trigger, the menu items, the composer's chip). */
@@ -110,23 +148,3 @@ export function ApprovalModeMenuItems({
   )
 }
 
-/** The statusbar's approval-mode item. The composer's chip
- *  (`approval-mode-chip`) opens the same menu from the input row — the statusbar
- *  is hidden in Simple mode, so that chip is the only place the mode is reachable
- *  there. */
-export function useApprovalModeStatusbarItem(profile: string): StatusbarItem {
-  const copy = useI18n().t.shell.approvalMode
-  const { labels, mode, setMode } = useApprovalModeControl(profile)
-
-  return {
-    className: mode === 'off' ? 'bg-(--chrome-action-hover) text-foreground' : undefined,
-    icon: mode === 'off' ? <ZapFilled className="size-3.5" /> : <Zap className="size-3.5 opacity-70" />,
-    id: 'approval-mode',
-    label: labels[mode],
-    menuAlign: 'end',
-    menuClassName: APPROVAL_MENU_CLASS,
-    menuContent: <ApprovalModeMenuItems mode={mode} onValueChange={setMode} />,
-    title: copy.ariaLabel(labels[mode]),
-    variant: 'menu'
-  }
-}

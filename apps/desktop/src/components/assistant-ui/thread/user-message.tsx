@@ -22,6 +22,7 @@ import { characterAvatarSources } from '@/lib/character-avatars'
 import { triggerHaptic } from '@/lib/haptics'
 import { Pencil, StopFilled } from '@/lib/icons'
 import { LruCache } from '@/lib/lru-cache'
+import { isTouchInteraction } from '@/lib/touch-interaction'
 import { cn } from '@/lib/utils'
 import { $gateway } from '@/store/gateway'
 import { notifyThreadEditOpen } from '@/store/thread-scroll'
@@ -430,13 +431,14 @@ export const UserMessage = () => {
                 // menu, and this handler's selection guard keeps ⌘C flows.
                 data-context-menu-skip=""
                 onContextMenu={
-                  // Right-click is the desktop stand-in for iOS touch-and-hold —
-                  // but only when there's nothing selected. A live highlight
-                  // keeps the native Copy menu (and ⌘C) instead of the picker.
+                  // Right-click is the desktop reaction gesture. A touch long-press
+                  // in the browser-hosted Desktop stays the platform's, so selection
+                  // handles and Copy are never replaced by the picker; a mouse
+                  // right-click on the same device still opens it.
                   readOnly || !reactionsEnabled
                     ? undefined
                     : event => {
-                        if (hasTextSelection()) {
+                        if (hasTextSelection() || isTouchInteraction(event.nativeEvent)) {
                           return
                         }
 

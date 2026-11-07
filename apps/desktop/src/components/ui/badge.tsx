@@ -15,6 +15,16 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground",
+        // Tones the catalog/settings surfaces ask for by name. Same stock box,
+        // tinted ink — no new shape or spacing.
+        muted: "border-transparent bg-muted text-muted-foreground",
+        success: "border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        warn: "border-transparent bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      },
+      size: {
+        default: "",
+        sm: "px-1.5 py-0 text-2xs",
+        xs: "px-1 py-0 text-2xs",
       },
     },
     defaultVariants: {
@@ -27,9 +37,9 @@ export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof badgeVariants> {}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, size, variant, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} data-slot="badge" {...props} />
+    <div className={cn(badgeVariants({ size, variant }), className)} data-slot="badge" {...props} />
   )
 }
 

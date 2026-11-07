@@ -5,8 +5,8 @@ import { test } from 'vitest'
 import { resolveDesktopHermesHome } from './data-paths'
 import {
   ENTERPRISE_HOME_SEGMENTS,
-  enterpriseAmbientEnvScrub,
   ENTERPRISE_WINDOWS_HOME_SEGMENTS,
+  enterpriseAmbientEnvScrub,
   enterpriseHermesHomeFor,
   enterpriseHomeIsolationIssue,
   enterpriseHomeSegments,
@@ -60,10 +60,12 @@ test('the enterprise home never points at the personal .hermes', () => {
     assert.ok(home && !home.includes('.hermes'))
     assert.ok(home.endsWith(ENTERPRISE_HOME_SEGMENTS.join('/')))
   }
+
   const windows = enterpriseHermesHomeFor(
     { enterprise: true },
     { home: 'C:\\Users\\u', platform: 'win32', env: { LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local' } }
   )
+
   assert.ok(windows && !windows.includes('.hermes'))
   assert.ok(windows.endsWith(ENTERPRISE_WINDOWS_HOME_SEGMENTS.join('\\')))
 })
@@ -247,6 +249,7 @@ test('the uniform target shape resolves, but is NOT the live prod default yet', 
     enterpriseHermesHomeFor({ enterprise: true, homeDir: 'prod' }, { home: '/Users/u', platform: 'darwin' }),
     enterpriseHermesHomeFor({ enterprise: true, homeDir: null }, { home: '/Users/u', platform: 'darwin' })
   )
+
   // Every environment, uniform shape included, is still outside ~/.hermes.
   for (const segment of ['prod', 'test', 'dev']) {
     const home = enterpriseHermesHomeFor({ enterprise: true, homeDir: segment }, { home: '/Users/u', platform: 'darwin' })
@@ -280,6 +283,7 @@ function startupHome(
   const platform = options.platform ?? 'darwin'
   const identity = { enterprise: options.enterprise ?? true, homeDir: options.homeDir ?? null }
   const enterpriseDefault = enterpriseHermesHomeFor(identity, { home, platform, env })
+
   const requestedHome = resolveDesktopHermesHome({
     home,
     env,
@@ -288,6 +292,7 @@ function startupHome(
     readWindowsHome: () => null,
     defaultHome: enterpriseDefault
   })
+
   const selection = enterpriseHomeSelection({
     identity,
     requestedHome,
@@ -296,6 +301,7 @@ function startupHome(
     platform,
     env
   })
+
   return {
     home: selection.home,
     discarded: selection.discardedAmbientRoot,
@@ -385,6 +391,7 @@ test('windows: another environment root under %LOCALAPPDATA%\\plankton is discar
     LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local',
     HERMES_HOME: 'C:\\Users\\u\\AppData\\Local\\plankton\\engine\\home'
   }
+
   const got = startupHome(env, { home: 'C:\\Users\\u', platform: 'win32', homeDir: 'dev' })
   assert.equal(got.home, 'C:\\Users\\u\\AppData\\Local\\plankton\\dev\\engine\\home')
   assert.equal(got.discardedReason, 'other-environment')

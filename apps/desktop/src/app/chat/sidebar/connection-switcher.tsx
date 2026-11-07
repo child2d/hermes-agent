@@ -19,7 +19,6 @@ import { useI18n } from '@/i18n'
 import {
   CONNECTION_SEARCH_THRESHOLD,
   connectionMatchesQuery,
-  connectionTooltip,
   sortConnectionsForDisplay
 } from '@/lib/connection-display'
 import { triggerHaptic } from '@/lib/haptics'
@@ -98,11 +97,7 @@ export function ConnectionSwitcher({ compact = false, onConnect }: { compact?: b
 
     void (async () => {
       if (connection?.kind === 'local' && connectionId !== activeConnectionId) {
-        const accepted = await requestLocalDevice({
-          connectionId,
-          label: connection.label,
-          replaceCenter: true
-        })
+        const accepted = await requestLocalDevice({ connectionId, label: connection.label })
 
         if (!accepted) {
           return

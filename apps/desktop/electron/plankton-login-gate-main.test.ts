@@ -219,9 +219,11 @@ function makeSandbox(): { root: string; home: string; hermesHome: string } {
   const root = fs.mkdtempSync(path.join(base, 'gate-'))
   const home = path.join(root, 'home')
   const hermesHome = path.join(root, 'engine-home')
+
   for (const d of ['home', 'appData', 'userData', 'tmp', 'logs', 'cache', 'sessionData']) {
     fs.mkdirSync(path.join(root, d), { recursive: true })
   }
+
   // engine-home is intentionally NOT created.
   return { root, home, hermesHome }
 }
@@ -230,6 +232,7 @@ function runChild(mode: string, extraEnv: Record<string, string> = {}): any {
   const sandbox = makeSandbox()
   const childFile = path.join(sandbox.root, 'probe.cjs')
   fs.writeFileSync(childFile, CHILD)
+
   try {
     const out = execFileSync(process.execPath, [childFile], {
       encoding: 'utf-8',
@@ -250,12 +253,16 @@ function runChild(mode: string, extraEnv: Record<string, string> = {}): any {
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 90_000
     })
+
     const marker = out.split('__RESULT__')[1]
+
     if (!marker) {
       throw new Error(`child produced no result marker: ${out.slice(0, 500)}`)
     }
+
     const parsed = JSON.parse(marker)
     parsed.__sandbox = sandbox
+
     return parsed
   } catch (error) {
     fs.rmSync(sandbox.root, { recursive: true, force: true })
@@ -266,12 +273,15 @@ function runChild(mode: string, extraEnv: Record<string, string> = {}): any {
 /** Files that prove the enterprise engine home was read/written. */
 function homeArtifacts(root: string): string[] {
   const found: string[] = []
+
   const walk = (dir: string): void => {
     if (!fs.existsSync(dir)) {
       return
     }
+
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name)
+
       if (entry.isDirectory()) {
         walk(full)
       } else if (/state\.db|config\.yaml|desktop\.log/.test(entry.name)) {
@@ -279,7 +289,9 @@ function homeArtifacts(root: string): string[] {
       }
     }
   }
+
   walk(root)
+
   return found
 }
 
@@ -297,6 +309,7 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
     const priorVariant = process.env.HERMES_DESKTOP_VARIANT
     process.env.HERMES_DESKTOP_VARIANT = 'plankton'
     let identity: any
+
     try {
       identity = gateRequire(identityPath)
     } finally {
@@ -305,8 +318,10 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
       } else {
         process.env.HERMES_DESKTOP_VARIANT = priorVariant
       }
+
       delete gateRequire.cache[identityPath]
     }
+
     expect(identity.enterprise, 'test identity must be the plankton variant').toBe(true)
 
     fs.mkdirSync(bundleDir, { recursive: true })
@@ -334,8 +349,10 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
 
   it('registers the named controlled channels (the gate has something to cover)', () => {
     const result = runChild('handlers')
+
     try {
       expect(result.fatal, result.fatal).toBeNull()
+
       for (const channel of NAMED_CONTROLLED) {
         expect(result.channels, `${channel} not registered`).toContain(channel)
       }
@@ -346,6 +363,7 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
 
   it('logged out: EVERY non-public invoke channel is refused before its business handler runs', () => {
     const result = runChild('handlers')
+
     try {
       expect(result.fatal, result.fatal).toBeNull()
       const results: Record<string, any> = result.results
@@ -358,10 +376,13 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
         if (PUBLIC.has(channel) || NOT_INVOKED.has(channel)) {
           continue
         }
+
         const value = results[channel]
+
         if (value && value.ok === false && value.code === 'not-authenticated') {
           continue
         }
+
         if (value && value.threw) {
           threw.push(`${channel}: ${value.threw}`)
         } else {
@@ -380,6 +401,7 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
 
   it('logged out: the login surface still works (else login is impossible)', () => {
     const result = runChild('handlers')
+
     try {
       expect(result.fatal, result.fatal).toBeNull()
       const results = result.results
@@ -395,6 +417,7 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
   it('logged out: no backend spawn and no enterprise home write on the startup path', () => {
     const loaded = runChild('handlers')
     const started = runChild('startup')
+
     for (const result of [loaded, started]) {
       try {
         expect(result.fatal, result.fatal).toBeNull()
@@ -415,6 +438,7 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
   // (fatal=null) with every invoke channel reachable while logged out.
   it('self-check aborts startup when a read-only ipcMain.handle write THROWS (fail-closed)', () => {
     const result = runChild('load', { GATE_IPC_HANDLE: 'readonly-throw' })
+
     try {
       expect(result.fatal, 'a failing handle assignment must abort, not boot').toBeTruthy()
       // The self-check message (not a bare TypeError) proves the abort path ran.
@@ -426,6 +450,7 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
 
   it('self-check aborts startup when a read-only ipcMain.handle write is SILENTLY ignored (fail-closed)', () => {
     const result = runChild('load', { GATE_IPC_HANDLE: 'readonly-silent' })
+
     try {
       expect(result.fatal, 'a silently-ignored wrap must abort, not boot ungated').toBeTruthy()
       expect(result.fatal).toMatch(/ipc gate self-check failure/i)
@@ -436,6 +461,7 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
 
   it('self-check passes on a healthy writable handle and leaves no probe channel behind', () => {
     const result = runChild('load')
+
     try {
       expect(result.fatal, result.fatal).toBeNull()
       expect(result.channels, 'the self-check probe channel was not cleaned up').not.toContain(

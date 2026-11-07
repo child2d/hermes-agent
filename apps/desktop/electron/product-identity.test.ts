@@ -229,7 +229,7 @@ test('packaging isolates boot metadata and executable names without renaming rel
 
     const {
       AppInfo
-    }: { AppInfo: typeof BuilderAppInfo } = require('../../../node_modules/app-builder-lib/dist/appInfo.js')
+    }: { AppInfo: typeof BuilderAppInfo } = require('app-builder-lib')
 
     const appInfo: BuilderAppInfo = new AppInfo(
       { config, metadata: { ...pkg, ...config.extraMetadata } } as Packager,
@@ -395,9 +395,11 @@ test('each environment pins its own userData dir, so the three apps coexist', as
 
   try {
     const dirs = new Map<string, string>()
+
     for (const variant of ['plankton', 'plankton-test', 'plankton-dev'] as const) {
       const identity: ProductIdentity = await identityForVariant(variant)
       const paths: Record<string, string> = { appData: root, userData: path.join(root, 'Hermes') }
+
       const app: Parameters<typeof applyDesktopIdentity>[0] = {
         getPath: (key: string): string => paths[key],
         setPath: (key: string, value: string): void => {
@@ -405,6 +407,7 @@ test('each environment pins its own userData dir, so the three apps coexist', as
         },
         setName: (): void => {}
       }
+
       runtime.applyDesktopIdentity(app, identity)
       const userData = path.basename(paths.userData)
       // Distinct userData = distinct single-instance lock + distinct window
@@ -413,6 +416,7 @@ test('each environment pins its own userData dir, so the three apps coexist', as
       dirs.set(userData, variant)
       assert.equal(userData, identity.appNamePascal)
     }
+
     assert.equal(dirs.size, 3)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
@@ -450,9 +454,11 @@ test('packaging the enterprise variant follows its icon and identity', async ():
   const pkg: { productName: string } = require('../package.json')
   delete require.cache[require.resolve('../product-identity.cjs')]
   delete require.cache[require.resolve('../electron-builder.config.cjs')]
+
   const load = (): PackagingConfiguration => {
     delete require.cache[require.resolve('../product-identity.cjs')]
     delete require.cache[require.resolve('../electron-builder.config.cjs')]
+
     return require('../electron-builder.config.cjs')
   }
 
@@ -478,12 +484,14 @@ test('packaging the enterprise variant follows its icon and identity', async ():
       commands: { hermes: 'bin/hermes' }
     }
   }
+
   const built = (await import('../scripts/write-build-stamp.mjs')).buildStampPayload(
     { commit: 'a'.repeat(40), branch: 'main', dirty: false, source: 'local' },
     { HERMES_DESKTOP_VARIANT: 'plankton' },
     'darwin',
     payload
   )
+
   // Plankton is a branded bundled carrier: the payload kind is the shared
   // 'bundled' shape (so every bundled gate applies) and the branding variant
   // rides in identityVariant.

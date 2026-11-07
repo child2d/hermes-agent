@@ -38,6 +38,10 @@ interface ToolsetsTabProps {
   /** The (connection, profile) scope every read and write routes to. */
   profile: ProfileScope
   query: string
+  /** The page shell owns the search field (and its hints); accepted from the
+   *  shared tab contract but not rendered here. */
+  onQueryChange?: (query: string) => void
+  hints?: string[]
 }
 
 /** THE Tools tab: the toolset list with its usage badges, and the inspector

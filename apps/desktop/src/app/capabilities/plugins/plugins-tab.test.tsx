@@ -1,19 +1,60 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { type ComponentProps, useState } from 'react'
+import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createPluginContext } from '@/contrib/plugin'
 import { $pluginDecisions, $pluginRecords, dropPlugin, patchPlugin, publishPlugin } from '@/contrib/plugins-store'
+import { CATALOG_ORIGIN } from '@/lib/plugin-catalog'
 import { queryClient } from '@/lib/query-client'
 import { $agentPlugins, $agentPluginsStatus } from '@/store/agent-plugins'
 import { $confirmRequest, settleConfirm } from '@/store/confirm'
 import { $notifications } from '@/store/notifications'
-import { $paneHeightOverride, setPaneHeightOverride } from '@/store/panes'
 import { $pluginInstallRequest, closePluginInstallRequest } from '@/store/plugin-install-request'
-import { $connection } from '@/store/session'
+import { $connection, $gatewayState } from '@/store/session'
+
+import { PageSearchShell } from '../../page-search-shell'
+import { parseCatalog } from '../catalog/catalog-data'
+import { $catalogCardView } from '../catalog/store'
 
 import { PluginsTab } from './plugins-tab'
 
-const requestGateway = vi.fn(async () => ({ plugins: [] }))
+const requestGateway = vi.fn(async (_method: string, _params?: Record<string, unknown>): Promise<unknown> => ({
+  plugins: $agentPlugins.get()
+}))
+
+// The shell owns search; exercise the same controlled composition as CapabilitiesView.
+function PluginsHarness({ query: initialQuery, ...props }: ComponentProps<typeof PluginsTab>) {
+  const [query, setQuery] = useState(initialQuery ?? '')
+
+  return (
+    <PageSearchShell onSearchChange={setQuery} searchHidden searchPlaceholder="Search plugins" searchValue={query}>
+      <PluginsTab {...props} onQueryChange={setQuery} query={query} />
+    </PageSearchShell>
+  )
+}
+
+function renderPlugins(props: ComponentProps<typeof PluginsTab>) {
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <PluginsHarness {...props} />
+    </QueryClientProvider>
+  )
+}
+
+const weatherEntry = {
+  name: 'weather-plugin',
+  repo: 'https://github.com/example/weather-plugin',
+  sha: 'a'.repeat(40),
+  subdir: '',
+  tier: 'community',
+  category: 'weather',
+  description: 'Local weather forecasts'
+}
+
+function seedCatalog(entries = [weatherEntry]) {
+  queryClient.setQueryData(['public-catalog', 'plugins'], parseCatalog('plugins', entries))
+}
 
 const connectionFixture = {
   baseUrl: 'http://localhost',
@@ -30,6 +71,9 @@ vi.mock('@/app/gateway/hooks/use-gateway-request', () => ({
 }))
 
 const uninstallDiskPlugin = vi.fn(async (_id: string) => ({ ok: true }))
+const setEnvVar = vi.fn(async (..._args: unknown[]) => ({}))
+
+vi.mock('@/api/config', () => ({ setEnvVar: (...args: unknown[]) => setEnvVar(...args) }))
 
 vi.mock('@/contrib/runtime-loader', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -47,23 +91,65 @@ vi.mock('@/api/toolsets', async importOriginal => ({
   setToolsetEnabled: (...args: unknown[]) => setToolsetEnabled(...(args as Parameters<typeof setToolsetEnabled>))
 }))
 
-describe('PluginsTab', () => {
-  beforeEach(() => {
-    $pluginRecords.set({})
-    $agentPlugins.set([])
-    $agentPluginsStatus.set('ready')
-    closePluginInstallRequest()
-    requestGateway.mockClear()
-    setToolsetEnabled.mockReset()
-    setToolsetEnabled.mockResolvedValue({ enabled: true, name: 'kanban', ok: true })
-    getToolsets.mockReset()
-    getToolsets.mockResolvedValue([])
-  })
+beforeEach(() => {
+  $gatewayState.set('open')
+  $pluginRecords.set({})
+  $agentPlugins.set([])
+  $agentPluginsStatus.set('ready')
+  $catalogCardView.set(false)
+  seedCatalog([])
+  closePluginInstallRequest()
+  requestGateway.mockReset()
+  requestGateway.mockImplementation(async () => ({ plugins: $agentPlugins.get() }))
+  setEnvVar.mockClear()
+  setToolsetEnabled.mockReset()
+  setToolsetEnabled.mockResolvedValue({ enabled: true, name: 'kanban', ok: true })
+  getToolsets.mockReset()
+  getToolsets.mockResolvedValue([])
+})
 
-  afterEach(() => {
-    cleanup()
-    $connection.set(null)
-    queryClient.clear()
+afterEach(() => {
+  cleanup()
+  settleConfirm(false)
+  $connection.set(null)
+  queryClient.clear()
+  vi.unstubAllGlobals()
+})
+
+describe('PluginsTab', () => {
+  it('resolves a deep-linked installed plugin to its row and consumes the route param', async () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    $agentPlugins.set(
+      ['alpha', 'omega'].map(name => ({
+        key: name,
+        name,
+        description: `${name} plugin`,
+        source: 'git',
+        status: 'enabled',
+        version: '1'
+      }))
+    )
+
+    function Location() {
+      return <output data-testid="route">{useLocation().search}</output>
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/capabilities?tab=plugins&plugin=omega']}>
+          <Location />
+          <PluginsHarness profile="workbot" query="nothing-matches" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    )
+
+    await screen.findByRole('switch', { name: 'Agent: omega' })
+    await waitFor(() => expect(screen.getByTestId('route').textContent).toBe('?tab=plugins'))
+    // The tab lists the whole scope (its search lives in the page shell, which is
+    // hidden for Plugins), so the deep-linked row is highlighted in place rather
+    // than through a Browse selection.
+    expect(screen.getByRole('row', { name: /^omega/ })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Agent: alpha' })).toBeTruthy()
   })
 
   it('renders declared server pills and the unavailable sentence under the description', () => {
@@ -86,7 +172,7 @@ describe('PluginsTab', () => {
       }
     ])
 
-    render(<PluginsTab profile="workbot" />)
+    renderPlugins({ profile: 'workbot' })
 
     expect(screen.getByTestId('server-pill-ready-server')).toBeTruthy()
     expect(screen.getByTestId('server-pill-setup-server')).toBeTruthy()
@@ -106,10 +192,11 @@ describe('PluginsTab', () => {
       }
     ])
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
     expect(screen.queryByText('fal')).toBeNull()
-    expect(screen.getByText(/No plugins yet/)).toBeTruthy()
+    expect(screen.queryByRole('row')).toBeNull()
+    expect(screen.getByText('No matches')).toBeTruthy()
   })
 
   // A desktop half can only be copied out of a backend that runs on THIS
@@ -129,7 +216,7 @@ describe('PluginsTab', () => {
       }
     ])
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
     const detail = within(screen.getByRole('row', { name: /^nous-prices/ }))
     expect(detail.getByText('unavailable (remote backend)')).toBeTruthy()
@@ -149,7 +236,7 @@ describe('PluginsTab', () => {
       }
     ])
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
     const detail = within(screen.getByRole('row', { name: /^nous-prices/ }))
     expect(detail.getByText('copying…')).toBeTruthy()
@@ -171,7 +258,7 @@ describe('PluginsTab', () => {
       }
     ])
 
-    render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+    renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
 
     expect(screen.getAllByTestId(/^plugin-row-/)).toHaveLength(1)
     expect(screen.getByText('Agent + Desktop')).toBeTruthy()
@@ -192,7 +279,7 @@ describe('PluginsTab', () => {
       }
     })
 
-    render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+    renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
 
     expect(screen.queryByRole('switch', { name: /^Agent:/ })).toBeNull()
     screen.getByRole('button', { name: 'Install here' }).click()
@@ -207,18 +294,43 @@ describe('PluginsTab', () => {
     })
   })
 
+  it('badges "Install here" with the catalog tier of the package it came from', async () => {
+    seedCatalog([{ ...weatherEntry, name: 'hermes-media-studio', tier: 'official' }])
+    $pluginRecords.set({
+      media: {
+        id: 'media',
+        name: 'Media Studio',
+        kind: 'disk',
+        status: 'loaded',
+        packageName: 'hermes-media-studio',
+        packageOrigin: {
+          catalogName: 'hermes-media-studio',
+          repo: 'https://github.com/NousResearch/hermes-media-studio.git',
+          sha: 'abc'
+        }
+      }
+    })
+
+    renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
+    screen.getByRole('button', { name: 'Install here' }).click()
+
+    await waitFor(() => {
+      expect($pluginInstallRequest.get()).toMatchObject({ catalogName: 'hermes-media-studio', tier: 'official' })
+    })
+  })
+
   it('disables "Install here" when the package has no known origin (hand-copied folder)', () => {
     $pluginRecords.set({
       media: { id: 'media', name: 'Media Studio', kind: 'disk', status: 'loaded', packageName: 'hermes-media-studio' }
     })
 
-    render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+    renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
 
     expect((screen.getByRole('button', { name: 'Install here' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('loads the plugin list scoped to the selected profile', () => {
-    render(<PluginsTab profile="workbot" />)
+    renderPlugins({ profile: 'workbot' })
 
     expect(requestGateway).toHaveBeenCalledWith(
       'plugins.manage',
@@ -226,49 +338,27 @@ describe('PluginsTab', () => {
     )
   })
 
-  it('opens the dual-target install modal from a catalog pick message', async () => {
-    render(<PluginsTab profile="workbot" />)
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          name: 'weather-plugin',
-          repo: 'https://github.com/example/weather-plugin',
-          sha: 'a'.repeat(40),
-          subdir: '',
-          tier: 'community',
-          type: 'hermes-plugin-pick'
-        },
-        origin: 'https://hermes-agent.nousresearch.com'
-      })
-    )
-
-    await waitFor(() => {
-      const request = $pluginInstallRequest.get()
-
-      expect(request).not.toBeNull()
-      expect(request?.catalogName).toBe('weather-plugin')
-      expect(request?.repo).toBe('https://github.com/example/weather-plugin')
-      expect(request?.profile).toBe('workbot')
-      expect(request?.sha).toBe('a'.repeat(40))
-    })
-  })
-
-  it('ignores pick messages from foreign origins', () => {
-    render(<PluginsTab profile={null} />)
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          name: 'evil-plugin',
-          repo: 'https://github.com/evil/evil-plugin',
-          type: 'hermes-plugin-pick'
-        },
-        origin: 'https://evil.example.com'
-      })
-    )
+  it('opens the scoped native install dialog from the page header', () => {
+    renderPlugins({ profile: 'workbot' })
 
     expect($pluginInstallRequest.get()).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Install from Git' }))
+
+    expect($pluginInstallRequest.get()).toMatchObject({ profile: 'workbot', repo: '' })
+  })
+
+  it('lists every installed package as one row with its halves', () => {
+    $pluginRecords.set({
+      clock: { id: 'clock', name: 'Clock', kind: 'disk', status: 'loaded' },
+      weather: { id: 'weather', name: 'Weather', kind: 'disk', status: 'loaded' }
+    })
+    renderPlugins({ profile: null })
+
+    expect(screen.getByRole('row', { name: /^Clock/ })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Desktop: Clock' })).toBeTruthy()
+    expect(screen.getByRole('row', { name: /^Weather/ })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Desktop: Weather' })).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('toggles by canonical key through plugins.manage', async () => {
@@ -282,12 +372,13 @@ describe('PluginsTab', () => {
         version: '0.20.0'
       }
     ])
-    requestGateway.mockResolvedValueOnce({
-      ok: true,
-      plugin: { key: 'image_gen/legacy', name: 'Legacy plugin', status: 'enabled' }
-    } as never)
+    requestGateway.mockImplementation(async (_method, params) =>
+      params?.action === 'toggle'
+        ? { ok: true, plugin: { key: 'image_gen/legacy', name: 'Legacy plugin', status: 'enabled' } }
+        : { plugins: $agentPlugins.get() }
+    )
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
     screen.getByRole('switch', { name: 'Agent: Legacy plugin' }).click()
 
@@ -297,6 +388,86 @@ describe('PluginsTab', () => {
         expect.objectContaining({ action: 'toggle', key: 'image_gen/legacy', enable: true })
       )
     )
+  })
+
+  it('turns a unified package on with ONE switch: Agent on also turns its desktop half on', async () => {
+    publishPlugin(
+      { id: 'meter-ui', name: 'Meter', kind: 'disk', status: 'disabled', packageName: 'meter' },
+      { activate: () => patchPlugin('meter-ui', { status: 'loaded' }), deactivate: () => undefined }
+    )
+    $agentPlugins.set([
+      { description: '', key: 'meter', name: 'meter', source: 'git', status: 'not enabled', version: '1' }
+    ])
+    requestGateway.mockImplementation((async (_method: string, params?: { action?: string }) =>
+      params?.action === 'toggle'
+        ? { ok: true, plugin: { key: 'meter', name: 'meter', status: 'enabled' } }
+        : { plugins: [] }) as never)
+
+    renderPlugins({ profile: null })
+
+    screen.getByRole('switch', { name: 'Agent: Meter' }).click()
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Desktop: Meter' }).getAttribute('aria-checked')).toBe('true')
+    )
+    expect($pluginDecisions.get()['meter-ui']).toBe(true)
+    requestGateway.mockImplementation(async () => ({ plugins: [] }))
+    $pluginDecisions.set({})
+  })
+
+  it('shows a package switch Off while its desktop half is off, and one click turns both halves on', async () => {
+    publishPlugin(
+      { id: 'meter-ui', name: 'Meter', kind: 'disk', status: 'disabled', packageName: 'meter' },
+      { activate: () => patchPlugin('meter-ui', { status: 'loaded' }), deactivate: () => undefined }
+    )
+    $agentPlugins.set([{ description: '', key: 'meter', name: 'meter', source: 'git', status: 'enabled', version: '1' }])
+    requestGateway.mockImplementation((async (_method: string, params?: { action?: string }) =>
+      params?.action === 'toggle'
+        ? { ok: true, plugin: { key: 'meter', name: 'meter', status: 'enabled' } }
+        : { plugins: [] }) as never)
+
+    renderPlugins({ profile: null })
+
+    const card = screen.getByRole('switch', { name: 'Meter' })
+    expect(card.getAttribute('aria-checked')).toBe('false')
+
+    card.click()
+
+    await waitFor(() => expect(card.getAttribute('aria-checked')).toBe('true'))
+    expect(requestGateway).toHaveBeenCalledWith(
+      'plugins.manage',
+      expect.objectContaining({ action: 'toggle', key: 'meter', enable: true })
+    )
+    expect($pluginDecisions.get()['meter-ui']).toBe(true)
+    requestGateway.mockImplementation(async () => ({ plugins: [] }))
+    $pluginDecisions.set({})
+  })
+
+  it('leaves a desktop half the user switched off alone when its agent half is turned on', async () => {
+    $pluginDecisions.set({ 'meter-ui': false })
+    publishPlugin(
+      { id: 'meter-ui', name: 'Meter', kind: 'disk', status: 'disabled', packageName: 'meter' },
+      { activate: () => patchPlugin('meter-ui', { status: 'loaded' }), deactivate: () => undefined }
+    )
+    $agentPlugins.set([
+      { description: '', key: 'meter', name: 'meter', source: 'git', status: 'not enabled', version: '1' }
+    ])
+    requestGateway.mockImplementation((async (_method: string, params?: { action?: string }) =>
+      params?.action === 'toggle'
+        ? { ok: true, plugin: { key: 'meter', name: 'meter', status: 'enabled' } }
+        : { plugins: [] }) as never)
+
+    renderPlugins({ profile: null })
+
+    screen.getByRole('switch', { name: 'Agent: Meter' }).click()
+
+    await waitFor(() =>
+      expect(requestGateway).toHaveBeenCalledWith('plugins.manage', expect.objectContaining({ action: 'toggle' }))
+    )
+    expect($pluginDecisions.get()['meter-ui']).toBe(false)
+    expect(screen.getByRole('switch', { name: 'Desktop: Meter' }).getAttribute('aria-checked')).toBe('false')
+    requestGateway.mockImplementation(async () => ({ plugins: [] }))
+    $pluginDecisions.set({})
   })
 
   it('renders keyless rows read-only (no name-addressed toggle RPC)', () => {
@@ -312,7 +483,7 @@ describe('PluginsTab', () => {
       }
     ])
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
     const toggle = screen.getByRole('switch', { name: 'Agent: Legacy plugin' })
 
@@ -323,23 +494,38 @@ describe('PluginsTab', () => {
     expect(requestGateway).not.toHaveBeenCalledWith('plugins.manage', expect.objectContaining({ action: 'toggle' }))
   })
 
-  it('appends the subdir fragment for multi-plugin repos', async () => {
-    render(<PluginsTab profile={null} />)
+  it('appends the selected subdir for multi-plugin repos without changing the catalog pin', async () => {
+    const entry = {
+      ...weatherEntry,
+      name: 'nested-plugin',
+      repo: 'https://github.com/example/plugins-monorepo',
+      subdir: 'packages/nested-plugin'
+    }
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          name: 'nested-plugin',
-          repo: 'https://github.com/example/plugins-monorepo',
-          subdir: 'nested-plugin',
-          type: 'hermes-plugin-pick'
-        },
-        origin: 'https://hermes-agent.nousresearch.com'
-      })
-    )
+    renderPlugins({ profile: null })
 
-    await waitFor(() => {
-      expect($pluginInstallRequest.get()?.repo).toBe('https://github.com/example/plugins-monorepo#nested-plugin')
+    // The catalog is an embedded docs page; the only thing it can do is post a
+    // pick to the parent, which must land in the shared install dialog.
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            name: entry.name,
+            repo: entry.repo,
+            sha: entry.sha,
+            subdir: entry.subdir,
+            tier: entry.tier,
+            type: 'hermes-plugin-pick'
+          },
+          origin: CATALOG_ORIGIN
+        })
+      )
+    })
+
+    expect($pluginInstallRequest.get()).toMatchObject({
+      catalogName: entry.name,
+      repo: `${entry.repo}#${entry.subdir}`,
+      sha: entry.sha
     })
   })
 
@@ -355,7 +541,7 @@ describe('PluginsTab', () => {
       kanban: { id: 'kanban', name: 'Kanban', kind: 'bundled', status: 'disabled' }
     })
 
-    render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+    renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
 
     screen.getByRole('switch', { name: 'Desktop: Kanban' }).click()
 
@@ -372,7 +558,7 @@ describe('PluginsTab', () => {
       kanban: { id: 'kanban', name: 'Kanban', kind: 'bundled', status: 'loaded' }
     })
 
-    render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+    renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
 
     screen.getByRole('switch', { name: 'Desktop: Kanban' }).click()
 
@@ -411,7 +597,7 @@ describe('PluginsTab', () => {
       setToolsetEnabled.mockRejectedValueOnce(new Error('HTTP 500'))
       getToolsets.mockResolvedValueOnce(toolsetReads(false))
 
-      render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+      renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
       fireEvent.click(kanbanSwitch())
       await waitFor(() => expect(notices('error')).toHaveLength(1))
       await settled()
@@ -436,7 +622,7 @@ describe('PluginsTab', () => {
       setToolsetEnabled.mockRejectedValueOnce(new Error('HTTP 500'))
       getToolsets.mockResolvedValueOnce(toolsetReads(true))
 
-      render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+      renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
       fireEvent.click(kanbanSwitch())
       await waitFor(() => expect(notices('error')).toHaveLength(1))
       await settled()
@@ -459,7 +645,7 @@ describe('PluginsTab', () => {
       setToolsetEnabled.mockRejectedValueOnce(new Error('Request timed out'))
       getToolsets.mockResolvedValueOnce(toolsetReads(true))
 
-      render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+      renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
       fireEvent.click(kanbanSwitch())
       await waitFor(() => expect(checked()).toBe('true'))
 
@@ -473,7 +659,7 @@ describe('PluginsTab', () => {
       setToolsetEnabled.mockRejectedValueOnce(new Error('Request timed out'))
       getToolsets.mockRejectedValueOnce(new Error('Request timed out'))
 
-      render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+      renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
       fireEvent.click(kanbanSwitch())
       await waitFor(() => expect(notices('error')).toHaveLength(1))
       await settled()
@@ -490,7 +676,7 @@ describe('PluginsTab', () => {
       media: { id: 'media', name: 'Media Studio', kind: 'disk', status: 'loaded' }
     })
 
-    render(<PluginsTab profile="workbot" scopeLabel="workbot" />)
+    renderPlugins({ profile: 'workbot', scopeLabel: 'workbot' })
 
     screen.getByRole('switch', { name: 'Desktop: Media Studio' }).click()
 
@@ -499,34 +685,53 @@ describe('PluginsTab', () => {
 })
 
 describe('PluginsTab catalog UX', () => {
-  beforeEach(() => {
-    $agentPlugins.set([])
-    $agentPluginsStatus.set('ready')
-    closePluginInstallRequest()
-    requestGateway.mockClear()
-    setPaneHeightOverride('capabilities-plugin-catalog', undefined)
-  })
+  it('requires widening consent before retrying an update, and leaves a declined update untouched', async () => {
+    $agentPlugins.set([
+      {
+        name: 'demo-weather',
+        key: 'demo-weather',
+        description: '',
+        source: 'git',
+        status: 'enabled',
+        version: '1',
+        catalog_sha: 'b'.repeat(40),
+        update_available: true
+      }
+    ])
+    requestGateway.mockImplementation(async (_method, params) => {
+      if (params?.action !== 'update') {
+        return { plugins: $agentPlugins.get() }
+      }
 
-  afterEach(cleanup)
+      return params.accept_capabilities
+        ? { ok: true, unchanged: false }
+        : { consent_required: true, sha: 'b'.repeat(40), delta_lines: ['Tools: weather-alerts'] }
+    })
+    await act(async () => {
+      renderPlugins({ profile: 'workbot' })
+    })
+    fireEvent.click(screen.getByRole('button', { name: `Update to ${'b'.repeat(8)}` }))
+    await waitFor(() => expect($confirmRequest.get()?.description).toContain('Tools: weather-alerts'))
+    expect($confirmRequest.get()?.title).toBe('demo-weather asks for more')
+    await act(async () => {
+      settleConfirm(false)
+    })
+    expect(requestGateway).not.toHaveBeenCalledWith(
+      'plugins.manage',
+      expect.objectContaining({ accept_capabilities: true })
+    )
+    expect(screen.getByRole('button', { name: `Update to ${'b'.repeat(8)}` })).toBeTruthy()
 
-  it('grows the catalog when its top-edge sash is dragged up, and resets on double-click', () => {
-    // jsdom has no layout: give the Capabilities column a real height so the
-    // "never crush the lists above" clamp has something to clamp against.
-    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(900)
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1000 })
-    render(<PluginsTab profile={null} />)
-    const sash = screen.getByTestId('plugin-catalog-sash')
-
-    fireEvent.pointerDown(sash, { button: 0, clientY: 600 })
-    fireEvent.pointerMove(window, { clientY: 400 })
-    fireEvent.pointerUp(window)
-
-    // Default 380px + 200px of upward drag (clamped only by window/column size).
-    expect($paneHeightOverride('capabilities-plugin-catalog').get()).toBe(580)
-
-    fireEvent.doubleClick(sash)
-    expect($paneHeightOverride('capabilities-plugin-catalog').get()).toBeUndefined()
-    clientHeight.mockRestore()
+    fireEvent.click(screen.getByRole('button', { name: `Update to ${'b'.repeat(8)}` }))
+    await waitFor(() => expect($confirmRequest.get()).not.toBeNull())
+    await act(async () => {
+      settleConfirm(true)
+    })
+    expect(requestGateway).toHaveBeenCalledWith(
+      'plugins.manage',
+      { action: 'update', name: 'demo-weather', profile: 'workbot', accept_capabilities: true },
+      expect.any(Number)
+    )
   })
 
   it('shows an Update chip when the catalog pin moved past the installed SHA', () => {
@@ -546,7 +751,7 @@ describe('PluginsTab catalog UX', () => {
       }
     ])
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
     expect(screen.getByRole('button', { name: `Update to ${'b'.repeat(8)}` })).toBeTruthy()
   })
@@ -569,14 +774,15 @@ describe('PluginsTab catalog UX', () => {
     ])
     requestGateway.mockResolvedValue({ ok: true, unchanged: false, plugins: [] } as never)
 
-    render(<PluginsTab profile="workbot" />)
+    renderPlugins({ profile: 'workbot' })
 
     screen.getByRole('button', { name: `Update to ${'b'.repeat(8)}` }).click()
 
     await waitFor(() =>
       expect(requestGateway).toHaveBeenCalledWith(
         'plugins.manage',
-        expect.objectContaining({ action: 'update', name: 'demo-weather', profile: 'workbot' })
+        expect.objectContaining({ action: 'update', name: 'demo-weather', profile: 'workbot' }),
+        expect.any(Number)
       )
     )
   })
@@ -592,14 +798,17 @@ describe('PluginsTab catalog UX', () => {
         version: '1.0.0'
       }
     ])
-    requestGateway.mockResolvedValue({ ok: true, name: 'demo-weather', plugins: [] } as never)
+    requestGateway.mockImplementation(async (_method, params) =>
+      params?.action === 'remove' ? { ok: true, name: 'demo-weather' } : { plugins: $agentPlugins.get() }
+    )
 
-    render(<PluginsTab profile="workbot" />)
+    renderPlugins({ profile: 'workbot' })
 
     screen.getByRole('button', { name: 'Uninstall: demo-weather' }).click()
 
     // The click only asks; nothing is deleted until the destructive confirm is answered.
     await waitFor(() => expect($confirmRequest.get()?.title).toContain('demo-weather'))
+    expect(screen.getByRole('row', { name: /^demo-weather/ })).toBeTruthy()
     expect(requestGateway).not.toHaveBeenCalledWith('plugins.manage', expect.objectContaining({ action: 'remove' }))
 
     settleConfirm(true)
@@ -619,7 +828,7 @@ describe('PluginsTab catalog UX', () => {
     })
     uninstallDiskPlugin.mockClear()
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
     screen.getByRole('button', { name: 'Uninstall: Clock' }).click()
 
@@ -639,10 +848,11 @@ describe('PluginsTab catalog UX', () => {
       media: { id: 'media', name: 'Media Studio', kind: 'disk', status: 'loaded', packageName: 'hermes-media-studio' }
     })
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
-    expect(screen.getByText('Bot Mode')).toBeTruthy()
-    expect(screen.getByText('Media Studio')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^Bot Mode/ }))
+    expect(screen.queryByRole('button', { name: /^Uninstall:/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Media Studio/ }))
     expect(screen.queryByRole('button', { name: /^Uninstall:/ })).toBeNull()
   })
 
@@ -651,116 +861,10 @@ describe('PluginsTab catalog UX', () => {
       { description: '', key: 'demo-tool', name: 'demo-tool', source: 'entrypoint', status: 'enabled', version: '' }
     ])
 
-    render(<PluginsTab profile={null} />)
+    renderPlugins({ profile: null })
 
-    expect(screen.getByText('demo-tool')).toBeTruthy()
+    expect(screen.getByRole('row', { name: /^demo-tool/ })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Uninstall: demo-tool' })).toBeNull()
   })
 
-  it('refuses a catalog pick that is already installed and current', async () => {
-    $agentPlugins.set([
-      {
-        catalog_name: 'demo-weather',
-        description: '',
-        installed_sha: 'a'.repeat(40),
-        key: 'demo-weather',
-        name: 'demo-weather',
-        source: 'git',
-        status: 'enabled',
-        update_available: false,
-        version: '1.0.0'
-      }
-    ])
-
-    render(<PluginsTab profile={null} />)
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          name: 'demo-weather',
-          repo: 'https://github.com/example/demo-weather',
-          type: 'hermes-plugin-pick'
-        },
-        origin: 'https://hermes-agent.nousresearch.com'
-      })
-    )
-
-    // The modal must NOT open — the pick is refused with a toast.
-    await new Promise(resolve => setTimeout(resolve, 20))
-    expect($pluginInstallRequest.get()).toBeNull()
-  })
-
-  it('still opens the modal for an installed pick when an update is available', async () => {
-    $agentPlugins.set([
-      {
-        catalog_name: 'demo-weather',
-        description: '',
-        installed_sha: 'a'.repeat(40),
-        key: 'demo-weather',
-        name: 'demo-weather',
-        source: 'git',
-        status: 'enabled',
-        update_available: true,
-        version: '1.0.0'
-      }
-    ])
-
-    render(<PluginsTab profile={null} />)
-
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: {
-          name: 'demo-weather',
-          repo: 'https://github.com/example/demo-weather',
-          type: 'hermes-plugin-pick'
-        },
-        origin: 'https://hermes-agent.nousresearch.com'
-      })
-    )
-
-    await waitFor(() => expect($pluginInstallRequest.get()).not.toBeNull())
-  })
-  // The gear no longer unfolds an inline form under the row: plugin settings
-  // live in Settings ▸ Plugins (one entry per plugin, WoW-AddOns style) and the
-  // gear deep-links there.
-  it('sends the settings gear to the plugin’s page in Settings ▸ Plugins', () => {
-    $agentPlugins.set([
-      {
-        description: '',
-        key: 'notes',
-        name: 'notes',
-        settings_schema: [{ description: '', key: 'region', label: 'Region', required: false, type: 'string' }],
-        source: 'user',
-        status: 'enabled',
-        version: '1.0.0'
-      }
-    ])
-
-    render(<PluginsTab profile={null} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Settings: notes' }))
-
-    expect(window.location.hash).toBe('#/settings?tab=plugins&agent=notes')
-    expect(screen.queryByTestId('plugin-settings-notes-settings-form')).toBeNull()
-  })
-
-  it('gives a desktop plugin that registered a settings page a gear too', () => {
-    publishPlugin(
-      { id: 'weather', kind: 'disk', name: 'Weather', status: 'loaded' },
-      {
-        activate: () => undefined,
-        deactivate: () => undefined
-      }
-    )
-    const ctx = createPluginContext('weather')
-    const dispose = ctx.registerSettingsPage({ id: 'main', render: () => null, title: 'Weather' })
-
-    try {
-      render(<PluginsTab profile={null} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Settings: Weather' }))
-      expect(window.location.hash).toBe('#/settings?tab=plugins&plugin=weather')
-    } finally {
-      dispose()
-      dropPlugin('weather')
-    }
-  })
 })

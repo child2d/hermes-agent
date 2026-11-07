@@ -52,7 +52,6 @@ import {
 } from './providers'
 
 export {
-  FeaturedProviderRow,
   FireworksProviderRow,
   KeyProviderRow,
   LocalModelsProviderRow,
@@ -259,13 +258,13 @@ export function DesktopOnboardingOverlay({
     const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
     if (reduce) {
-      confirmOnboardingModel(ctx)
+      void confirmOnboardingModel(ctx)
 
       return
     }
 
     setLeaving(true)
-    window.setTimeout(() => confirmOnboardingModel(ctx), ONBOARDING_EXIT_MS)
+    window.setTimeout(() => void confirmOnboardingModel(ctx), ONBOARDING_EXIT_MS)
   }
 
   // The free-tier intro's three doors share one exit: consume the notice, play
@@ -628,12 +627,14 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
 
   const hasOauth = ordered.length > 0
   const apiKeyOptions = useApiKeyCatalog(ctx.scope)
+  const select = (p: OAuthProvider) => void startProviderOAuth(p, ctx)
 
   // localEndpoint forces the key form regardless of `mode` (which a manual
   // provider refresh may flip back to 'oauth'); it preselects the local option
   // and hides the "back to sign in" link since the user came specifically to
-  // configure a custom endpoint.
-  if (localEndpoint || mode === 'apikey' || !hasOauth) {
+  // configure a custom endpoint. A list still loading (null) is not "no OAuth
+  // providers": it waits below instead of flashing the key form.
+  if (localEndpoint || mode === 'apikey' || (providers !== null && !hasOauth)) {
     return (
       <div className="grid gap-3">
         <ApiKeyForm
@@ -667,10 +668,6 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   if (providers === null) {
     return <Status>{t.onboarding.lookingUpProviders}</Status>
   }
-
-  const select = (p: OAuthProvider) => void startProviderOAuth(p, ctx)
-  // No featured anchor means nothing to fold the rest behind — the list is flat,
-  // which is the shape this picker already used when Nous Portal was absent.
 
   // "Run models locally" leaves the picker for Settings -> Providers ->
   // Local Models, where install/download live. First-run: persist the skip

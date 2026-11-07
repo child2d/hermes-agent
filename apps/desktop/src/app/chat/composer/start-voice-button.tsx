@@ -33,7 +33,7 @@ export function StartVoiceButton({
 
   return (
     <span className="flex items-center">
-            <Button
+      <Button
         aria-label={label}
         className={cn(PRIMARY_ICON_BTN, engine && 'rounded-r-none')}
         disabled={disabled}
@@ -49,7 +49,7 @@ export function StartVoiceButton({
       </Button>
       {engine ? (
         <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+          <DropdownMenuTrigger asChild>
             <Button
               aria-label={t.composer.voiceEngine}
               className={cn(GHOST_ICON_BTN, 'w-5 rounded-l-none p-0')}

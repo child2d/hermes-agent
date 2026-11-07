@@ -6,13 +6,11 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DiffCount } from '@/components/ui/diff-count'
-import { SegmentedControl } from '@/components/ui/segmented-control'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger
 } from '@/components/ui/tooltip'
-import type { HermesReviewScope } from '@/global'
 import { useDelayedTrue } from '@/hooks/use-delayed-true'
 import { useI18n } from '@/i18n'
 import { displayPath } from '@/lib/display-path'

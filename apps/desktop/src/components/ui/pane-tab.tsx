@@ -121,8 +121,17 @@ export type PaneTabSide = "left" | "right";
 // `text-*` utility (two font-size utilities resolve by Tailwind's output order,
 // not by className order). Defaults are the effective result of stock `text-xs`
 // (0.75rem / 1rem), so an untouched host sees no difference.
+//
+// `[-webkit-app-region:no-drag]`: a strip can sit in the titlebar band, and a
+// drag region wins hit testing over its own DOM — a tab inside one would never
+// receive the click that activates it.
+//
+// The focus ring is a ring, not an outline: the base layer zeroes native
+// outlines, and the strip's scroller clips anything drawn outside the tab, so
+// the ring is inset. Roving tabindex (usePaneTabKeyboard) makes this the only
+// visual answer to arrow-key movement across the strip.
 const TAB =
-  "group/tab relative flex shrink-0 items-center text-(length:--pane-tab-font-size,0.75rem) leading-(--pane-tab-line-height,1rem) font-medium";
+  "group/tab relative flex shrink-0 items-center text-(length:--pane-tab-font-size,0.75rem) leading-(--pane-tab-line-height,1rem) font-medium [-webkit-app-region:no-drag] focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-(--color-ring) focus-visible:ring-inset";
 
 // Full height: with the strip's rule removed there is no last-pixel row to leave
 // uncovered, so tabs fill the bar and no sliver of gutter shows through. The
@@ -157,10 +166,12 @@ export interface PaneTabProps extends React.ComponentProps<"div"> {
   active?: boolean;
   /** Unsaved-changes indicator: an amber dot that yields to the hover ✕. */
   dirty?: boolean;
+  /** Keyboard activation is separate from pointerdown so drag/tap routing stays
+   *  intact: Enter/Space activate the focused tab, Delete closes it. */
+  onActivate?: () => void;
   /** Close verb. Horizontal tabs reveal a hover ✕ over the label's right edge;
-   *  middle-click and ⌘-click always work and stay the only gestures on
-   *  vertical rails (no room for a chip ✕). Omit `onClose` for an uncloseable
-   *  tab — then no ✕ affordance is shown either. */
+   *  Delete, middle-click and ⌘-click also close. Omit `onClose` for an
+   *  uncloseable tab — then no ✕ affordance is shown either. */
   onClose?: () => void;
   /** Accessible name of the ✕ chip. Defaults to the English "Close". */
   closeLabel?: string;
@@ -186,6 +197,7 @@ export const PaneTab = React.forwardRef<HTMLDivElement, PaneTabProps>(
     {
       active = false,
       dirty = false,
+      onActivate,
       onClose,
       closeLabel,
       closeIcon,
@@ -193,6 +205,7 @@ export const PaneTab = React.forwardRef<HTMLDivElement, PaneTabProps>(
       onPointerDown,
       onPointerUp,
       onClickCapture,
+      onKeyDown,
       selected = false,
       vertical = false,
       side = "left",
@@ -241,6 +254,37 @@ export const PaneTab = React.forwardRef<HTMLDivElement, PaneTabProps>(
           }
 
           onClickCapture?.(event);
+        }}
+        onKeyDown={(event) => {
+          // Radix asChild and caller handlers run before our defaults. In
+          // particular, leave ContextMenu/Shift+F10 and modified app shortcuts
+          // alone, and only answer for the tab itself — a keypress in a nested
+          // control (the label button) belongs to that control.
+          onKeyDown?.(event);
+
+          if (
+            event.defaultPrevented ||
+            event.target !== event.currentTarget ||
+            props.role !== "tab" ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey ||
+            event.nativeEvent.isComposing
+          ) {
+            return;
+          }
+
+          const action =
+            event.key === "Delete" ? onClose : event.key === "Enter" || event.key === " " ? onActivate : undefined;
+
+          if (!action) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          action();
         }}
         onMouseDown={(event) => {
           middle.onMouseDown(event);
@@ -416,6 +460,7 @@ export const PaneTabStrip = React.forwardRef<HTMLDivElement, PaneTabStripProps>(
         {...props}
       >
         <div
+          aria-orientation="horizontal"
           className="flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           ref={listRef}
           role="tablist"

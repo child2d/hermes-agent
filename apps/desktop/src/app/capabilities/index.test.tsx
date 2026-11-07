@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as HermesApi from '@/hermes'
 import { queryClient } from '@/lib/query-client'
 
+import { $catalogCardView } from './catalog/store'
+
 const getSkills = vi.fn()
 const getToolsets = vi.fn()
 const setSkillEnabled = vi.fn()
@@ -86,6 +88,7 @@ async function renderSkills() {
 }
 
 beforeEach(() => {
+  $catalogCardView.set(true)
   getSkills.mockResolvedValue([])
   getToolsets.mockResolvedValue([toolset()])
   setToolsetEnabled.mockResolvedValue({ ok: true, name: 'web', enabled: false })
@@ -99,6 +102,7 @@ beforeEach(() => {
   // Single profile by default → the scope selector stays hidden (>1 gate),
   // so existing tests see unchanged single-profile behavior.
   getProfiles.mockResolvedValue({ profiles: [{ name: 'default', is_default: true }] })
+  queryClient.setQueryData(['public-catalog', 'skills'], [])
 })
 
 afterEach(() => {
@@ -197,7 +201,7 @@ describe('CapabilitiesView toolset management', { timeout: 60_000 }, () => {
       )
     })
 
-    // The selector renders on the Skills tab too (Capabilities-wide).
+    // The selector renders on the Skills tab too (Capabilities-wide); the catalog's sort lives in its Filters popover.
     const trigger = await screen.findByRole('combobox')
     await act(async () => {
       fireEvent.click(trigger)
@@ -218,7 +222,8 @@ describe('CapabilitiesView toolset management', { timeout: 60_000 }, () => {
     await waitFor(() => expect(setSkillEnabled).toHaveBeenCalledWith('web-research', false, 'researcher'))
   })
 
-  it('shows the FULL skill in the detail pane — frontmatter metadata + body', async () => {
+  it('shows the FULL skill body in the detail pane, not just the description or raw frontmatter', async () => {
+    $catalogCardView.set(false)
     getSkills.mockResolvedValue([
       {
         name: 'web-research',
@@ -240,13 +245,10 @@ describe('CapabilitiesView toolset management', { timeout: 60_000 }, () => {
       )
     })
 
-    // Frontmatter renders as metadata rows, the body as full text — not just
-    // the one-line description.
     await waitFor(() => expect(getSkillContent).toHaveBeenCalled())
     expect(getSkillContent.mock.calls[0][0]).toBe('web-research')
-    expect(await screen.findByText('version')).toBeTruthy()
-    expect(await screen.findByText('1.2.0')).toBeTruthy()
     expect(await screen.findByText(/Deep research steps/)).toBeTruthy()
+    expect(screen.queryByText(/version: 1\.2\.0/)).toBeNull()
   })
 
   it('renders a contributed tab in the strip and accepts it as the ?tab= value', async () => {
@@ -327,6 +329,11 @@ describe('CapabilitiesView toolset management', { timeout: 60_000 }, () => {
     getToolsetConfig.mockResolvedValue({ has_category: false, active_provider: null, providers: [] })
 
     await renderSkills()
+
+    // Toolset settings open in a dialog from the toolset's card.
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Vision / Image Analysis' }))
+    })
 
     const link = await screen.findByRole('button', { name: /Choose vision model in Settings/ })
 

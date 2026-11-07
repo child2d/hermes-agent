@@ -26,6 +26,7 @@ function tempDir(prefix: string): string {
 function write(file: string, contents: string, mode?: number): string {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, contents)
+
   if (mode !== undefined) {
     fs.chmodSync(file, mode)
   }
@@ -55,6 +56,7 @@ afterEach(() => {
 describe('prependEnterpriseBinToPath', () => {
   it('front-loads <HERMES_HOME>/bin ahead of a personal ~/.local/bin', () => {
     const home = '/tmp/plankton-home'
+
     const out = prependEnterpriseBinToPath('/usr/bin:/Users/me/.local/bin:/bin', {
       hermesHome: home,
       delimiter: ':'
@@ -71,6 +73,7 @@ describe('prependEnterpriseBinToPath', () => {
       delimiter: ';',
       platform: 'win32'
     })
+
     const second = prependEnterpriseBinToPath(first, { hermesHome: 'C:\\Plankton', delimiter: ';', platform: 'win32' })
 
     expect(second).toBe(first)
@@ -82,6 +85,7 @@ describe('prependEnterpriseBinToPath', () => {
       delimiter: ';',
       platform: 'win32'
     })
+
     expect(moved.split(';').filter(entry => entry.toLowerCase() === 'c:\\plankton\\bin')).toHaveLength(1)
     expect(moved.split(';')[0].toLowerCase()).toBe('c:\\plankton\\bin')
   })
@@ -99,6 +103,7 @@ describe('mergePluginEnabled', () => {
     const doc = parseDocument(merged)
     expect(doc.errors, `merged YAML must parse: ${merged}`).toHaveLength(0)
     const seq = doc.getIn(['plugins', 'enabled']) as { items?: unknown[] } | undefined
+
     return (seq?.items ?? []).map(item =>
       typeof item === 'object' && item !== null && 'value' in item ? String((item as { value: unknown }).value) : String(item)
     )
@@ -108,6 +113,7 @@ describe('mergePluginEnabled', () => {
   function topLevelPluginsCount(merged: string): number {
     const doc = parseDocument(merged)
     const map = doc.contents as { items?: Array<{ key: { value?: unknown } }> } | null
+
     return (map?.items ?? []).filter(entry => String(entry.key?.value) === 'plugins').length
   }
 
@@ -269,6 +275,7 @@ describe('seedEnterpriseAssets', () => {
 
     const cli = path.join(enterpriseBinDir(home), process.platform === 'win32' ? 'shaoke-cli.exe' : 'shaoke-cli')
     expect(fs.existsSync(cli)).toBe(true)
+
     if (process.platform !== 'win32') {
       expect(fs.statSync(cli).mode & 0o111).not.toBe(0)
     }
@@ -333,16 +340,19 @@ describe('seedEnterpriseAssets', () => {
     const home = tempDir('plankton-home-')
     const resources = fakeResources(tempDir('plankton-res-'))
     const config = path.join(home, 'config.yaml')
+
     // Other keys present: the collapse-to-'' bug replaced the whole file with
     // only the plugin entry (silent data loss) while logging success.
     const original =
       'model:\n  provider: deepseek\nmcp_servers:\n  local:\n    command: foo\nplugins:\n  enabled:\n    - keep-me\n'
+
     write(config, original)
     fs.chmodSync(config, 0o000)
     // Premise: the file really is unreadable to the seeder right now.
     expect(() => fs.readFileSync(config, 'utf8')).toThrow()
 
     const notes: string[] = []
+
     const result = seedEnterpriseAssets({
       identity: { enterprise: true },
       hermesHome: home,
@@ -357,6 +367,7 @@ describe('seedEnterpriseAssets', () => {
       // Restore read permission so the byte-for-byte proof can be read back.
       fs.chmodSync(config, 0o600)
     }
+
     // Byte-for-byte identical: model / mcp_servers / existing enabled all survive.
     expect(fs.readFileSync(config, 'utf8')).toBe(original)
   })
@@ -463,6 +474,7 @@ describe('seedEnterpriseAssets', () => {
     fs.symlinkSync(target, link)
 
     const notes: string[] = []
+
     const result = seedEnterpriseAssets({
       identity: { enterprise: true },
       hermesHome: home,
@@ -484,6 +496,7 @@ describe('seedEnterpriseAssets', () => {
   it('P2-2: a failed config write reports partial (not seeded) and a visible error', () => {
     const home = tempDir('plankton-home-')
     const resources = fakeResources(tempDir('plankton-res-'))
+
     // Only the config publish fails (a real write error, not a permission one so
     // there is no mkstemp fallback): the CLI and plugin copies still land.
     const fsModule = {
@@ -505,12 +518,14 @@ describe('seedEnterpriseAssets', () => {
           error.code = 'EIO'
           throw error
         }
+
         fs.renameSync(from, to)
       },
       unlinkSync: fs.unlinkSync
     }
 
     const notes: string[] = []
+
     const result = seedEnterpriseAssets({
       identity: { enterprise: true },
       hermesHome: home,
@@ -530,9 +545,11 @@ describe('seedEnterpriseAssets', () => {
 
     // Low-item: the failed atomic write left no `.tmp` turd behind.
     const leftovers: string[] = []
+
     const walk = (dir: string): void => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name)
+
         if (entry.isDirectory()) {
           walk(full)
         } else if (entry.name.endsWith('.tmp')) {
@@ -540,6 +557,7 @@ describe('seedEnterpriseAssets', () => {
         }
       }
     }
+
     walk(home)
     expect(leftovers).toEqual([])
   })

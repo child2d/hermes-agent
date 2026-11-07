@@ -6,14 +6,16 @@ import { app } from 'electron'
 
 import { resolveDesktopHermesHome } from './data-paths'
 import { enterpriseHermesHomeFor, enterpriseHomeSelection } from './enterprise-paths'
+import { releasePackagedWorkingDirectory } from './packaged-working-directory'
 import { readDesktopLaunchConfig } from './renderer-heap-flags'
+import { restoreUserProxyEnv } from './updater/system-proxy-env'
 import { wslgLaunchArgs } from './wslg-launch'
 import { spawnWslgLaunch } from './wslg-launch-process'
 
 // The baked product identity is a build-time global (see product-identity.ts).
 // Read it defensively instead of importing the accessor: importing pulls in
-// product-identity.ts, whose dev fallback `require('../product-identity.cjs')`
-// is absent beside a dev/test bundle and would abort this pre-launch module.
+// product-identity.ts, whose dev fallback `require('../product-identity.cjs')` is
+// absent beside a dev/test bundle and would abort this pre-launch module.
 // `undefined` (dev bundle) simply means "not an enterprise artifact".
 declare const __HERMES_PRODUCT_IDENTITY__: { enterprise?: boolean } | undefined
 
@@ -21,17 +23,34 @@ function bakedEnterpriseIdentity(): { enterprise?: boolean } | null {
   return typeof __HERMES_PRODUCT_IDENTITY__ === 'undefined' ? null : __HERMES_PRODUCT_IDENTITY__
 }
 
+// A Desktop relaunched by an update (any rung: hand-off script, staged updater,
+// Start-Process) must not keep the system proxy the update's children were given.
+restoreUserProxyEnv(process.env)
+
+// `hermes desktop` asks this binary whether Chromium's namespace sandbox starts under the host's
+// AppArmor policy (#130177). Chromium creates its sandboxed zygote before any JS runs, so reaching
+// this line answers yes; exit before any window, single-instance lock, backend or relaunch.
+if (process.argv.includes('--hermes-sandbox-probe')) {
+  process.exit(0)
+}
+
+// Run before main creates windows/IME integrations or spawns resident helpers.
+// Closing Hermes cannot release a CWD inherited by an out-of-tree process.
+releasePackagedWorkingDirectory(app.isPackaged || Boolean(process.env.HERMES_DESKTOP_IS_PACKAGED))
+
 function configuredElectronFlags(env: NodeJS.ProcessEnv): string[] {
   // Resolve the home exactly like main.ts does, through the shared resolver:
   // HERMES_DATA_DIR_SUFFIX channel installs and profiles/-rooted HERMES_HOME
   // values must pick the same config.yaml before the relaunch and inside the
   // app, or desktop.electron_flags silently never reaches the relaunch.
   const identity = bakedEnterpriseIdentity()
+
   const enterpriseDefault = enterpriseHermesHomeFor(identity, {
     home: os.homedir(),
     platform: process.platform,
     env
   })
+
   const requestedHome = resolveDesktopHermesHome({
     home: os.homedir(),
     env,
@@ -43,6 +62,7 @@ function configuredElectronFlags(env: NodeJS.ProcessEnv): string[] {
     // pre-launch flags and the running app agree.
     defaultHome: enterpriseDefault
   })
+
   // Same ambient-personal-root guard as main.ts: an inherited HERMES_HOME of
   // ~/.hermes must not make this pre-launch read open the personal config.yaml.
   const home = enterpriseHomeSelection({
@@ -67,17 +87,18 @@ const electronFlags = linux ? configuredElectronFlags(process.env) : []
 // True only when the NVIDIA proprietary kernel module is loaded
 // (not nouveau, not the open kernel module, not WSL's dxg passthrough).
 function hasNvidiaProprietaryDriver() {
-  if (process.platform !== 'linux') {return false}
+  if (process.platform !== 'linux') {
+    return false
+  }
 
   try {
-    const version = readFileSync('/proc/driver/nvidia/version', 'utf8') || ""
+    const version = readFileSync('/proc/driver/nvidia/version', 'utf8') || ''
 
     return !/Open Kernel Module/.test(version)
   } catch {
     return false // no nvidia driver on this box
   }
 }
-
 
 const args = wslgLaunchArgs(
   process.argv.slice(1),
@@ -88,7 +109,7 @@ const args = wslgLaunchArgs(
 )
 
 if (args) {
-  // Keep the launcher alive until the child exits: npm's concurrently must not
+  // Keep the launcher alive until the child exits: the dev script's concurrently must not
   // tear down Vite during this handoff. No backend, windows or single-instance
   // lock are created in this parent. The child has an explicit platform flag,
   // so it goes straight into main on its first pass.

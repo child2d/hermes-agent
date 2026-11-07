@@ -15,6 +15,7 @@ import { storedSessionIdForNotification } from '@/lib/session-ids'
 import { announceNewSessionDraftKey } from '@/store/composer'
 import { recordAction } from '@/store/desktop-metrics'
 import { $enterpriseEnabled } from '@/store/enterprise-flag'
+import { onKeptRouteOpened } from '@/store/gateway-kept-routes'
 import { requestMcpInstallFromDeepLink } from '@/store/mcp-deeplink-install'
 import { startMcpHealthChecker, stopMcpHealthChecker } from '@/store/mcp-health'
 import {
@@ -50,6 +51,9 @@ import { requestComposerFocus, requestComposerInsert } from '../../chat/composer
 import { appViewForPath, isOverlayView, NEW_CHAT_ROUTE, routeSessionId, sessionRoute } from '../../routes'
 
 import { resolveRememberedSessionId } from './remembered-session'
+
+// Trailing window that folds a burst of kept-route opens into one list refresh.
+const KEPT_ROUTE_REFRESH_COALESCE_MS = 400
 
 type RememberedSession = Pick<SessionInfo, '_lineage_root_id' | 'id' | 'parent_session_id' | 'profile' | 'source'>
 
@@ -567,5 +571,22 @@ export function useDesktopIntegrations({
     }
 
     return onSessionsChanged(() => void refreshSessions())
+  }, [refreshSessions])
+
+  // A gateway that connects after the list was drawn adds its rows to it.
+  // Kept-route opens (launch dials and reconnects alike) share one trailing
+  // timer, so opens less than KEPT_ROUTE_REFRESH_COALESCE_MS apart pull once.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const off = onKeptRouteOpened(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => void refreshSessions(), KEPT_ROUTE_REFRESH_COALESCE_MS)
+    })
+
+    return () => {
+      off()
+      clearTimeout(timer)
+    }
   }, [refreshSessions])
 }

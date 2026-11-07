@@ -21,10 +21,11 @@ import {
 import { ToggleRow } from './primitives'
 
 /**
- * Settings › Safety › Privacy: the same two opt-ins the first-run dialog and
- * `hermes setup` write, for the profile this page applies to. Collection off
- * turns sending off with it (the backend enforces it too), so the send switch
- * is disabled until collection is on. Optimistic, rolled back on failure.
+ * Settings › Safety › Privacy: one switch for the answer the first-run offer and
+ * `hermes setup` write, for the profile this page applies to. On sets both
+ * opt-ins (collect and send), off clears both. A collect-only answer from
+ * before the offer dropped it reads off here: nothing is shared. Optimistic,
+ * rolled back on failure.
  */
 export function SharedMetricsSettings() {
   const { t } = useI18n()
@@ -92,10 +93,11 @@ export function SharedMetricsSettings() {
     }
   }
 
-  // An older backend has no shared_metrics.* methods: keep the controls, disabled and explained.
+  // An older backend has no shared_metrics.* methods: keep the control, disabled and explained.
   const unavailable = loaded && consent === null
+  const sharing = consent?.send ?? false
   const enabled = consent?.enabled ?? false
-  const send = consent?.send ?? false
+  const send = sharing
 
   return (
     <div className="grid gap-1" id="setting-shared-metrics">

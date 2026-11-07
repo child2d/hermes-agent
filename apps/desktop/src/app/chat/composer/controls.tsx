@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
+import { hostHas } from '@/lib/host-capabilities'
 import { Ear, EarOff, iconSize, Layers3, Loader2, Square } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { recordAction } from '@/store/desktop-metrics'
@@ -28,6 +29,16 @@ import { VoiceMenu } from './voice-menu'
 // for these here, and the row is where they read as belonging.
 export { ACTIVE_ICON_BTN, GHOST_ICON_BTN, ICON_BTN, PRIMARY_ICON_BTN } from './control-classes'
 
+// iOS fires mousedown after touchend, and its default blurs the editor before
+// submit runs. The browser-hosted Desktop keeps focus where it was so a send
+// leaves the keyboard as it was. Native Desktop keeps the press's blur, which
+// closes an open completion list and clears a composition the IME never ended.
+const keepEditorFocus = (event: { preventDefault: () => void }) => {
+  if (hostHas('keepFocusOnPress')) {
+    event.preventDefault()
+  }
+}
+
 interface ConversationProps {
   active: boolean
   level: number
@@ -44,6 +55,7 @@ export function ComposerControls({
   busy,
   busyAction,
   canSubmit,
+  cardWaiting = false,
   compactModelPill = false,
   conversation,
   disabled,
@@ -55,12 +67,15 @@ export function ComposerControls({
   voiceStatus,
   onDictate,
   onQueue,
+  onSteer,
   onToggleAutoSpeak
 }: {
   autoSpeak: boolean
   busy: boolean
-  busyAction: 'steer' | 'queue' | 'stop'
+  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop'
   canSubmit: boolean
+  /** A card parked on the session takes typed text as its answer, so queueing that text would leave the card waiting. */
+  cardWaiting?: boolean
   compactModelPill?: boolean
   conversation: ConversationProps
   disabled: boolean
@@ -72,6 +87,7 @@ export function ComposerControls({
   voiceStatus: VoiceStatus
   onDictate: () => void
   onQueue: () => void
+  onSteer?: () => void
   onToggleAutoSpeak: () => void
 }) {
   const { t } = useI18n()
@@ -83,10 +99,12 @@ export function ComposerControls({
   }
 
   const showVoicePrimary = !busy && !hasComposerPayload
-  // Steer is just send: a payload keeps the Send affordance mid-turn. Stop
-  // only when the composer is empty and a turn is running.
+  // Steer is just send: a payload keeps the Send affordance mid-turn (it answers
+  // a waiting card). Stop only when the composer is empty and a turn is running.
   const showStop = busy && !hasComposerPayload
-  const showQueueButton = busy && busyAction !== 'stop' && hasComposerPayload
+
+  const showQueueButton = queueButtonVisible(busy, busyAction, hasComposerPayload, cardWaiting)
+
   // The HUD is a Spotlight bar a few hundred pixels wide, so the four separate
   // voice toggles fold into one menu there and leave the row to the input. A
   // narrow tile hits the same wall from the other direction and folds for the
@@ -117,8 +135,15 @@ export function ComposerControls({
     />
   )
 
+  // The browser host's touch-size controls can outgrow a minimal row, so there
+  // they pack to the end and wrap. Native Desktop keeps main's single row.
+  const browserHost = hostHas('touchSizedControls')
+
   return (
-    <div className="flex min-w-0 shrink items-center gap-(--composer-control-gap)">
+    <div
+      className={cn('flex min-w-0 shrink items-center gap-(--composer-control-gap)', browserHost && 'justify-end')}
+      style={{ flexWrap: browserHost && minimal ? 'wrap' : undefined }}
+    >
       {minimal ? null : (
         <>
           {hideModelPill ? null : (
@@ -130,12 +155,14 @@ export function ComposerControls({
           {voiceControls}
         </>
       )}
+      {renderSteerButton(busy, busyAction, onSteer, disabled, c.steer)}
       {showQueueButton ? (
         <Button
             aria-label={c.queueMessage}
             className={GHOST_ICON_BTN}
             disabled={disabled}
             onClick={onQueue}
+            onMouseDown={keepEditorFocus}
             size="icon"
             type="button"
             variant="ghost"
@@ -151,6 +178,7 @@ export function ComposerControls({
             className={PRIMARY_ICON_BTN}
             disabled={disabled || !canSubmit}
             onClick={() => recordAction(showStop ? 'composer.cancel' : 'composer.send', 'click')}
+            onMouseDown={keepEditorFocus}
             type="submit"
           >
             {showStop ? (
@@ -170,6 +198,44 @@ export function ComposerControls({
       {hudMode ? <HudWindowButtons /> : null}
     </div>
   )
+}
+
+// Queue is the secondary mid-turn action: never while the primary button already queues or stops, and
+// never while a card waits (its Send answers the card).
+function queueButtonVisible(
+  busy: boolean,
+  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
+  hasPayload: boolean,
+  cardWaiting: boolean
+): boolean {
+  return busy && busyAction !== 'stop' && busyAction !== 'queue' && hasPayload && !cardWaiting
+}
+
+function renderSteerButton(
+  busy: boolean,
+  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
+  onSteer: (() => void) | undefined,
+  disabled: boolean,
+  label: string
+) {
+  return busy && busyAction !== 'steer' && onSteer ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={label}
+          className={GHOST_ICON_BTN}
+          disabled={disabled}
+          onClick={onSteer}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <Codicon name="debug-step-over" size="0.875rem" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  ) : null
 }
 
 function HudWindowButtons() {

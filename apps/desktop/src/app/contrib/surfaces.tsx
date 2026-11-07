@@ -15,7 +15,7 @@ import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { $activeConnectionId } from '@/store/connections'
 import { $gateway } from '@/store/gateway'
-import { $guideOpening } from '@/store/onboarding-gate'
+import { $chatOnboardingSolo } from '@/store/onboarding-intro'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $freshDraftReady, $gatewayState } from '@/store/session'
 
@@ -99,7 +99,7 @@ export const StatusbarSurface = memo(function StatusbarSurface({
   const activeConnectionId = useStore($activeConnectionId)
   const activeGatewayProfile = useStore($activeGatewayProfile)
   const gatewayState = useStore($gatewayState)
-  const guideOpening = useStore($guideOpening)
+  const demoLayout = useStore($chatOnboardingSolo)
   const freshDraftReady = useStore($freshDraftReady)
   const gatewayScope = `${activeConnectionId ?? ''}\0${activeGatewayProfile}`
   const { inferenceStatus, statusSnapshot } = useStatusSnapshot(gatewayState, actions.requestGateway, gatewayScope)
@@ -108,6 +108,7 @@ export const StatusbarSurface = memo(function StatusbarSurface({
 
   const { leftStatusbarItems, statusbarItems } = useStatusbarItems({
     agentsOpen,
+    changeSessionCwd: actions.changeSessionCwd,
     chatOpen,
     commandCenterOpen,
     extraLeftItems,
@@ -122,7 +123,8 @@ export const StatusbarSurface = memo(function StatusbarSurface({
     toggleCommandCenter: actions.toggleCommandCenter
   })
 
-  return guideOpening ? null : <StatusbarControls items={statusbarItems} leftItems={leftStatusbarItems} />
+  // The demo layout (first-run intro) has no status bar.
+  return demoLayout ? null : <StatusbarControls items={statusbarItems} leftItems={leftStatusbarItems} />
 })
 
 /** The workspace pane: the real route table (chat + full-page views + plugin

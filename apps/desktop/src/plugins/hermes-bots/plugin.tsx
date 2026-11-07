@@ -49,6 +49,7 @@ import {
   botMentionTag,
   botSelectionKey,
   cachedUnionRoster,
+  claimDefaultHandles,
   isActiveRosterBot,
   migrateBotMeta,
   primeRoster,
@@ -67,6 +68,7 @@ import {
   sweepGroupChatMembersForRemovedConnection,
   updateGroupChat
 } from './group-chat'
+import { stickyGroupEngine } from './group-engine'
 import { groupWorkspaceOwnerKey } from './group-membership'
 import { annotateOrphanedGroupChatMembers } from './hygiene'
 import { BOTS_LOCALES } from './i18n'
@@ -297,6 +299,7 @@ export default {
                     room.externalCursors && typeof room.externalCursors === 'object' ? room.externalCursors : {},
                   members: Array.isArray(room.members) ? room.members : [],
                   roomId: typeof room.roomId === 'string' && room.roomId ? room.roomId : null,
+                  ...stickyGroupEngine(room),
                   image: typeof room.image === 'string' && room.image ? room.image : null,
                   rosterOrder: Number.isFinite(room.rosterOrder) ? room.rosterOrder : undefined,
                   pinned: Boolean(room.pinned),
@@ -770,7 +773,9 @@ export default {
 
               // Same resolver as the cached path — renamed bots (display_name
               // / ui_meta title) stay taggable when the roster cache is cold.
-              mentionedBots = resolveRosterMentions(text, res?.profiles ?? [], live).map(bot => ({
+              // The same handle claim the pane applies: a real 'hermes'
+              // profile keeps @hermes, so the default must not answer it too.
+              mentionedBots = resolveRosterMentions(text, claimDefaultHandles(res?.profiles ?? []), live).map(bot => ({
                 ...bot,
                 remoteSource: false
               }))
@@ -800,8 +805,12 @@ export default {
             // local path a bare profile name or 'hermes'. botHandle() prefers
             // the row's source-qualified UI alias ('default-vera'), which
             // neither resolver accepts — annotate the canonical form instead.
+            // The default's canonical form is 'hermes' only while no real
+            // 'hermes' profile holds it; then it is 'default' itself.
             const target =
-              bot.remoteSource && bot.connectionId ? `${bot.name}@${bot.connectionId}` : botHandle(bot.name)
+              bot.remoteSource && bot.connectionId
+                ? `${bot.name}@${bot.connectionId}`
+                : botHandle(bot.name, { hermesHandleTaken: bot.hermesHandleTaken })
 
             // Local rows get the same annotation whenever their UI alias
             // ('default-this-device') differs from the resolvable handle —

@@ -8,12 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardGrid, EntityCard } from '@/components/ui/entity-card'
 import { Switch } from '@/components/ui/switch'
-import {
-  editLearningNode,
-  getLearningNode,
-  type ProfileScope,
-  setSkillEnabled
-} from '@/hermes'
+import { editLearningNode, getLearningNode, type ProfileScope, profileScopeKey, setSkillEnabled } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { Codecs, persistentAtom } from '@/lib/persisted'
 import { queryClient } from '@/lib/query-client'
@@ -70,11 +65,14 @@ function skillBadges(skill: SkillInfo): ReactNode {
 interface SkillsTabProps {
   /** The scope's skill list, straight from the shell's query. */
   skills: SkillInfo[]
-  /** The (connection, profile) scope every read and write routes to. */
+  /** Every read and write targets this connection/profile pair. */
   profile: ProfileScope
   query: string
-  /** Page-level refresh: a saved skill edit reloads the same way the refresh
-   *  hotkey does, counts and slash completions included. */
+  /** The page shell owns the search field; accepted from the shared tab
+   *  contract but not rendered here. */
+  onQueryChange?: (value: string) => void
+  installedPending?: boolean
+  installedError?: unknown
   onRefresh: () => void
 }
 
@@ -83,7 +81,20 @@ interface SkillsTabProps {
  *  about where skills come from — the install catalog is a separate surface
  *  (this fork's is the enterprise plugin's own tab, not a catalog rendered
  *  here). */
-export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps) {
+export function SkillsTab(props: SkillsTabProps) {
+  // Remounted on scope changes so an old profile's editor, confirmation or
+  // pending write cannot enter another.
+  return <ScopedSkillsTab key={profileScopeKey(props.profile)} {...props} />
+}
+
+function ScopedSkillsTab({
+  onRefresh,
+  profile,
+  query,
+  skills,
+  installedPending = false,
+  installedError
+}: SkillsTabProps) {
   const { t } = useI18n()
   const skillsSortDesc = useStore($skillsSortDesc)
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -92,13 +103,26 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
   // Learned/local skills are editable + archivable, mirroring the memory
   // graph (same /api/learning/node endpoints — delete archives, restorable
   // via `hermes curator restore`).
-  const [skillEditor, setSkillEditor] = useState<null | { content: string; name: string }>(null)
+  const [skillEditor, setSkillEditor] = useState<null | { name: string }>(null)
   const [skillDraft, setSkillDraft] = useState('')
   const [skillSaving, setSkillSaving] = useState(false)
   const [archiveTarget, setArchiveTarget] = useState<null | string>(null)
 
-  // Optimistic write-through against the scoped Skills key: toggles/bulk/
-  // archive repaint instantly; the next background refetch reconciles.
+  const mounted = useRef(true)
+  const mutationBusy = useRef(false)
+  const editorRequest = useRef(0)
+  const saving = useRef(false)
+
+  // eslint-disable-next-line no-restricted-syntax -- lifecycle guard drops stale async completions; it does not mirror an atom
+  useEffect(() => {
+    mounted.current = true
+
+    return () => {
+      mounted.current = false
+      editorRequest.current += 1
+    }
+  }, [])
+
   const setSkills = useCallback(
     (fn: (cur: SkillInfo[] | undefined) => SkillInfo[] | undefined) =>
       queryClient.setQueryData<SkillInfo[]>(skillsQueryKey(profile), prev => fn(prev) ?? prev),
@@ -114,72 +138,86 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
     [selectedSkill, visibleSkills]
   )
 
-  async function handleToggleSkill(skill: SkillInfo, enabled: boolean) {
-    setSkills(current => current?.map(row => (row.name === skill.name ? { ...row, enabled } : row)) ?? current)
-
-    try {
-      await setSkillEnabled(skill.name, enabled, profile)
-      // A disabled skill loses its `/name` command, so the composer's cached
-      // `/` list has to be dropped along with the row repaint.
-      invalidateSlashCompletions()
-    } catch (err) {
-      setSkills(
-        current => current?.map(row => (row.name === skill.name ? { ...row, enabled: !enabled } : row)) ?? current
-      )
-      notifyError(err, t.skills.failedToUpdate(skill.name))
-    }
-  }
-
-  // Sequential on purpose: each toggle is a config read-modify-write on the
-  // backend; parallel calls would race the disabled-list save.
-  async function bulkApply(targets: SkillInfo[], enabled: boolean) {
-    if (bulkBusy || targets.length === 0) {
+  // The backend saves one disabled-list config value: serialize individual and
+  // bulk changes together, not merely the members of a bulk action.
+  async function applyEnabled(targets: SkillInfo[], enabled: boolean, bulk = false) {
+    if (mutationBusy.current || installedPending || installedError || targets.length === 0) {
       return
     }
 
+    mutationBusy.current = true
     setBulkBusy(true)
-
     let done = 0
 
     try {
+      await queryClient.cancelQueries({ queryKey: skillsQueryKey(profile), exact: true })
+
       for (const row of targets) {
-        await setSkillEnabled(row.name, enabled, profile)
-        setSkills(cur => cur?.map(r => (r.name === row.name ? { ...r, enabled } : r)) ?? cur)
-        done += 1
+        if (!mounted.current) {
+          break
+        }
+
+        const previous =
+          queryClient.getQueryData<SkillInfo[]>(skillsQueryKey(profile))?.find(skill => skill.name === row.name) ?? row
+
+        setSkills(current => current?.map(skill => (skill.name === row.name ? { ...skill, enabled } : skill)))
+
+        try {
+          await setSkillEnabled(row.name, enabled, profile)
+          done += 1
+        } catch (err) {
+          if (mounted.current) {
+            setSkills(current =>
+              current?.map(skill =>
+                skill.name === row.name && skill.enabled === enabled ? { ...skill, enabled: previous.enabled } : skill
+              )
+            )
+          }
+
+          throw err
+        }
       }
 
-      notify({ kind: 'success', title: t.skills.bulkUpdated(done), message: '' })
+      if (bulk && mounted.current) {
+        notify({ kind: 'success', title: t.skills.bulkUpdated(done), message: '' })
+      }
     } catch (err) {
-      notifyError(err, t.skills.failedToUpdate(t.skills.tabSkills))
+      if (mounted.current) {
+        notifyError(err, t.skills.failedToUpdate(bulk ? t.skills.tabSkills : targets[0].name))
+      }
     } finally {
       invalidateSlashCompletions()
-      setBulkBusy(false)
+      void queryClient.invalidateQueries({ queryKey: skillsQueryKey(profile), exact: true })
+      mutationBusy.current = false
+
+      if (mounted.current) {
+        setBulkBusy(false)
+      }
     }
   }
 
-  // Bulk actions ("All" master switch, "Disable unused") and the master-switch
-  // state target the WHOLE tab, never the search-filtered view — a tab-wide
-  // control that silently scoped to the current query would be a lie.
-  const allEnabled = skills.length > 0 && skills.every(s => s.enabled)
+  const controlsDisabled = bulkBusy || installedPending || Boolean(installedError)
 
-  // One switch line covering enable-all/disable-all.
+  // Bulk always means the whole profile, never just a search/filter result.
   const bulkSwitch: ListStripMenuToggle = {
-    checked: allEnabled,
-    disabled: bulkBusy,
+    checked: skills.length > 0 && skills.every(skill => skill.enabled),
+    disabled: controlsDisabled || skills.length === 0,
     label: t.skills.all,
     onToggle: checked =>
-      void bulkApply(
-        skills.filter(row => row.enabled !== checked),
-        checked
+      void applyEnabled(
+        skills.filter(skill => skill.enabled !== checked),
+        checked,
+        true
       )
   }
 
   // "Never used" = zero recorded activity. The pruning move for a 100+ skill
   // install: keep the workhorses, shed the noise.
   const disableUnused = () =>
-    bulkApply(
+    void applyEnabled(
       skills.filter(skill => skill.enabled && usageOf(skill) === 0),
-      false
+      false,
+      true
     )
 
   // The band's bottom fade, measured rather than assumed: it is on only while
@@ -216,36 +254,75 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
   }, [measureBand, visibleSkills.length])
 
   const openSkillEditor = async (name: string) => {
-    try {
-      const node = await getLearningNode(name, profile)
-
-      setSkillEditor({ content: node.content, name })
-      setSkillDraft(node.content)
-    } catch (err) {
-      notifyError(err, name)
-    }
-  }
-
-  const saveSkillEdit = async () => {
-    if (!skillEditor) {
+    if (saving.current || skillEditor?.name === name) {
       return
     }
 
+    const request = ++editorRequest.current
+
+    try {
+      const node = await getLearningNode(name, profile)
+
+      if (!mounted.current || request !== editorRequest.current) {
+        return
+      }
+
+      setSkillEditor({ name })
+      setSkillDraft(node.content)
+    } catch (err) {
+      if (mounted.current && request === editorRequest.current) {
+        notifyError(err, name)
+      }
+    }
+  }
+
+  const closeSkillEditor = () => {
+    editorRequest.current += 1
+    setSkillEditor(null)
+  }
+
+  const saveSkillEdit = async () => {
+    if (!skillEditor || saving.current) {
+      return
+    }
+
+    const editor = skillEditor
+    const request = editorRequest.current
+    saving.current = true
     setSkillSaving(true)
 
     try {
-      await editLearningNode(skillEditor.name, skillDraft, profile)
-      notify({
-        kind: 'success',
-        title: t.skills.skillUpdated,
-        message: t.skills.appliesToNewSessions(skillEditor.name)
-      })
-      setSkillEditor(null)
+      const result = await editLearningNode(editor.name, skillDraft, profile)
+
+      if (!result.ok) {
+        throw new Error(result.message)
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ['skill-content', editor.name, profileScopeKey(profile)] })
+      void queryClient.invalidateQueries({ queryKey: skillsQueryKey(profile), exact: true })
+      invalidateSlashCompletions()
+
+      if (!mounted.current) {
+        return
+      }
+
+      notify({ kind: 'success', title: t.skills.skillUpdated, message: t.skills.appliesToNewSessions(editor.name) })
+
+      if (request === editorRequest.current) {
+        setSkillEditor(null)
+      }
+
       onRefresh()
     } catch (err) {
-      notifyError(err, skillEditor.name)
+      if (mounted.current) {
+        notifyError(err, editor.name)
+      }
     } finally {
-      setSkillSaving(false)
+      saving.current = false
+
+      if (mounted.current) {
+        setSkillSaving(false)
+      }
     }
   }
 
@@ -257,14 +334,15 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
         </Button>
       }
       id="skill-editor"
-      onClose={() => setSkillEditor(null)}
+      onClose={closeSkillEditor}
       title={<span className="text-2xs font-normal text-muted-foreground/60">{skillEditor.name}/SKILL.md</span>}
     >
       <CodeEditor
+        disabled={skillSaving}
         filePath="SKILL.md"
-        initialValue={skillEditor.content}
+        initialValue={skillDraft}
         key={skillEditor.name}
-        onCancel={() => setSkillEditor(null)}
+        onCancel={closeSkillEditor}
         onChange={setSkillDraft}
         onSave={() => void saveSkillEdit()}
       />
@@ -295,9 +373,9 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
               <ListStripMenu
                 items={[
                   {
-                    disabled: bulkBusy,
+                    disabled: controlsDisabled || !skills.some(skill => skill.enabled && usageOf(skill) === 0),
                     label: t.skills.disableUnused,
-                    onSelect: () => void disableUnused()
+                    onSelect: disableUnused
                   }
                 ]}
                 label={t.skills.tabSkills}
@@ -321,8 +399,8 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
                       aria-label={skill.name}
                       checked={skill.enabled}
                       className={cn('cursor-pointer', !skill.enabled && 'opacity-60')}
-                      disabled={bulkBusy}
-                      onCheckedChange={enabled => void handleToggleSkill(skill, enabled)}
+                      disabled={controlsDisabled}
+                      onCheckedChange={enabled => void applyEnabled([skill], enabled)}
                       title={skill.name}
                     />
                   }
@@ -344,7 +422,11 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
           <DetailColumn footer={t.skills.changesApplyNewSessions} width="full">
             {activeSkill && (
               <SkillDetail
-                onArchive={() => setArchiveTarget(activeSkill.name)}
+                onArchive={() => {
+                  if (!saving.current) {
+                    setArchiveTarget(activeSkill.name)
+                  }
+                }}
                 onEdit={() => void openSkillEditor(activeSkill.name)}
                 profile={profile}
                 skill={activeSkill}
@@ -358,19 +440,43 @@ export function SkillsTab({ onRefresh, profile, query, skills }: SkillsTabProps)
         <ArchiveSkillConfirmDialog
           onApply={() => {
             const name = archiveTarget
-            const snapshot = skills
 
-            setSkills(current => current?.filter(skill => skill.name !== name) ?? current)
+            const snapshot =
+              queryClient.getQueryData<SkillInfo[]>(skillsQueryKey(profile))?.find(skill => skill.name === name) ??
+              skills.find(skill => skill.name === name)
+
+            void queryClient.cancelQueries({ queryKey: skillsQueryKey(profile), exact: true })
+            setSkills(current => current?.filter(skill => skill.name !== name))
             invalidateSlashCompletions()
 
             if (skillEditor?.name === name) {
-              setSkillEditor(null)
+              closeSkillEditor()
             }
 
-            return () => setSkills(() => snapshot)
+            // Restore only this row; never clobber intervening toggles or installs.
+            return () => {
+              if (mounted.current) {
+                setSkills(current =>
+                  snapshot && current && !current.some(skill => skill.name === name) ? [...current, snapshot] : current
+                )
+              }
+
+              void queryClient.invalidateQueries({ queryKey: skillsQueryKey(profile), exact: true })
+            }
           }}
           onClose={() => setArchiveTarget(null)}
-          onFailure={(err, name) => notifyError(err, name)}
+          onFailure={(err, name) => {
+            if (mounted.current) {
+              notifyError(err, name)
+            }
+          }}
+          onSuccess={() => {
+            void queryClient.invalidateQueries({ queryKey: skillsQueryKey(profile), exact: true })
+
+            if (mounted.current) {
+              onRefresh()
+            }
+          }}
           open
           profile={profile}
           skillId={archiveTarget}

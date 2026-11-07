@@ -10,11 +10,21 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { type CSSProperties, Fragment, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
+import {
+  type ComponentProps,
+  type CSSProperties,
+  Fragment,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState
+} from 'react'
 
 import { ShellMenuItems } from '@/app/context-menu/shell-menu-items'
 import { BandSlot, publishBandHeight, useBandBox, useBandRowTarget } from '@/app/shell/app-top-bar'
-import { TITLEBAR_DRAG_HANDLE_WIDTH, TITLEBAR_HEIGHT } from '@/app/shell/titlebar'
+import { TITLEBAR_DRAG_HANDLE_WIDTH } from '@/app/shell/titlebar'
 import { ActionsContextMenu, type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
 import { Codicon } from '@/components/ui/codicon'
 import { DecodeText } from '@/components/ui/decode-text'
@@ -27,10 +37,12 @@ import {
   PaneTabLabel,
   PaneTabStrip
 } from '@/components/ui/pane-tab'
+import { usePaneTabKeyboard } from '@/components/ui/pane-tab-keyboard'
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { useI18n } from '@/i18n'
 import { useKeybindHint } from '@/lib/keybinds/use-keybind-hint'
+import { isBrowserOwnedTouch } from '@/lib/touch-interaction'
 import { cn } from '@/lib/utils'
 import { closeAllOpenSessionTiles, setZoneParkedTiles } from '@/store/session-states'
 
@@ -84,6 +96,7 @@ import {
   toggleTabSelected
 } from '../tab-selection'
 
+import { CompactTabPicker } from './compact-tab-picker'
 import { startPaneDrag } from './drag-session'
 import { KeepAlivePaneSlot, useStablePaneHosts } from './keep-alive-panes'
 import { PaneBody } from './pane-body'
@@ -91,6 +104,7 @@ import { usePanelTitlebar } from './panel-titlebar'
 import { tabStripVisibleForZone } from './strip-visibility'
 import { useActiveTabVisible } from './tab-strip-scroll'
 import { foldsToRailInShell, paneChrome } from './track-model'
+import { useZoneHeaderLayout } from './zone-header-layout'
 
 /** Inset stroke for a vertical tab rail — the content-facing edge the active
  *  tab cuts. Pane-shell geometry, so it lives here rather than in the shared
@@ -113,6 +127,7 @@ const TAB_CLOSE_ICON: Record<PaneTabCloseItem['id'], string> = {
  *  a pane with no domain menu of its own (the file tree, a terminal, the main
  *  tab on a fresh draft) falls through to this one. */
 function ZoneMenu({
+  allowOpen,
   children,
   closable,
   includeAppActions = false,
@@ -124,6 +139,7 @@ function ZoneMenu({
   tabMenuPrefix,
   targetPane
 }: {
+  allowOpen?: () => boolean
   children: ReactNode
   includeAppActions?: boolean
   /** The pane the menu closes (the right-clicked chip / the active pane);
@@ -260,9 +276,177 @@ function ZoneMenu({
   // `w-40` clips the spelled-out chord (`Ctrl+Alt+T`) under the menu's
   // overflow-x-hidden. Size to the row; `min-w-40` keeps the short rows.
   return (
-    <ActionsContextMenu contentClassName="w-max min-w-40" items={items}>
+    <ActionsContextMenu allowOpen={allowOpen} contentClassName="w-max min-w-40" items={items}>
       {children}
     </ActionsContextMenu>
+  )
+}
+
+type ZoneMenuProps = ComponentProps<typeof ZoneMenu>
+
+interface ZoneBodyMenuProps extends Omit<ZoneMenuProps, 'allowOpen' | 'includeAppActions'> {
+  label: string
+}
+
+/** The body's zone menu, app actions included. A touch hold on message text,
+ *  an editable, a link or media keeps the browser's selection/paste callout;
+ *  the hold opens this menu only on plain pane chrome. */
+function ZoneBodyMenu({ children, label, ...menu }: ZoneBodyMenuProps) {
+  // Whether the touch now down landed on browser-owned body content.
+  const touchOwnedByBrowser = useRef(false)
+
+  return (
+    <ZoneMenu {...menu} allowOpen={() => !touchOwnedByBrowser.current} includeAppActions>
+      <div
+        aria-label={label}
+        data-zone-body={menu.nodeId}
+        onPointerCancel={() => void (touchOwnedByBrowser.current = false)}
+        onPointerDown={event => void (touchOwnedByBrowser.current = isBrowserOwnedTouch(event.nativeEvent))}
+        onPointerUp={() => void (touchOwnedByBrowser.current = false)}
+        style={{ display: 'contents' }}
+      >
+        {children}
+      </div>
+    </ZoneMenu>
+  )
+}
+
+interface EditVeilProps extends Omit<ZoneMenuProps, 'children'> {
+  label: string
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
+  /** Where the zone's header ends. */
+  top: number
+}
+
+/** The edit-mode drag veil over a zone's body, carrying the zone menu. */
+function EditVeil({ label, onPointerDown, top, ...menu }: EditVeilProps) {
+  return (
+    <ZoneMenu {...menu}>
+      <div
+        // z-50: pane CONTENT may carry its own stacked chrome (the
+        // terminal rail is z-40) — the edit veil must cover all of it.
+        // The scrim mixes the accent over the CHROME BG (not transparent)
+        // so it properly dims content in dark themes instead of leaving a
+        // barely-tinted wash; the light blur reads as "edit mode" the same
+        // way the zone editor's backdrop does.
+        className="absolute inset-x-0 bottom-0 z-50 flex cursor-grab items-center justify-center outline-1 -outline-offset-2 outline-dashed backdrop-blur-[2px]"
+        onPointerDown={onPointerDown}
+        style={{
+          top,
+          background:
+            'color-mix(in srgb, var(--ui-accent) 6%, color-mix(in srgb, var(--ui-bg-chrome) 55%, transparent))',
+          outlineColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)'
+        }}
+      >
+        <span className="flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-md border border-(--ui-stroke-secondary) bg-popover px-2 py-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-(--ui-text-secondary)">
+          <Codicon className="shrink-0" name="gripper" size="0.8125rem" />
+          <span className="min-w-0 truncate">{label}</span>
+        </span>
+      </div>
+    </ZoneMenu>
+  )
+}
+
+type CompactTabPickerProps = ComponentProps<typeof CompactTabPicker>
+
+interface CompactZoneTabsProps extends Pick<CompactTabPickerProps, 'activeId' | 'newTab' | 'tabActions' | 'tabs'> {
+  belowControls: boolean
+  /** The active tab takes Close (see TreeGroup's `closeableTab`). */
+  closeable: boolean
+  node: GroupNode
+}
+
+/** A narrow touch zone's tab row: the picker in place of the scrolling strip.
+ *  Picking a tab is a strip tap, so a minimized zone restores first. */
+function CompactZoneTabs({ activeId, belowControls, closeable, newTab, node, tabActions, tabs }: CompactZoneTabsProps) {
+  return (
+    <div
+      className={cn('flex min-w-0 flex-1', belowControls && 'absolute inset-x-0 bottom-0')}
+      data-zone-tabstrip={node.id}
+      onPointerDownCapture={() => noteActiveTreeGroup(node.id)}
+    >
+      <CompactTabPicker
+        activeId={activeId}
+        newTab={node.minimized ? null : newTab}
+        onClose={closeable ? () => closeTabPane(activeId) : undefined}
+        onSelect={paneId => {
+          clearTabSelection()
+
+          if (node.minimized) {
+            restoreTreePane(paneId)
+          }
+
+          activateTreePane(node.id, paneId)
+        }}
+        tabActions={tabActions}
+        tabs={tabs}
+      />
+    </div>
+  )
+}
+
+interface CollapsedZoneRailProps {
+  activeId: string
+  children: ReactNode
+  /** A pane that keeps working chrome while collapsed (the sidebar's nav rail):
+   *  the rail needs the width of a glyph column, not a tab's. */
+  collapsedRail?: () => ReactNode
+  menu: Omit<ComponentProps<typeof ZoneMenu>, 'children'>
+  railSide: 'left' | 'right'
+}
+
+function CollapsedZoneRail({ activeId, children, collapsedRail, menu, railSide }: CollapsedZoneRailProps) {
+  const { t } = useI18n()
+
+  return (
+    <ZoneMenu {...menu}>
+      <div
+        className={cn(
+          'flex h-full min-h-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
+          collapsedRail ? 'w-13 min-w-13' : 'w-7 min-w-7',
+          // Strip line faces the content the zone collapsed away from — but a
+          // collapsed rail draws its OWN border-r (RAIL_SHELL). Keeping both
+          // doubles the seam and costs the rail 1px of its 52px track, which
+          // shows up as the icon column being squeezed on the right the moment
+          // the list folds.
+          collapsedRail ? '' : railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
+        )}
+        onClick={() => restoreTreePane(activeId)}
+        title={t.zones.restore}
+      >
+        {/* The rail comes FIRST: it is working chrome, so it keeps the corner it
+            occupies while the list is open and the restore tab moves below it
+            instead. Padding is the rail's own (the zone adds none for this
+            case) — that is what makes the two states pixel-identical. */}
+        {collapsedRail?.()}
+        {collapsedRail ? (
+          // The rail already fills the strip, so a vertical restore tab would
+          // read as a stray block of text under the glyphs (it is a 52px-wide
+          // writing-mode:vertical-rl cell). Keep the way back as an icon-sized
+          // control in the same column instead.
+          <button
+            aria-label={t.zones.restore}
+            className="mx-auto mt-1 grid size-7 shrink-0 place-items-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
+            data-slot="rail-restore"
+            onClick={event => {
+              event.stopPropagation()
+              restoreTreePane(activeId)
+            }}
+            type="button"
+          >
+            <Codicon name={railSide === 'right' ? 'chevron-left' : 'chevron-right'} size="0.875rem" />
+          </button>
+        ) : (
+          <div
+            aria-orientation="vertical"
+            className="flex min-h-0 flex-col overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+          >
+            {children}
+          </div>
+        )}
+      </div>
+    </ZoneMenu>
   )
 }
 
@@ -334,11 +518,20 @@ export function TreeGroup({
     ? node.active
     : (resolveRememberedActivePane(memoryKey, shown) ?? shown[0] ?? '')
 
+  const tabKeyboardProps = usePaneTabKeyboard(shown, activeId, ref)
+
   const active = paneFor(activeId)
   const isEmpty = shown.length === 0
   const sidebarGroup = !node.panes.some(id => id === 'workspace' || paneChrome(paneFor(id)).placement === 'main')
-  const tabsBelowControls = topEdge && (sidebarGroup || titlebar.belowControls)
-  const tabsInTitlebar = topEdge && !tabsBelowControls
+
+  const { compactTabs, tabStripHeight, tabsBelowControls, tabsInTitlebar, titlebarHeight } = useZoneHeaderLayout({
+    measuredBelowControls: titlebar.belowControls,
+    narrow,
+    shown,
+    sidebarGroup,
+    topEdge
+  })
+
   const pageHeader = paneChrome(active).headerContent
 
   // What the strip's "+" makes. The pane you are LOOKING AT answers first (a
@@ -465,7 +658,7 @@ export function TreeGroup({
   // (it lines up with the traffic lights), not a title's own height. The extra
   // 10px is the title band's vertical padding — one knob, shared by the header,
   // the drag handle and the edit veil so none of them can drift.
-  const headerBandHeight = topEdge ? TITLEBAR_HEIGHT + 10 : undefined
+  const headerBandHeight = topEdge ? titlebarHeight + 10 : undefined
 
   // The fixed titlebar clusters (traffic lights, bell, tools) center themselves
   // in the window's top band. A lone session makes that band 10px taller, so the
@@ -476,7 +669,10 @@ export function TreeGroup({
   // this (`--app-band-height`) so that case grows the whole row.
   const bandRow = useBandRowTarget()
   const portaledBand = Boolean(topEdge && bandRow)
-  const bandHeight = headerBandHeight ? headerBandHeight + (tabsBelowControls && headerVisible ? 28 : 0) : undefined
+
+  const bandHeight = headerBandHeight
+    ? headerBandHeight + (tabsBelowControls && headerVisible ? tabStripHeight : 0)
+    : undefined
 
   useEffect(() => {
     if (!headerBandHeight) {
@@ -511,7 +707,7 @@ export function TreeGroup({
   // the strip's scroll window. Opening a tab past the right edge otherwise
   // left both the new tab and the button that made it out of view.
   useActiveTabVisible(tabsRef, activeId, {
-    enabled: headerVisible,
+    enabled: headerVisible && !compactTabs,
     last: shown[shown.length - 1] === activeId,
     tabCount: shown.length
   })
@@ -543,6 +739,17 @@ export function TreeGroup({
   // Middle-click / ⌘-click on a tab: one routing for every tab kind, the same
   // one the zone menu's Close and ⌘W use.
   const closeTab = (paneId: string) => closeTabPane(paneId)
+
+  const activateTab = (paneId: string) => {
+    noteActiveTreeGroup(node.id)
+    clearTabSelection()
+
+    if (node.minimized) {
+      restoreTreePane(paneId)
+    }
+
+    activateTreePane(node.id, paneId)
+  }
 
   // A pane whose store owns Close keeps the gesture even when the pane itself
   // is uncloseable — the workspace tab empties to a fresh draft rather than
@@ -656,77 +863,34 @@ export function TreeGroup({
           the horizontal strip, just `vertical`. Click a tab to restore +
           activate; click anywhere else on the rail to restore. */}
       {verticalCollapse && !hidesInShell && (
-        <ZoneMenu {...zoneMenu}>
-          <div
-            className={cn(
-              'flex h-full min-h-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
-              // A pane that keeps working chrome while collapsed (the sidebar's
-              // nav rail) needs the width of a glyph column, not a tab's.
-              collapsedRail ? 'w-13 min-w-13' : 'w-7 min-w-7',
-              // Strip line faces the content the zone collapsed away from — but
-              // a collapsed rail draws its OWN border-r (RAIL_SHELL). Keeping
-              // both doubles the seam and costs the rail 1px of its 52px
-              // track, which shows up as the icon column being squeezed on the
-              // right the moment the list folds.
-              collapsedRail ? '' : railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
-            )}
-            onClick={() => restoreTreePane(activeId)}
-            title={t.zones.restore}
-          >
-            {/* The rail comes FIRST: it is working chrome, so it keeps the corner
-                it occupies while the list is open and the restore tab moves below
-                it instead. Padding is the rail's own (the zone adds none for this
-                case) — that is what makes the two states pixel-identical. */}
-            {collapsedRail?.()}
-            {collapsedRail ? (
-              // The rail already fills the strip, so a vertical restore tab
-              // would read as a stray block of text under the glyphs (it is a
-              // 52px-wide writing-mode:vertical-rl cell). Keep the way back as
-              // an icon-sized control in the same column instead.
-              <button
-                aria-label={t.zones.restore}
-                className="mx-auto mt-1 grid size-7 shrink-0 place-items-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
-                data-slot="rail-restore"
+        <CollapsedZoneRail activeId={activeId} collapsedRail={collapsedRail} menu={zoneMenu} railSide={railSide}>
+          {shown.map(paneId => {
+            const closeable = closeableTab(paneId)
+
+            return (
+              <PaneTab
+                {...tabKeyboardProps(paneId)}
+                // Match the horizontal minimized strip: no tab is "active"
+                // while collapsed (there's no content surface to merge into).
+                aria-label={tabText(paneId)}
+                aria-selected={paneId === activeId}
+                data-tree-tab={paneId}
+                key={paneId}
+                onActivate={() => activateTab(paneId)}
                 onClick={event => {
                   event.stopPropagation()
-                  restoreTreePane(activeId)
+                  activateTab(paneId)
                 }}
-                type="button"
+                onClose={closeable ? () => closeTab(paneId) : undefined}
+                role="tab"
+                side={railSide}
+                vertical
               >
-                <Codicon name={railSide === 'right' ? 'chevron-left' : 'chevron-right'} size="0.875rem" />
-              </button>
-            ) : (
-              <div
-                className="flex min-h-0 flex-col overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                role="tablist"
-              >
-                {shown.map(paneId => {
-                  const closeable = closeableTab(paneId)
-
-                  return (
-                    <PaneTab
-                      // Match the horizontal minimized strip: no tab is "active"
-                      // while collapsed (there's no content surface to merge into).
-                      aria-selected={paneId === activeId}
-                      data-tree-tab={paneId}
-                      key={paneId}
-                      onClick={event => {
-                        event.stopPropagation()
-                        restoreTreePane(paneId)
-                      }}
-                      onClose={closeable ? () => closeTab(paneId) : undefined}
-                      role="tab"
-                      side={railSide}
-                      vertical
-                    >
-                      <PaneTabLabel>{tabLabel(paneId)}</PaneTabLabel>
-                    </PaneTab>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </ZoneMenu>
+                <PaneTabLabel>{tabLabel(paneId)}</PaneTabLabel>
+              </PaneTab>
+            )
+          })}
+        </CollapsedZoneRail>
       )}
 
       {/* Top-edge bands mount in the window row; other strips stay in their
@@ -779,6 +943,16 @@ export function TreeGroup({
               >
                 <PaneTab active>{pageHeader()}</PaneTab>
               </div>
+            ) : headerVisible && compactTabs ? (
+              <CompactZoneTabs
+                activeId={activeId}
+                belowControls={tabsBelowControls}
+                closeable={closeableTab(activeId)}
+                newTab={newTab}
+                node={node}
+                tabActions={paneId => paneChrome(paneFor(paneId)).tabActions?.()}
+                tabs={shown.map(id => ({ id, label: tabLabel(id), title: tabText(id) }))}
+              />
             ) : headerVisible ? (
               <ZoneMenu {...zoneMenu}>
                 <PaneTabStrip
@@ -827,12 +1001,15 @@ export function TreeGroup({
 
                     const tab = (
                       <PaneTab
+                        {...tabKeyboardProps(paneId)}
                         active={isActive}
+                        aria-label={title}
                         aria-selected={isActive}
                         closeIcon={<Codicon name="close" size="0.6875rem" />}
                         closeLabel={t.common.close}
                         data-tree-tab={paneId}
                         key={paneId}
+                        onActivate={() => activateTab(paneId)}
                         onClose={closeable ? () => closeTab(paneId) : undefined}
                         onPointerDown={e => {
                           // Chrome's tab-selection grammar, ahead of activate/drag:
@@ -994,7 +1171,7 @@ export function TreeGroup({
                 )}
                 data-window-drag-handle=""
                 style={{
-                  height: headerBandHeight ?? TITLEBAR_HEIGHT,
+                  height: headerBandHeight ?? titlebarHeight,
                   width: headerVisible && tabsInTitlebar ? TITLEBAR_DRAG_HANDLE_WIDTH : undefined
                 }}
               />
@@ -1021,15 +1198,9 @@ export function TreeGroup({
           wrap={
             !isEmpty
               ? body => (
-                  <ZoneMenu {...zoneMenu} includeAppActions>
-                    <div
-                      aria-label={t.zones.zoneMenuLabel(String(tabLabel(activeId)))}
-                      data-zone-body={node.id}
-                      style={{ display: 'contents' }}
-                    >
-                      {body}
-                    </div>
-                  </ZoneMenu>
+                  <ZoneBodyMenu {...zoneMenu} label={t.zones.zoneMenuLabel(tabText(activeId))}>
+                    {body}
+                  </ZoneBodyMenu>
                 )
               : undefined
           }
@@ -1101,35 +1272,20 @@ export function TreeGroup({
           starts below the header so tabs/headers stay directly interactive
           (drag any tab, right-click for the zone menu). */}
       {editMode && !dragging && !isEmpty && !node.minimized && (
-        <ZoneMenu {...zoneMenu}>
-          <div
-            // z-50: pane CONTENT may carry its own stacked chrome (the
-            // terminal rail is z-40) — the edit veil must cover all of it.
-            // The scrim mixes the accent over the CHROME BG (not transparent)
-            // so it properly dims content in dark themes instead of leaving a
-            // barely-tinted wash; the light blur reads as "edit mode" the same
-            // way the zone editor's backdrop does.
-            className="absolute inset-x-0 bottom-0 z-50 flex cursor-grab items-center justify-center outline-1 -outline-offset-2 outline-dashed backdrop-blur-[2px]"
-            onPointerDown={e => startPaneDrag(activeId, e, undefined, undefined, tabText(activeId))}
-            style={{
-              top: portaledBand
-                ? 0
-                : topEdge
-                  ? (headerBandHeight ?? TITLEBAR_HEIGHT) + (tabsBelowControls && headerVisible ? 28 : 0)
-                  : headerVisible
-                    ? 28
-                    : 0,
-              background:
-                'color-mix(in srgb, var(--ui-accent) 6%, color-mix(in srgb, var(--ui-bg-chrome) 55%, transparent))',
-              outlineColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)'
-            }}
-          >
-            <span className="flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-md border border-(--ui-stroke-secondary) bg-popover px-2 py-1 text-2xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-secondary)">
-              <Codicon className="shrink-0" name="gripper" size="0.8125rem" />
-              <span className="min-w-0 truncate">{tabText(activeId)}</span>
-            </span>
-          </div>
-        </ZoneMenu>
+        <EditVeil
+          {...zoneMenu}
+          label={tabText(activeId)}
+          onPointerDown={e => startPaneDrag(activeId, e, undefined, undefined, tabText(activeId))}
+          top={
+            portaledBand
+              ? 0
+              : topEdge
+                ? (headerBandHeight ?? titlebarHeight) + (tabsBelowControls && headerVisible ? tabStripHeight : 0)
+                : headerVisible
+                  ? tabStripHeight
+                  : 0
+          }
+        />
       )}
 
       {/* FancyZones drop overlay — its own component so the per-frame drop

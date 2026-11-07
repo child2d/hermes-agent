@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
+import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { getSkillContent, type ProfileScope, profileScopeKey } from '@/hermes'
+import { getSkillContent, type ProfileScope, profileScopeKey, setSkillLocked } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { Lock, LockOpen } from '@/lib/icons'
+import { queryClient } from '@/lib/query-client'
+import { cn } from '@/lib/utils'
+import { notifyError } from '@/store/notifications'
 import type { SkillInfo } from '@/types/hermes'
 
 import { PanelPill } from '../../overlays/panel'
@@ -13,7 +17,7 @@ import { DetailHeader } from '../primitives'
 
 import { parseFrontmatter } from './frontmatter'
 import { isEditableProvenance } from './skill-provenance'
-import { categoryFor } from './skills-data'
+import { categoryFor, skillsQueryKey } from './skills-data'
 
 export function SkillDetail({
   onArchive,
@@ -40,6 +44,38 @@ export function SkillDetail({
     staleTime: 60_000
   })
 
+  // Lock is a user declaration against AGENT edits — offered for every provenance
+  // (bundled/hub/external can be locked too) and never blocks the user's own edits.
+  const locked = Boolean(skill.locked)
+  const [lockPending, setLockPending] = useState(false)
+
+  const setLocked = (name: string, next: boolean) =>
+    queryClient.setQueryData<SkillInfo[]>(skillsQueryKey(profile), current =>
+      current?.map(row => (row.name === name ? { ...row, locked: next } : row))
+    )
+
+  const toggleLock = async () => {
+    if (lockPending) {
+      return
+    }
+
+    const { name } = skill
+    const next = !locked
+    setLockPending(true)
+    await queryClient.cancelQueries({ queryKey: skillsQueryKey(profile), exact: true })
+    setLocked(name, next)
+
+    try {
+      await setSkillLocked(name, next, profile)
+    } catch (err) {
+      setLocked(name, !next)
+      notifyError(err, t.skills.failedToUpdate(name))
+    } finally {
+      setLockPending(false)
+      void queryClient.invalidateQueries({ queryKey: skillsQueryKey(profile), exact: true })
+    }
+  }
+
   const parsed = useMemo(
     () => (contentQuery.data ? parseFrontmatter(contentQuery.data.content) : null),
     [contentQuery.data]
@@ -61,16 +97,33 @@ export function SkillDetail({
         }
         title={skill.name}
       />
-      {editable && (
+      <div className="grid gap-1">
         <div className="flex items-center gap-2">
-          <Button onClick={onEdit} size="sm" variant="link">
-            {t.skills.edit}
-          </Button>
-          <Button className="text-destructive hover:text-destructive" onClick={onArchive} size="sm" variant="link">
-            {t.skills.archive}
+          {editable && (
+            <>
+              <Button onClick={onEdit} size="sm" variant="link">
+                {t.skills.edit}
+              </Button>
+              <Button className="text-destructive hover:text-destructive" onClick={onArchive} size="sm" variant="link">
+                {t.skills.archive}
+              </Button>
+            </>
+          )}
+          <Button
+            aria-pressed={locked}
+            className={cn(locked && 'text-foreground')}
+            data-slot="skill-lock-toggle"
+            disabled={lockPending}
+            onClick={() => void toggleLock()}
+            size="sm"
+            variant="link"
+          >
+            {locked ? <Lock /> : <LockOpen />}
+            {locked ? t.skills.locked : t.skills.lock}
           </Button>
         </div>
-      )}
+        <p className="text-xs text-(--ui-text-tertiary)">{locked ? t.skills.lockHint : t.skills.unlockedHint}</p>
+      </div>
       {parsed && parsed.meta.length > 0 && (
         <div className="grid gap-1 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-3">
           {parsed.meta.map(([key, value]) => (
@@ -82,7 +135,7 @@ export function SkillDetail({
         </div>
       )}
       {contentQuery.isLoading ? (
-        <Skeleton className="inline-block h-2 w-3.5 translate-y-px rounded-sm bg-current/25" />
+        <PageLoader className="h-40" label={t.skills.loading} />
       ) : parsed ? (
         <pre
           className="overflow-auto whitespace-pre-wrap wrap-break-word rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-3 font-mono text-2xs leading-relaxed"

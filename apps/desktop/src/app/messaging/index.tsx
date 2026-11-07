@@ -31,6 +31,7 @@ import { openExternalLink } from '@/lib/external-link'
 import { AlertTriangle, ExternalLink, RefreshCw, Save, Trash2 } from '@/lib/icons'
 import { platformStatusTone, TONE_PILL_CLASS } from '@/lib/platform-status'
 import { cn } from '@/lib/utils'
+import { $activeConnectionId } from '@/store/connections'
 import { $changeEventsAvailable, $pairingChangeTick, $platformsChangeTick } from '@/store/live-sync'
 import {
   $messagingPairing,
@@ -53,9 +54,10 @@ import { ListRow } from '../settings/primitives'
 import { SettingsProfileScope } from '../settings/profile-scope'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
-import { byPlatform, pairingKey, pairingLabel } from './pairing'
 import { AllowlistField } from './allowlist-field'
+import { byPlatform, pairingKey, pairingLabel } from './pairing'
 import { PlatformAvatar } from './platform-icon'
+import { RelayLinkSetup } from './relay-link'
 import { TelegramQrSetup } from './telegram-qr-setup'
 
 interface MessagingViewProps extends React.ComponentProps<'section'> {
@@ -558,12 +560,8 @@ function PlatformDetail({
 }) {
   const { t } = useI18n()
   const m = t.messaging
-  const [showAdvanced, setShowAdvanced] = useState(false)
-
-  const requiredFields = platform.env_vars.filter(field => field.required)
-  const optionalFields = platform.env_vars.filter(field => !field.required && !fieldCopy(field, m).advanced)
-  const advancedFields = platform.env_vars.filter(field => !field.required && fieldCopy(field, m).advanced)
-  const hiddenCount = advancedFields.length
+  const connectionId = useStore($activeConnectionId)
+  const viaRelay = Boolean(platform.relay_exclusive)
 
   return (
     <>
@@ -572,9 +570,13 @@ function PlatformDetail({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="min-w-0 truncate text-base font-semibold tracking-tight">{platform.name}</h3>
-            <StatePill tone={platformStatusTone(platform)}>{stateLabel(platform.state, m)}</StatePill>
+            {viaRelay ? (
+              <SetupPill active>{m.relayLink.title}</SetupPill>
+            ) : (
+              <StatePill tone={platformStatusTone(platform)}>{stateLabel(platform.state, m)}</StatePill>
+            )}
             {/* Resting states earn no pill — only actionable ones. */}
-            {!platform.configured && <SetupPill active={false}>{m.needsSetup}</SetupPill>}
+            {!platform.configured && !viaRelay && <SetupPill active={false}>{m.needsSetup}</SetupPill>}
             {/* The state pill already reads "gateway stopped" when that is the
                 platform's whole story; only add the hint when it is not. */}
             {!platform.gateway_running && platform.state !== 'gateway_stopped' && (
@@ -650,6 +652,68 @@ function PlatformDetail({
         </section>
       )}
 
+      {platform.relay_fronted && (
+        <section>
+          <RelayLinkSetup
+            // A new backend or profile is a new flow: no code, poll or account list carries over.
+            key={`${connectionId ?? 'local'}:${scopeProfile ?? ''}:${platform.id}`}
+            platform={platform}
+            scopeProfile={scopeProfile}
+          />
+        </section>
+      )}
+
+      {/* Not carried by the shared bot yet switched off at every start: say so instead of a toggle
+          that reverts (#141175). */}
+      {platform.disabled_by_relay && !platform.relay_exclusive && (
+        <p className="text-xs text-muted-foreground">{m.relayLink.managedNote(platform.name)}</p>
+      )}
+
+      {/* Under an exclusive relay a direct bot is switched off at every start: the shared-bot link
+          above is the whole setup, so the credential sections would only lead nowhere (#141546). */}
+      {!platform.relay_exclusive && (
+        <DirectSetupSections
+          edits={edits}
+          onClear={onClear}
+          onEdit={onEdit}
+          onTelegramApplied={onTelegramApplied}
+          platform={platform}
+          saving={saving}
+          scopeProfile={scopeProfile}
+        />
+      )}
+    </>
+  )
+}
+
+function DirectSetupSections({
+  edits,
+  onClear,
+  onEdit,
+  onTelegramApplied,
+  platform,
+  saving,
+  scopeProfile
+}: {
+  edits: Record<string, string>
+  onClear: (key: string) => void
+  onEdit: (key: string, value: string) => void
+  onTelegramApplied: (result: TelegramOnboardingApplyResponse) => void
+  platform: MessagingPlatformInfo
+  saving: string | null
+  scopeProfile: string | undefined
+}) {
+  const { t } = useI18n()
+  const m = t.messaging
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
+  const requiredFields = platform.env_vars.filter(field => field.required)
+  const optionalFields = platform.env_vars.filter(field => !field.required && !fieldCopy(field, m).advanced)
+  const advancedFields = platform.env_vars.filter(field => !field.required && fieldCopy(field, m).advanced)
+  const hiddenCount = advancedFields.length
+
+  return (
+    <>
       {platform.id === 'telegram' && (
         <section>
           <SectionTitle>{m.telegramQr.quickSetup}</SectionTitle>
@@ -778,16 +842,21 @@ function PlatformActionBar({
   const m = t.messaging
   const isSavingEnv = saving === `env:${platform.id}`
 
+  // Under an exclusive relay the direct adapter never runs; the link panel is the whole setup.
+  if (platform.relay_exclusive) {
+    return null
+  }
+
   return (
     <>
       <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
         <Switch
           aria-label={platform.enabled ? m.disableAria(platform.name) : m.enableAria(platform.name)}
           checked={platform.enabled}
-          disabled={saving === `enabled:${platform.id}`}
+          disabled={platform.disabled_by_relay || saving === `enabled:${platform.id}`}
           onCheckedChange={onToggle}
         />
-        {platform.enabled ? m.enabled : m.disabled}
+        {platform.disabled_by_relay ? m.relayLink.managed : platform.enabled ? m.enabled : m.disabled}
       </label>
 
       <div className="ml-auto flex items-center gap-2">

@@ -197,7 +197,10 @@ function DropdownMenuSearch({
   const hoverSubmenus = React.useContext(HoverSubmenusContext)
 
   return (
-    <div className="px-2.5 py-1.5" data-slot="dropdown-menu-search">
+    <div
+      className="px-2.5 py-1.5 has-[>input:focus]:shadow-[inset_0_-1px_0_var(--color-ring)]"
+      data-slot="dropdown-menu-search"
+    >
       <input
         autoFocus
         className={cn(

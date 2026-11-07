@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { appVersionInfo, aboutCredits, assertSourceUpdateChannel, nativeAboutVersion } from './app-version'
+import { aboutCredits, appVersionInfo, assertSourceUpdateChannel, nativeAboutVersion } from './app-version'
 import type { InstallStamp } from './install-stamp'
 
 describe('artifact version identity', (): void => {
@@ -81,6 +81,18 @@ describe('artifact version identity', (): void => {
   it('keeps source installs on their runtime version without a fixed package channel', (): void => {
     expect(appVersionInfo(null, '9.9.9-runtime', '1.2.3')).toMatchObject({ appVersion: '9.9.9-runtime' })
     expect((): void => assertSourceUpdateChannel(null)).not.toThrow()
+  })
+
+  it('uses the local bootstrap runtime version supplied by the desktop shell', (): void => {
+    const stamp: InstallStamp = {
+      payload: 'bootstrap',
+      displayVersion: null,
+      baseVersion: null,
+      source: 'local',
+      updateMechanism: 'self'
+    } as InstallStamp
+
+    expect(appVersionInfo(stamp, '0.21.5+6644.gb412ee9', '0.0.0').appVersion).toBe('0.21.5+6644.gb412ee9')
   })
 
   // #124581: the desktop package.json carries a 0.0.0 placeholder, so the

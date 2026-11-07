@@ -14,6 +14,9 @@ interface SegmentedControlProps<T extends string> {
   className?: string
   /** Dims the whole track and blocks selection (e.g. gated behind a prerequisite). */
   disabled?: boolean
+  /** `equal` (default) gives every option the widest option's width; `content`
+   *  sizes each option to its own label, for filters with uneven labels/counts. */
+  sizing?: 'equal' | 'content'
 }
 
 /**
@@ -26,12 +29,14 @@ export function SegmentedControl<T extends string>({
   disabled = false,
   onChange,
   options,
+  sizing = 'equal',
   value
 }: SegmentedControlProps<T>) {
   return (
     <div
       className={cn(
-        'inline-grid w-fit auto-cols-fr grid-flow-col gap-0.5 rounded-md bg-(--ui-bg-tertiary) p-0.5',
+        'inline-grid w-fit grid-flow-col gap-0.5 rounded-md bg-(--ui-bg-tertiary) p-0.5',
+        sizing === 'equal' ? 'auto-cols-fr' : 'auto-cols-max',
         disabled && 'opacity-50',
         className
       )}
@@ -51,10 +56,8 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(id)}
             type="button"
           >
-            {Icon && <Icon className="size-3 shrink-0" />}
-            {/* A squeezed track ellipsizes a label inside its own cell; it never
-                wraps or paints across the neighbouring option. */}
-            <span className="min-w-0 truncate">{label}</span>
+            {Icon && <Icon className="size-3" />}
+            {label}
           </button>
         )
       })}

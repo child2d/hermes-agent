@@ -11,6 +11,10 @@ const alertVariants = cva(
         default: "bg-background text-foreground",
         destructive:
           "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+        // Tones upstream's catalog/install surfaces ask for (a neutral notice and
+        // a warning). Plankton keeps the stock box; only the ink changes.
+        secondary: "bg-muted/40 text-foreground",
+        warning: "border-amber-500/40 text-amber-700 dark:text-amber-300 [&>svg]:text-amber-600",
       },
     },
     defaultVariants: {

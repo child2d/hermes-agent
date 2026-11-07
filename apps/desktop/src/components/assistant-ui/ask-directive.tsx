@@ -4,10 +4,19 @@ import { useState } from 'react'
 
 import { requestComposerSubmit } from '@/app/chat/composer/focus'
 import { useSessionView } from '@/app/chat/session-view'
-import { answeredAfter } from '@/lib/chat-messages/parts'
 import { cn } from '@/lib/utils'
 
 const settled = new Set<string>()
+
+/** True once a later message carries a user answer. */
+function hasAnswerAfter(
+  messages: readonly { id?: string; role?: string }[],
+  messageId: string
+): boolean {
+  const index = messages.findIndex(message => message.id === messageId)
+
+  return index >= 0 && messages.slice(index + 1).some(message => message.role === 'user')
+}
 
 export function AskDirective({ attrs, streaming }: { attrs: Record<string, string>; streaming: boolean }) {
   const view = useSessionView()
@@ -27,7 +36,7 @@ export function AskDirective({ attrs, streaming }: { attrs: Record<string, strin
   const wantsInput = attrs.input === 'true' || attrs.input === 'yes'
   const [picked, setPicked] = useState<null | string>(() => (settled.has(identity) ? '' : null))
 
-  const answeredInComposer = answeredAfter(useStore(view.$messages), messageId)
+  const answeredInComposer = hasAnswerAfter(useStore(view.$messages), messageId)
 
   const closed = picked !== null || answeredInComposer
 

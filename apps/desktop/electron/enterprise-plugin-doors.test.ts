@@ -31,6 +31,7 @@ import { PACKAGE_MARKER, reconcileUnifiedDesktopHalves } from './desktop-plugins
 // in project"). vitest/resolve loads the actual module, so the test still
 // exercises the shipped `pluginActive` rather than a hand-copied mirror.
 const pluginsStorePath = '../src/contrib/plugins-store'
+
 const { pluginActive } = (await import(/* @vite-ignore */ pluginsStorePath)) as {
   pluginActive: (id: string, defaultEnabled?: boolean) => boolean
 }

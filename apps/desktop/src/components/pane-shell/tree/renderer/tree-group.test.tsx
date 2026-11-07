@@ -58,6 +58,8 @@ afterEach(() => {
   container = null
   disposePane = null
   globalThis.document.querySelectorAll('[data-titlebar-cluster]').forEach(element => element.remove())
+  delete globalThis.document.documentElement.dataset.hermesDesktopHost
+  vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -180,6 +182,7 @@ describe('TreeGroup', () => {
       mountCrowdedStrip(800)
       const zone = container!.querySelector<HTMLElement>('[data-tree-group]')!
       const band = container!.querySelector<HTMLElement>('[data-panel-header]')!
+
       const spacers = [...band.querySelectorAll<HTMLElement>('div')].filter(spacer =>
         spacer.style.width.includes('--panel-titlebar-')
       )
@@ -273,6 +276,29 @@ describe('TreeGroup', () => {
     expect(strip.style).toHaveProperty('WebkitAppRegion', 'no-drag')
     act(() => $treeDragging.set(null))
     expect(strip.style).toHaveProperty('WebkitAppRegion', '')
+  })
+
+  // A pane's live tab label is a React element (the terminal's
+  // locale-following title), so the zone menu's accessible name must come
+  // from the string form, never the element ("Zone options for [object
+  // Object]").
+  it.each([
+    ['its string label', { tabTitleText: () => 'Terminal' }, 'Terminal'],
+    ['its registered title without one', {}, 'Shell']
+  ])('names the body zone menu from %s when the tab label is an element', (_case, chrome, expected) => {
+    disposePane = registry.register({
+      area: 'panes',
+      data: { placement: 'main', tabTitle: () => <span>Live label</span>, ...chrome },
+      id: 'terminal',
+      title: 'Shell',
+      render: () => <div>Terminal</div>
+    })
+    vi.stubGlobal('CSS', { escape: (value: string) => value })
+    stubResizeObserver()
+    render(<TreeGroup leftEdge node={terminalGroup(false)} rightEdge topEdge />)
+
+    const body = container!.querySelector<HTMLElement>('[data-zone-body="terminal-zone"]')!
+    expect(body.getAttribute('aria-label')).toBe(`Zone options for ${expected}`)
   })
 
   // The invariant behind the shared eligibility predicate
@@ -381,5 +407,47 @@ describe('TreeGroup', () => {
     expect(screen.getByRole('menuitem', { name: /new (chat|session)/i })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: /settings/i })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: /update/i })).toBeTruthy()
+  })
+
+  // iOS Safari sends no contextmenu for a touch hold on text; Radix opens the
+  // body menu from its own pointer timer, over the native selection callout.
+  it('leaves a browser touch hold on message text to the browser, but not on pane chrome', () => {
+    vi.useFakeTimers()
+    disposePane = registry.register({
+      area: 'panes',
+      data: { height: '12rem' },
+      id: 'terminal',
+      render: () => (
+        <div>
+          <span>Pane chrome</span>
+          <div data-slot="aui_assistant-message-content">
+            <p>Reply text</p>
+          </div>
+        </div>
+      ),
+      title: 'Terminal'
+    })
+    vi.stubGlobal('CSS', { escape: (value: string) => value })
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ addEventListener: vi.fn(), matches: true, removeEventListener: vi.fn() })
+    )
+    stubMenuDomApis()
+    globalThis.document.documentElement.dataset.hermesDesktopHost = 'browser'
+
+    render(<TreeGroup node={terminalGroup(false)} parentAxis="column" />)
+
+    const hold = (target: Element) =>
+      act(() => {
+        fireEvent.pointerDown(target, { button: 0, pointerType: 'touch' })
+        vi.advanceTimersByTime(800)
+        fireEvent.pointerUp(target, { button: 0, pointerType: 'touch' })
+      })
+
+    hold(screen.getByText('Reply text'))
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    hold(screen.getByText('Pane chrome'))
+    expect(screen.getAllByRole('menuitem', { name: /close/i }).length).toBeGreaterThan(0)
   })
 })

@@ -57,7 +57,7 @@ const ROUTINES_KEY = [ID, 'routines']
 /** Last good cron list, same idea as the roster snapshot. */
 const $lastJobs = atom<RoutineJob[]>([])
 
-function showsHandle(name: string, meta: BotMeta | null | undefined, bot?: RosterRow) {
+function showsHandle(name: string, meta: BotMeta | null | undefined, bot?: RosterRow | null) {
   const display = displayName(
     {
       name
@@ -1272,8 +1272,8 @@ export function RoutinesPane() {
                 meta
               )}
             </div>
-            {showsHandle(bot, meta) ? (
-              <span className="shrink-0 font-mono text-2xs text-(--ui-text-quaternary)">{`@${botHandle(bot)}`}</span>
+            {showsHandle(bot, meta, owner) ? (
+              <span className="shrink-0 font-mono text-2xs text-(--ui-text-quaternary)">{`@${botHandle(bot, owner)}`}</span>
             ) : null}
           </div>
           <div className="text-2xs uppercase tracking-wider text-(--ui-text-quaternary)">{c.title}</div>

@@ -1,8 +1,9 @@
 import { configure } from '@testing-library/react'
 import type * as RtlModule from '@testing-library/react'
 import type { RenderOptions, RenderResult } from '@testing-library/react'
-import { vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
 
+import { clearPlaybackSourceCache } from './src/lib/playback-source-cache'
 import { InertResizeObserver } from './src/test/jsdom'
 
 // Shared tooltips measure their arrow through Radix's useSize hook.
@@ -116,3 +117,7 @@ vi.mock('@testing-library/react', async (importOriginal: () => Promise<typeof Rt
       })) as typeof actual.renderHook
   }
 })
+
+// Resolved stream URLs outlive a mount on purpose; a test file reusing one path must not
+// inherit the previous case's source.
+afterEach(() => clearPlaybackSourceCache())

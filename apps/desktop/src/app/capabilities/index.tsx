@@ -1,5 +1,7 @@
+import './ui/page.css'
+
 import type * as React from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
@@ -17,6 +19,8 @@ import { PanelEmpty } from '../overlays/panel'
 import { PageSearchShell } from '../page-search-shell'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
+import { syncCatalogArcs } from './catalog/catalog-arc'
+import { prefetchCatalogWhenIdle } from './catalog/catalog-data'
 import { ConnectorsTab } from './connectors/connectors-tab'
 import { CAPABILITIES_TABS_AREA, capabilityTabs } from './contrib'
 import { PluginsTab } from './plugins/plugins-tab'
@@ -107,6 +111,11 @@ export function CapabilitiesView({
 
   useRefreshHotkey(refreshCapabilities)
 
+  // Plugins is small enough to warm from any tab. Skills (~100k rows) only
+  // loads when asked for: an idle parse of it would still block the page.
+  useEffect(() => (mode === 'plugins' ? undefined : prefetchCatalogWhenIdle('plugins')), [mode])
+  useEffect(syncCatalogArcs, [])
+
   // Rotating placeholder nudges from the user's own data — teach that search
   // understands categories and tool names, not just titles.
   const searchHints = useMemo(() => {
@@ -151,19 +160,23 @@ export function CapabilitiesView({
         profile={scope.profile}
       />
     ),
-    // Agent plugins for the scoped profile (selector in the section header),
-    // app-level desktop plugins, and the docs catalog picker underneath.
+    // Agent plugins for the scoped profile and app-level desktop plugins.
     plugins: () => (
       <PluginsTab
         key={`plugins-${scope.key}`}
+        onQueryChange={setQuery}
         profile={scope.profile}
+        query={query}
         scopeLabel={scope.label}
         scopeSelector={scope.options.length > 1 ? <CapabilityScopeSelector compact scope={scope} /> : undefined}
       />
     ),
     skills: () => (
       <SkillsTab
+        installedError={skillsError}
+        installedPending={!skills || skillsFailed}
         key={`skills-${scope.key}`}
+        onQueryChange={setQuery}
         onRefresh={() => void refreshCapabilities()}
         profile={scope.profile}
         query={query}
@@ -171,7 +184,7 @@ export function CapabilitiesView({
       />
     ),
     toolsets: () => (
-      <ToolsetsTab key={`toolsets-${scope.key}`} profile={scope.profile} query={query} toolsets={toolsets ?? []} />
+      <ToolsetsTab key={`toolsets-${scope.key}`} onQueryChange={setQuery} profile={scope.profile} query={query} toolsets={toolsets ?? []} />
     )
   } satisfies Record<CoreTab, () => React.ReactNode>
 
@@ -197,6 +210,7 @@ export function CapabilitiesView({
         // its own body carries the counts it cares about.
         ...contributedTabs.map(tab => ({ id: tab.id, label: tab.label }))
       ]}
+      tabsAlign="start"
     >
       <div className="flex h-full flex-col">
         {activeMode !== 'plugins' && <CapabilityScopeSelector scope={scope} />}

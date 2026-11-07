@@ -75,9 +75,11 @@ export function enterpriseHomeSegments(
 ): string[] {
   const base = platform === 'win32' ? [...ENTERPRISE_WINDOWS_HOME_SEGMENTS] : [...ENTERPRISE_HOME_SEGMENTS]
   const segment = identity?.homeDir == null ? '' : String(identity.homeDir).trim()
+
   if (!segment) {
     return base
   }
+
   // 'engine' would produce `.plankton/engine/engine/home`, shadowing the prod
   // root's own first segment — ambiguous by construction.
   if (segment === base[1] || !HOME_DIR_SEGMENT.test(segment)) {
@@ -109,6 +111,7 @@ export function enterpriseHermesHomeFor(
 
   if (platform === 'win32') {
     const base = (env.LOCALAPPDATA || '').trim() || path.win32.join(options.home, 'AppData', 'Local')
+
     return path.win32.join(base, ...segments)
   }
 
@@ -236,8 +239,10 @@ export function enterpriseProductRoot(options: {
 }): string {
   const platform = options.platform ?? process.platform
   const env = options.env ?? process.env
+
   if (platform === 'win32') {
     const base = (env.LOCALAPPDATA || '').trim() || path.win32.join(options.home, 'AppData', 'Local')
+
     return path.win32.join(base, ENTERPRISE_WINDOWS_HOME_SEGMENTS[0])
   }
 
@@ -254,10 +259,13 @@ function isEngineRootUnder(options: {
   paths: typeof path.posix | typeof path.win32
 }): boolean {
   const relative = options.paths.relative(options.productRoot, options.requested)
+
   if (!relative || relative.startsWith('..')) {
     return false
   }
+
   const parts = relative.split(options.paths.sep).filter(Boolean)
+
   if (parts.length !== 2 && parts.length !== 3) {
     return false
   }
@@ -274,6 +282,7 @@ export function enterpriseHomeSelection(options: {
   env?: NodeJS.ProcessEnv
 }): { home: string; discardedAmbientRoot: string | null; discardedReason: EnterpriseHomeDiscardReason | null } {
   const enterpriseDefault = options.enterpriseDefault
+
   if (!options.identity?.enterprise || !enterpriseDefault) {
     return { home: options.requestedHome, discardedAmbientRoot: null, discardedReason: null }
   }
@@ -309,6 +318,7 @@ export function enterpriseHomeSelection(options: {
   // dirs under the product root (test sandboxes such as
   // `~/.plankton/hermes-desktop-tests/<run>/engine-home`) stay honoured.
   const productRoot = fold(paths.resolve(enterpriseProductRoot({ home: options.home, platform, env })))
+
   if (isEngineRootUnder({ productRoot, requested, paths })) {
     return { home: enterpriseDefault, discardedAmbientRoot: options.requestedHome, discardedReason: 'other-environment' }
   }

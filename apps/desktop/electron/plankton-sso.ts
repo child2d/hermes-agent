@@ -176,6 +176,7 @@ export function resolvePlanktonSsoConfig(
         clientSecret = value
         secretSource = candidate.source
         secretFile = candidate.file
+
         break
       }
     }
