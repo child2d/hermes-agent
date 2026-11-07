@@ -138,7 +138,9 @@ it('renders only room messages with their author and markdown presentation', asy
   render(<CanonicalGroupWorkspace binding={binding} />)
   const history = within(screen.getByRole('log'))
 
-  await waitFor(() => expect(history.getByText(/helper/)).toBeTruthy())
+  // The fork's room row paints the author twice (header line + the message's own
+  // byline), so assert presence in the log instead of uniqueness.
+  await waitFor(() => expect(history.getAllByText(/helper/).length).toBeGreaterThan(0))
   expect(screen.getByRole('list', { name: 'Members' }).textContent).toContain('helper')
   expect(history.getByTestId('markdown').textContent).toBe('**Done**')
   expect(history.queryByText('turn.settled')).toBeNull()

@@ -1005,6 +1005,9 @@ export function BotFace({ shape, color, image, size = 36, name = 'agent', mood =
       <img
         alt=""
         aria-hidden
+        // Same hook the SVG faces expose: rosters and the cross-gateway create
+        // dialog address a bot by its face, and a portrait is still a face.
+        data-bot-face={name}
         data-hb-mood={mood}
         {...characterAvatarSources(name, image, size)}
         style={{ width: size, height: size, objectFit: 'contain', display: 'block' }}

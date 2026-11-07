@@ -51,6 +51,7 @@ import { formatPercentUsed, formatResetsIn } from '@/lib/usage-percent'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { resolveVersionStatus } from '@/lib/version-status'
+import { requestGatewayForActiveRoute } from '@/store/active-route-request'
 import { $cloudOwnsUpdates } from '@/store/cloud-updates'
 import { copyFilePath, revealFile, shouldOfferLocalReveal } from '@/store/file-actions'
 import { $freeTierSignInOpen, $freeTierStatus, FREE_TIER_MODEL } from '@/store/free-tier'
@@ -348,7 +349,12 @@ export function useStatusbarItems({
 
   // Approval mode dials the viewed profile itself — see
   // `useApprovalModeControl`, which owns that scoping for every surface.
-  const approvalModeItem = useApprovalModeStatusbarItem(activeGatewayProfile)
+  const approvalModeItem = useApprovalModeStatusbarItem(
+    activeGatewayProfile,
+    (method, params) => requestGatewayForActiveRoute(activeGatewayProfile, method, params),
+    gatewayState
+  )
+
   const systemResourcesItem = useSystemResourcesStatusbarItem()
 
   const gatewayMenuContent = useMemo(

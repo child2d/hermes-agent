@@ -455,6 +455,9 @@ export function createGroupGateway(options: GatewayOptions = {}): ScriptedGatewa
  *  the `vi.mock` factory rather than hoisted alongside it. */
 export async function pluginSdkMock(host: Record<string, unknown>) {
   const nanostores = await import('nanostores')
+  // Bot portraits render through the fork's character-avatar set; the helpers are
+  // pure, so the mock hands back the real ones instead of inventing an image.
+  const { characterAvatarSources } = await import('@/lib/character-avatars')
   const { Textarea } = await import('@/components/ui/textarea')
   const { cn } = await import('@/lib/utils')
   const { randomUuid } = await import('@hermes/shared')
@@ -486,6 +489,9 @@ export async function pluginSdkMock(host: Record<string, unknown>) {
     // The room views' shared parts (group-room-ui.tsx) wear the main composer's classes.
     Codicon: () => null,
     profileColor: () => '#8b5cf6',
+    // Plankton renders bot portraits through the character-avatar set; the real
+    // helpers are pure, so mocking them would only invent a different image.
+    characterAvatarSources,
     GHOST_ICON_BTN: '',
     PRIMARY_ICON_BTN: '',
     composerInputBacking: '',

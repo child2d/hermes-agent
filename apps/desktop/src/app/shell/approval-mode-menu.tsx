@@ -34,7 +34,7 @@ export function useApprovalModeStatusbarItem(
   routeIdentity?: unknown
 ): StatusbarItem {
   const copy = useI18n().t.shell.approvalMode
-  const { labels, mode, setMode } = useApprovalModeControl(profile)
+  const { labels, mode, setMode } = useApprovalModeControl(profile, requestGateway)
 
   // The shell (and this chip) mount before the gateway socket opens at boot, and
   // a sync issued that early rejects with "Hermes gateway unavailable" — the
@@ -84,14 +84,20 @@ function useApprovalModeLabels(): Record<ApprovalMode, string> {
  * The profile is dialled directly (not through the ambient, session-routed
  * dispatcher, which re-scopes `params.profile` to the focused session's).
  */
-export function useApprovalModeControl(profile: string) {
+export function useApprovalModeControl(
+  profile: string,
+  /** Route-aware requester: a profile served only by a remote gateway has no
+   *  local backend, so resolving the bare name through the profile pool would
+   *  try to start one (#125969). */
+  routeRequest?: ApprovalModeRequester
+) {
   const labels = useApprovalModeLabels()
   const modes = useStore($approvalModes)
   const mode = modes[profile.trim() || 'default'] ?? 'smart'
 
   const requestGateway = useCallback<ApprovalModeRequester>(
-    (method, params) => requestGatewayForProfile(profile, method, params),
-    [profile]
+    routeRequest ?? ((method, params) => requestGatewayForProfile(profile, method, params)),
+    [profile, routeRequest]
   )
 
   // Adopt whatever the gateway reports on profile change, pushing local drift
