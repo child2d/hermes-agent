@@ -7,10 +7,10 @@
     "redirectUri": "http://127.0.0.1:18924/callback"
   },
   "model": {
-    "provider": "shaoke-antimage",
-    "model": "minimax-m3",
-    "base_url": "https://anti-mage.shaoke.com/v1",
-    "api_key_env": "SHAOKE_ANTIMAGE_API_KEY"
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key_env": "DEEPSEEK_API_KEY"
   },
   "update": {
     "channel": null,
@@ -20,6 +20,7 @@
   "todo": [
     "sso.issuer: point at the dev/test tenant's SSO issuer (prod uses https://tech.shaoke.com/sso)",
     "sso.redirectUri: port 18924 so dev/test/prod can be logged in at the same time; the SSO client must whitelist this redirect URI or login fails",
-    "update.channel/feedUrl: a dev build must never be pulled onto an update feed"
+    "update.channel/feedUrl: a dev build must never be pulled onto an update feed",
+    "model: first-launch seed is deepseek/deepseek-flash; the build machine must ship DEEPSEEK_API_KEY (or the operator fills it in after install)"
   ]
 }
