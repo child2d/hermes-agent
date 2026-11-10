@@ -43,6 +43,7 @@ import {
   ensureAutocodeService
 } from './autocode-service'
 import { rollbackRuntime, syncRuntime } from './autocode-updater'
+import { describeRemoteConfig, resolveRemoteConfig } from './autocode-config'
 import {
   destroyKeepaliveAgents,
   htmlResponseError,
@@ -1811,10 +1812,13 @@ ipcMain.handle('autocode:service:status', async () => ({
 
 ipcMain.handle('autocode:service:ensure', async () => {
   const runtimeRoot = autocodeRuntimeRoot()
+  const remote = resolveRemoteConfig(process.env as Record<string, string | undefined>, runtimeRoot)
+  autocodeLog('[autocode]', describeRemoteConfig(remote))
   const sync = await syncRuntime({
     runtimeRoot,
     // Empty = no update channel configured: use the dev checkout as-is.
-    manifestUrl: (process.env.AUTOCODE_PAYLOAD_URL || '').trim(),
+    manifestUrl: remote.payloadUrl,
+    oss: remote.ak && remote.sk ? { ak: remote.ak, sk: remote.sk } : null,
     planktonVersion: app.getVersion(),
     log: message => autocodeLog('[autocode]', message),
     resolvePython: resolveBootstrapPython

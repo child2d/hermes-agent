@@ -53,6 +53,8 @@ export interface UpdaterDeps {
   /** Injected for tests; defaults to node's fs. */
   fetchText?: (url: string) => Promise<string>
   fetchBinary?: (url: string) => Promise<Buffer>
+  /** OSS credentials for a private bucket; falls back to AUTOCODE_OSS_AK/SK. */
+  oss?: { ak: string; sk: string } | null
   /** Injected for tests; defaults to the real child-process runner. */
   runCommand?: (command: string, args: string[], cwd: string) => Promise<void>
   /** Python used to create the venv. Resolved lazily so tests can skip it. */
@@ -111,30 +113,40 @@ export function ossSignedHeaders(
   return { Date: date, Authorization: `OSS ${ak}:${signature}` }
 }
 
-function ossCreds(): { ak: string; sk: string } | null {
+function ossCreds(override?: { ak: string; sk: string } | null): { ak: string; sk: string } | null {
+  if (override && override.ak && override.sk) return override
   const ak = (process.env.AUTOCODE_OSS_AK || '').trim()
   const sk = (process.env.AUTOCODE_OSS_SK || '').trim()
   return ak && sk ? { ak, sk } : null
 }
 
-async function authHeadersFor(url: string): Promise<Record<string, string>> {
-  const creds = ossCreds()
+async function authHeadersFor(
+  url: string,
+  override?: { ak: string; sk: string } | null
+): Promise<Record<string, string>> {
+  const creds = ossCreds(override)
   return creds ? ossSignedHeaders(url, creds.ak, creds.sk) : {}
 }
 
-async function defaultFetchText(url: string): Promise<string> {
+async function defaultFetchText(
+  url: string,
+  oss?: { ak: string; sk: string } | null
+): Promise<string> {
   const local = toLocalPath(url)
   if (local) return fs.promises.readFile(local, 'utf8')
-  const res = await fetch(url, { headers: await authHeadersFor(url) })
+  const res = await fetch(url, { headers: await authHeadersFor(url, oss) })
   if (!res.ok) throw new PayloadError(`GET ${url} → HTTP ${res.status}`)
 
   return res.text()
 }
 
-async function defaultFetchBinary(url: string): Promise<Buffer> {
+async function defaultFetchBinary(
+  url: string,
+  oss?: { ak: string; sk: string } | null
+): Promise<Buffer> {
   const local = toLocalPath(url)
   if (local) return fs.promises.readFile(local)
-  const res = await fetch(url, { headers: await authHeadersFor(url) })
+  const res = await fetch(url, { headers: await authHeadersFor(url, oss) })
   if (!res.ok) throw new PayloadError(`GET ${url} → HTTP ${res.status}`)
   const array = await res.arrayBuffer()
 
@@ -280,8 +292,8 @@ export async function syncRuntime(deps: UpdaterDeps): Promise<UpdateResult> {
     }
   }
 
-  const getText = deps.fetchText ?? defaultFetchText
-  const getBinary = deps.fetchBinary ?? defaultFetchBinary
+  const getText = deps.fetchText ?? ((url: string) => defaultFetchText(url, deps.oss))
+  const getBinary = deps.fetchBinary ?? ((url: string) => defaultFetchBinary(url, deps.oss))
 
   const location = manifestLocation(deps)
   let manifest: PayloadManifest

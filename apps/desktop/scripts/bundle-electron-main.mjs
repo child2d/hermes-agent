@@ -45,6 +45,18 @@ export async function bundleElectronMain({ source, out, stamp, dev = false }) {
   // Dev bundles leave the environment alone so source-tree resolution keeps working.
   const envBanner = dev ? '' : environmentDefaultsBanner(process.env.HERMES_BUNDLE_ENV_JSON || '{}')
   const define = {}
+  // AutoCode payload source, baked in so a distributed build needs zero setup on
+  // the colleague's machine. Values come from the pack environment only — they
+  // are never written into the repo. Unset ⇒ the identifier stays undefined and
+  // autocode-config falls back to settings.json / env at runtime.
+  for (const [name, key] of [
+    ['__AUTOCODE_PAYLOAD_URL__', 'AUTOCODE_PAYLOAD_URL'],
+    ['__AUTOCODE_OSS_AK__', 'AUTOCODE_OSS_AK'],
+    ['__AUTOCODE_OSS_SK__', 'AUTOCODE_OSS_SK'],
+  ]) {
+    const value = String(process.env[key] || '').trim()
+    if (value) define[name] = JSON.stringify(value)
+  }
   let bakedStamp = null
   if (!dev) {
     if (!stamp) throw new Error('A prepared install stamp is required')
