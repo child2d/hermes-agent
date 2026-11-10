@@ -115,6 +115,18 @@ declare global {
       // reply). Resolves true for the first window to claim a key, false for
       // peers — so N open windows don't all fire the same cue.
       claimAmbientCue: (key: string) => Promise<boolean>
+      // AutoCode 侧栏页的本地服务监管：ensure 冷启动、status 只读、stop 关闭。
+      autocodeService?: {
+        ensure: () => Promise<{
+          state: 'running' | 'starting' | 'failed' | 'missing'
+          url: string
+          spawned: boolean
+          detail: string
+          pid?: number
+        }>
+        status: () => Promise<{ healthy: boolean; managed: boolean; url: string }>
+        stop: () => Promise<{ ok: boolean }>
+      }
       // Renderer-drawn min/max/close for WSLg (`custom` true there only), sent
       // over hermes:window-control; Electron/OS chrome owns them elsewhere.
       windowControls: {

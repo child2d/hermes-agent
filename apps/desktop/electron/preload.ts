@@ -94,6 +94,13 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     return () => ipcRenderer.removeListener('hermes:browser-popout:closed', listener)
   },
   claimAmbientCue: key => ipcRenderer.invoke('hermes:ambient:claim', key),
+  // AutoCode 侧栏页：冷启动时让主进程拉起本机编排服务（带 agent-payload +
+  // HERMES_HOME，agent 即以本安装的 shaoke-agent 身份运行）。
+  autocodeService: {
+    ensure: () => ipcRenderer.invoke('autocode:service:ensure'),
+    status: () => ipcRenderer.invoke('autocode:service:status'),
+    stop: () => ipcRenderer.invoke('autocode:service:stop')
+  },
   windowControls: {
     custom: customWindowControlsEnabled(),
     minimize: () => ipcRenderer.send('hermes:window-control', 'minimize'),

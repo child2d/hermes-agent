@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { atom, computed } from 'nanostores'
 import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } from 'react'
 
+import { registerAutocodePage } from '@/app/autocode/register'
 import { registerBaymaxPage } from '@/app/baymax/register'
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
@@ -201,6 +202,7 @@ const workspaceTabDrag = (event: ReactPointerEvent<HTMLElement>, onTap: () => vo
 // way plugins do. Baymax is the local personal workbench; its reads go through
 // the enterprise plugin's read-only pack port, so this page adds no backend.
 registerBaymaxPage()
+registerAutocodePage()
 
 registry.registerMany([
   {

@@ -37,6 +37,13 @@ import type { Session } from 'electron'
 import { type ActiveRuntimeState, classifyActiveRuntime } from './active-runtime-state'
 import { HERMES_API_EXPECTED_404 } from './api-expected-404'
 import {
+  AUTOCODE_EMBED_URL,
+  AUTOCODE_PORT,
+  backendArgs,
+  ensureAutocodeService
+} from './autocode-service'
+import { rollbackRuntime, syncRuntime } from './autocode-updater'
+import {
   destroyKeepaliveAgents,
   htmlResponseError,
   httpStatusError,
@@ -1711,6 +1718,164 @@ if (PRODUCT_IDENTITY.enterprise) {
     return { ok: true }
   })
 }
+
+// ── AutoCode：侧栏页 ↔ 本机编排服务 ────────────────────────────────────
+// 冷启动可用：页面让主进程 ensure，主进程带 AUTOCODE_AGENT_PAYLOAD +
+// HERMES_HOME 拉起后端，agent 就以本安装的 shaoke-agent 身份运行。
+// 一个进程同时提供 API 与 SPA（app.main 挂了 frontend/dist）。
+let autocodeChild: ChildProcess | null = null
+
+function autocodeHealth(): Promise<boolean> {
+  return new Promise(resolve => {
+    const req = http.get(
+      { host: '127.0.0.1', port: AUTOCODE_PORT, path: '/health', timeout: 1500 },
+      res => {
+        res.resume()
+        resolve(res.statusCode === 200)
+      }
+    )
+    req.on('timeout', () => {
+      req.destroy()
+      resolve(false)
+    })
+    req.on('error', () => resolve(false))
+  })
+}
+
+function autocodeLog(prefix: string, message: string): void {
+  console.info(`${prefix} ${message}`)
+}
+
+function autocodeLogStream(): fs.WriteStream | null {
+  try {
+    const dir = path.join(HERMES_HOME, 'logs')
+    fs.mkdirSync(dir, { recursive: true })
+    return fs.createWriteStream(path.join(dir, 'autocode-backend.log'), { flags: 'a' })
+  } catch {
+    return null
+  }
+}
+
+function stopAutocodeChild(): void {
+  const child = autocodeChild
+  autocodeChild = null
+  if (!child || child.exitCode !== null) return
+  try {
+    child.kill()
+  } catch {
+    // already gone
+  }
+}
+
+/** Managed runtime root: per-user, survives app upgrades, never in Program Files. */
+function autocodeRuntimeRoot(): string {
+  const base = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
+
+  return path.join(base, 'AutoCode')
+}
+
+/**
+ * Interpreter used once to build the payload's venv.
+ *
+ * Prefers the bundled payload python — the main process is a package process, so
+ * unlike the backend it can actually execute it. Falls back to the operator's
+ * choice, then plain `python` on PATH; the venv step reports a clear error if
+ * whichever one runs produces no interpreter.
+ */
+function resolveBootstrapPython(): string | null {
+  const explicit = (process.env.AUTOCODE_PYTHON || '').trim()
+  if (explicit && fs.existsSync(explicit)) return explicit
+
+  try {
+    const tools = path.join(process.resourcesPath, 'agent-payload', 'tools')
+    for (const name of fs.readdirSync(tools)) {
+      if (!name.toLowerCase().startsWith('python')) continue
+      const exe =
+        process.platform === 'win32'
+          ? path.join(tools, name, 'python.exe')
+          : path.join(tools, name, 'bin', 'python3')
+      if (fs.existsSync(exe)) return exe
+    }
+  } catch {
+    // No bundled payload (dev run): fall through.
+  }
+
+  return process.platform === 'win32' ? 'python' : 'python3'
+}
+
+ipcMain.handle('autocode:service:status', async () => ({
+  healthy: await autocodeHealth(),
+  managed: autocodeChild !== null && autocodeChild.exitCode === null,
+  url: AUTOCODE_EMBED_URL
+}))
+
+ipcMain.handle('autocode:service:ensure', async () => {
+  const runtimeRoot = autocodeRuntimeRoot()
+  const sync = await syncRuntime({
+    runtimeRoot,
+    // Empty = no update channel configured: use the dev checkout as-is.
+    manifestUrl: (process.env.AUTOCODE_PAYLOAD_URL || '').trim(),
+    planktonVersion: app.getVersion(),
+    log: message => autocodeLog('[autocode]', message),
+    resolvePython: resolveBootstrapPython
+  })
+
+  const run = (homeOverride: string | null) =>
+    ensureAutocodeService({
+      exists: candidate => fs.existsSync(candidate),
+      isHealthy: autocodeHealth,
+      homeOverride,
+      spawnBackend: (home, python, env) => {
+        if (autocodeChild && autocodeChild.exitCode === null) return autocodeChild.pid
+        const stream = autocodeLogStream()
+        const child = spawn(python, backendArgs(), {
+          cwd: path.join(home, 'backend'),
+          env: { ...env },
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        })
+        autocodeChild = child
+        if (stream) {
+          child.stdout?.pipe(stream)
+          child.stderr?.pipe(stream)
+        }
+        child.on('exit', code => {
+          autocodeLog('[autocode]', `backend exited code=${code}`)
+          if (autocodeChild === child) autocodeChild = null
+        })
+
+        return child.pid
+      },
+      env: process.env as Record<string, string | undefined>,
+      resourcesPath: process.resourcesPath,
+      stateRoot: runtimeRoot,
+      log: message => autocodeLog('[autocode]', message)
+    })
+
+  const first = await run(sync.home)
+  if (first.state === 'running' || !sync.changed || !sync.state?.sha) {
+    return { ...first, detail: first.detail || sync.detail }
+  }
+
+  // A freshly installed version that will not boot must not brick the page:
+  // step back one version and try once. The bad sha is remembered so the next
+  // click does not repeat the same failure.
+  autocodeLog('[autocode]', `new payload failed to start, rolling back (${sync.state.sha})`)
+  stopAutocodeChild()
+  const rolled = rollbackRuntime(runtimeRoot, sync.state.sha)
+  const second = await run(rolled.home)
+
+  return {
+    ...second,
+    detail: second.detail ? `${rolled.detail}；${second.detail}` : rolled.detail
+  }
+})
+
+ipcMain.handle('autocode:service:stop', () => {
+  stopAutocodeChild()
+
+  return { ok: true }
+})
 
 // #77311: `desktop.electron_flags` and the renderer heap ceiling
 // (`desktop.renderer_max_old_space_mb`) used to reach Chromium only through
@@ -18821,6 +18986,7 @@ app.on('before-quit', () => {
 // hold the event loop open or leak FDs past app teardown.
 app.on('will-quit', () => {
   killTimedGitChildren()
+  stopAutocodeChild()
   sshIsolatedKeepalives.stopAll()
   destroyKeepaliveAgents()
   nativeNotifications.dispose()
