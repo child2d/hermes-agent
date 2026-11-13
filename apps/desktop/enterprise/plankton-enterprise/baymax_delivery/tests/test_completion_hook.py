@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 import json
 import sqlite3
 import tempfile
@@ -106,7 +106,7 @@ class CompletionTests(unittest.TestCase):
                     self.assertIn('完整运行终态见证据', captured['summary'])
                 else:
                     self.assertEqual(captured['summary'], 'x' * length)
-                full = [a for a in captured['artifacts'] if a['name'] == 'runtime-output.txt'][0]['content']
+                full = next(a for a in captured['artifacts'] if a['name'] == 'runtime-output.txt')['content']
                 self.assertEqual(len(full), length)  # the untruncated output is kept as evidence
                 with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db, db:
                     db.execute('DELETE FROM intents')

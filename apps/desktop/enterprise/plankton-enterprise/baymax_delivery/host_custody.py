@@ -78,10 +78,10 @@ class HostCustody:
         finally:
             data = b'\x00' * len(data)
         if key.key_size < MIN_RSA_BITS:
-            raise CustodyError('RSA key must be at least %d bits' % MIN_RSA_BITS)
+            raise CustodyError(f'RSA key must be at least {MIN_RSA_BITS} bits')
         checks = [
             'regular_file', 'not_symlink', 'owner_is_host_user', 'no_group_or_other_permissions',
-            'outside_agent_workspace', 'unencrypted_pem', 'rsa_min_%d_bits' % MIN_RSA_BITS,
+            'outside_agent_workspace', 'unencrypted_pem', f'rsa_min_{MIN_RSA_BITS}_bits',
         ]
         return cls(key, resolved, issuer, binding, checks)
 
@@ -131,6 +131,6 @@ class HostCustody:
     def __repr__(self):
         state = 'closed' if self._closed else 'open'
         fingerprint = 'redacted' if self._closed else self.fingerprint()
-        return '<HostCustody %s fingerprint=%s path=%s>' % (state, fingerprint, self._path)
+        return f'<HostCustody {state} fingerprint={fingerprint} path={self._path}>'
 
     __str__ = __repr__

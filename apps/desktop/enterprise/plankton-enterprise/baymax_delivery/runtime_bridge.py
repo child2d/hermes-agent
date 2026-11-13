@@ -166,7 +166,7 @@ class SandboxTransport:
                     continue
                 got = payload.get(key)
                 if _normalised(got) != _normalised(want):
-                    raise RuntimeError('Delivery receipt payload mismatch on %s; keep pending' % key)
+                    raise RuntimeError(f'Delivery receipt payload mismatch on {key}; keep pending')
             if expected.get('version') is not None and response.get('version') != expected['version']:
                 raise RuntimeError('Delivery receipt version mismatch; keep pending')
         if operation == 'evidence':

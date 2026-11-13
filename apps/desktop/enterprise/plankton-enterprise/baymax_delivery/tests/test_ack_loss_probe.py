@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """Actual HTTP/socket + SQLite probe test; REMOTE SERVER IS AN EXPLICIT FIXTURE."""
 import hashlib
 import json

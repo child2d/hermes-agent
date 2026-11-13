@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """Custody preconditions are enforced locally; the remote verifier check uses the real build."""
 import json
 import os
@@ -117,7 +117,7 @@ class CustodyTests(unittest.TestCase):
                 'BAYMAX_AGENT_ISSUER:p.issuer,BAYMAX_AGENT_AUDIENCE:p.audience});'
                 'console.log(JSON.stringify({kind:actor.kind,subject:actor.subject,operations:actor.operations}));});')
         result = subprocess.run(['node', '-e', code, module], input=json.dumps(payload), text=True,
-                                capture_output=True, timeout=15)
+                                capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout),
                          {'kind': 'agent', 'subject': 'plankton:custody-unit', 'operations': ['evidence']})

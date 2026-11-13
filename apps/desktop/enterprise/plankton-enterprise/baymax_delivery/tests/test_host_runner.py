@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """The standalone host refuses to run without a real OS boundary and never re-runs business work."""
 import io
 import json
@@ -14,7 +14,7 @@ from unittest import mock
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-import baymax_delivery.host_runner as host_runner
+from baymax_delivery import host_runner
 
 
 def write_key(path, key, mode=0o600):

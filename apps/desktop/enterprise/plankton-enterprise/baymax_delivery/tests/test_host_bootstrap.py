@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """Bootstrap refuses raw keys, publishes only public material, and reaches no network here."""
 import os
 import tempfile

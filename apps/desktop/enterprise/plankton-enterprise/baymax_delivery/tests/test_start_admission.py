@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """One request key admits at most one logical business run (host boundary evidence)."""
 import os
 import tempfile

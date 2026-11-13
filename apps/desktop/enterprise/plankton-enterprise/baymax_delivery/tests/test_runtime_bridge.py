@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """Real RSA and loopback HTTP tests. This is not a formal runtime or live grant."""
 import base64
 import hashlib

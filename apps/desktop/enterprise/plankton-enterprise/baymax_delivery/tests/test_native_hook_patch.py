@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """Installed HookRegistry integration; staged source-order check is not a live run."""
 import ast
 import asyncio
@@ -34,7 +34,7 @@ class NativeHookTests(unittest.TestCase):
         if not package: self.fail('Run with the discovered installed HERMES_PACKAGE_ROOT; do not replace registry with a mock')
         sys.path.insert(0, package)
         import gateway.hooks as native
-        import baymax_delivery.completion_hook as completion_hook
+        from baymax_delivery import completion_hook
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); state=root/'state.db'
             with closing(sqlite3.connect(state)) as db, db:

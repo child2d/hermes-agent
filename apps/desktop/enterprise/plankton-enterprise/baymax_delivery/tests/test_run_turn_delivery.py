@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """End-to-end wiring test: model HTTP call -> artifact -> authoritative terminal -> delivery.
 
 Scope: the model is a loopback OpenAI-compatible server and the BFF is a loopback stand-in, so this
@@ -80,7 +80,7 @@ class TurnDeliveryTests(unittest.TestCase):
         self.model_server = ThreadingHTTPServer(('127.0.0.1', 0), Model)
         threading.Thread(target=self.model_server.serve_forever, daemon=True).start()
         os.environ['BAYMAX_MODEL_API_KEY'] = 'unit-test-key'
-        self.model = OpenAICompatibleModel('http://127.0.0.1:%d' % self.model_server.server_port, 'unit-model')
+        self.model = OpenAICompatibleModel(f'http://127.0.0.1:{self.model_server.server_port}', 'unit-model')
 
     def tearDown(self):
         self.outbox.close()

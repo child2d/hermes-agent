@@ -44,7 +44,7 @@ class OpenAICompatibleModel:
     def complete(self, prompt):
         api_key = os.environ.get(self.api_key_env, '')
         if not api_key:
-            raise ModelUnavailable('model credential is not provisioned (%s)' % self.api_key_env)
+            raise ModelUnavailable(f'model credential is not provisioned ({self.api_key_env})')
         payload = json.dumps({'model': self.model, 'messages': [{'role': 'user', 'content': prompt}],
                               'temperature': 0}).encode()
         request = urllib.request.Request(self.endpoint + '/chat/completions', payload,
@@ -55,7 +55,7 @@ class OpenAICompatibleModel:
             with self._opener(request, self.timeout) as response:
                 body = json.loads(response.read(1 << 20))
         except Exception as error:
-            raise ModelUnavailable('model call failed: %s' % type(error).__name__) from None
+            raise ModelUnavailable(f'model call failed: {type(error).__name__}') from None
         choices = body.get('choices') or []
         if not choices:
             raise ModelUnavailable('model returned no choice')
@@ -92,7 +92,7 @@ def persist_terminal(state_path, session_id, content, kind=None):
 def write_artifact(directory, execution_ref, text, usage):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / ('turn-%s.json' % execution_ref.replace(':', '-'))
+    path = directory / f"turn-{execution_ref.replace(':', '-')}.json"
     path.write_text(json.dumps({'executionRef': execution_ref, 'output': text, 'usage': usage},
                                ensure_ascii=False, indent=2))
     return path

@@ -1,10 +1,10 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """Real SQLite recovery tests; remote transport is explicitly an in-memory test double."""
 import os
 import tempfile
 import unittest
 from pathlib import Path
-import baymax_delivery.delivery_outbox as delivery_outbox
+from baymax_delivery import delivery_outbox
 
 
 class TransportDouble:
@@ -182,7 +182,7 @@ class OutboxTests(unittest.TestCase):
         with raw:
             raw.execute('CREATE TABLE queue (key TEXT PRIMARY KEY, payload TEXT NOT NULL, receipt TEXT)')
             raw.execute('CREATE TABLE uploads (queue_key TEXT NOT NULL, slot INTEGER NOT NULL, receipt TEXT NOT NULL, PRIMARY KEY(queue_key,slot))')
-            raw.execute('PRAGMA application_id=%d' % delivery_outbox._APPLICATION_ID)
+            raw.execute(f'PRAGMA application_id={delivery_outbox._APPLICATION_ID}')
         raw.close()
         migrated = delivery_outbox.DeliveryOutbox(path)
         try:

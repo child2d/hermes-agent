@@ -1,4 +1,4 @@
-import _path_setup  # noqa: F401  (puts the plugin directory on sys.path)
+import _path_setup
 """Cross-language compatibility against the actual built BFF verifier, NOT live trust."""
 import json
 import os
@@ -19,7 +19,7 @@ class IdentityInteropTests(unittest.TestCase):
         payload = {'token':token,'key':key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode(),
                    'issuer':'isolated-interop-issuer','audience':ENDPOINT}
         code = '''const {verifyWorkloadIdentity}=require(process.argv[1]);let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const p=JSON.parse(input);const actor=verifyWorkloadIdentity(p.token,{BAYMAX_AGENT_PUBLIC_KEY:p.key,BAYMAX_AGENT_ISSUER:p.issuer,BAYMAX_AGENT_AUDIENCE:p.audience});console.log(JSON.stringify({kind:actor.kind,subject:actor.subject,issueId:actor.issueId,executionRef:actor.executionRef,operations:actor.operations}));});'''
-        result = subprocess.run(['node','-e',code,module],input=json.dumps(payload),text=True,capture_output=True,timeout=15)
+        result = subprocess.run(['node','-e',code,module],input=json.dumps(payload),text=True,capture_output=True,timeout=15,check=False)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(json.loads(result.stdout), {'kind':'agent','subject':'plankton:isolated-interop','issueId':'42','executionRef':'unit-interop-run','operations':['submit']})
 

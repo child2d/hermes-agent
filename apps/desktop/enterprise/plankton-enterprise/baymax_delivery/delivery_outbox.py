@@ -7,7 +7,7 @@ import hashlib
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from pathlib import Path
 
 from .delivery_errors import DeliveryCancelled, DeliveryRevoked
@@ -44,7 +44,7 @@ def _json(value):
 
 
 def _timestamp():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class DeliveryOutbox:
@@ -67,7 +67,7 @@ class DeliveryOutbox:
             if column not in columns:
                 # Additive: an outbox written by an earlier build keeps working.
                 with self.db:
-                    self.db.execute('ALTER TABLE queue ADD COLUMN %s TEXT' % column)
+                    self.db.execute(f'ALTER TABLE queue ADD COLUMN {column} TEXT')
         os.chmod(path, 0o600)
 
     def close(self):
