@@ -163,9 +163,11 @@ class SessionTranscriptMixin:
         dead/unopenable state.db escalates and spools instead of dropping turns silently
         (#114266).
 
-        Returns the new row id when this call's write landed synchronously, else None (skipped,
-        queued for retry, or diverted). Callers must treat None as "not persisted yet" rather than
-        looking the row up by content."""
+        Returns ``(row_id, session_id)`` **only** when this call's own queued item landed
+        synchronously; ``None`` when that item was skipped, queued for retry, deferred, or diverted.
+        The session is the one the row actually landed in (a compression reroute reports the child).
+        Callers must treat ``None`` as "not persisted yet" rather than looking a row up by content.
+        """
         if skip_db:
             return None
         with self._get_transcript_drain_lock():
@@ -286,8 +288,12 @@ class SessionTranscriptMixin:
         SQLite via its own _flush_messages_to_session_db(), preventing the duplicate-write bug (#860).
         """
         written_row_id = None
+        original_receipt = None
         with self._transcript_retry_lock:
             pending = self._enqueue_transcript_message(session_id, message)
+            # The object THIS call enqueued (tail), never the head: with an older backlog the head is
+            # somebody else's message and reporting its id would be a receipt for the wrong row.
+            original_msg = pending[-1]
             msg = pending[0]
         queue_session_id = session_id
 
@@ -313,6 +319,8 @@ class SessionTranscriptMixin:
                 if spool_exc is not None:
                     raise spool_exc
                 written_row_id = self._append_transcript_message(session_id, msg)
+                if msg is original_msg and written_row_id:
+                    original_receipt = (int(written_row_id), session_id)
             except Exception as exc:
                 from hermes_state import StateDbCorruptError, StateDbReplacedError
                 from hermes_state_errors import CompressionSessionClosedError
@@ -330,6 +338,10 @@ class SessionTranscriptMixin:
                             self._lazy("_session_owner_hints", dict)[child_id] = _owner_key
                         try:
                             written_row_id = self._append_transcript_message(child_id, msg)
+                            if msg is original_msg and written_row_id:
+                                # The row really lives in the child session; report that session,
+                                # never the parent id with a child row.
+                                original_receipt = (int(written_row_id), child_id)
                         except Exception as reroute_exc:
                             exc = reroute_exc
                         else:
@@ -339,7 +351,7 @@ class SessionTranscriptMixin:
                                 queue_session_id = child_id
                             self._publish_transcript_reroute(session_id, child_id)
                             if not pending:
-                                return
+                                return original_receipt
                             msg = pending[0]
                             session_id = child_id
                             continue
@@ -357,11 +369,17 @@ class SessionTranscriptMixin:
                         continue  # repaired: drain the older spool again before ``msg``
                     try:
                         written_row_id = self._append_transcript_message(session_id, msg)
+                        if msg is original_msg and written_row_id:
+                            original_receipt = (int(written_row_id), session_id)
                     except Exception as retry_exc:
                         exc = retry_exc
                     else:
                         with self._transcript_retry_lock:
-                            _ack_head()
+                            queue_empty = _ack_head()
+                            if not queue_empty:
+                                msg = pending[0]
+                        if queue_empty:
+                            return original_receipt
                         continue
                 with self._transcript_retry_lock:
                     failures = self._transcript_append_failures.get(session_id, 0) + 1
@@ -383,7 +401,7 @@ class SessionTranscriptMixin:
                     if not queue_empty:
                         msg = pending[0]
                 if queue_empty:
-                    return written_row_id
+                    return original_receipt
                 continue
 
     def _spool_stalled_backlog(self, session_id: str, queue_session_id: str) -> int:

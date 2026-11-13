@@ -29,7 +29,10 @@ _APP_ID = 0x42434D50
 APPEND_RECEIPT_SOURCE = 'append_return'
 # The agent's own insert path is equally exact: its uid is minted by the writer and stored with the row.
 AGENT_PERSIST_RECEIPT_SOURCE = 'agent_persist_uid'
-RECEIPT_SOURCES = (APPEND_RECEIPT_SOURCE, AGENT_PERSIST_RECEIPT_SOURCE)
+# The flush boundary stamps row id + owner session only AFTER its batch committed, which is the
+# strongest agent-owned proof available (see agent/transcript_repair.sync_flushed_message_markers).
+AGENT_FLUSH_RECEIPT_SOURCE = 'agent_flush_marker'
+RECEIPT_SOURCES = (APPEND_RECEIPT_SOURCE, AGENT_PERSIST_RECEIPT_SOURCE, AGENT_FLUSH_RECEIPT_SOURCE)
 
 
 def _json(value):

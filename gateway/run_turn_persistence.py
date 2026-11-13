@@ -503,6 +503,7 @@ class GatewayTurnPersistenceMixin:
     async def _hmwa_persist_turn_transcript(
         self, *, event, source, session_entry, session_key, agent_result, agent_messages,
         prepared, response, agent_failed_early, hidden_reasoning_incomplete, is_context_overflow_failure,
+        delivery_enabled=False, run_ref=None,
     ):
         """Persist this turn to the transcript (session_meta on first turn, user-only on transient
         failure, nothing on context overflow), update last_prompt_tokens, and re-baseline the
@@ -526,6 +527,16 @@ class GatewayTurnPersistenceMixin:
         # Receipt for this turn's terminal row: the id the write itself returned. None means the
         # terminal is not provably persisted (queued, skipped, or failed) and no delivery may claim it.
         receipt = None
+        # This turn's own generated boundary: only the LAST message the run produced can be its
+        # terminal, and only when that message is an assistant answer (not a pending tool call and
+        # not a tool result). Anything else means this run has no terminal of its own.
+        history_len = agent_result.get("history_offset", len(history))
+        new_messages = agent_messages[history_len:] if len(agent_messages) > history_len else []
+        terminal_candidate = new_messages[-1] if new_messages else None
+        if terminal_candidate is not None and (
+            terminal_candidate.get("role") != "assistant" or terminal_candidate.get("tool_calls")
+        ):
+            terminal_candidate = None
 
         if is_context_overflow_failure:
             pass  # Skip all transcript writes — don't grow a broken session
@@ -571,19 +582,17 @@ class GatewayTurnPersistenceMixin:
             else:
                 # Only the NEW messages: history_offset (what the agent saw), not len(history), which
                 # counts session_meta entries stripped before the agent saw them.
-                history_len = agent_result.get("history_offset", len(history))
-                new_messages = agent_messages[history_len:] if len(agent_messages) > history_len else []
                 if not new_messages:
                     # Edge case: fall back to simple user/assistant rows.
                     await store.append_to_transcript(sid, _user_row, skip_db=agent_persisted)
                     if response:
-                        row_id = await store.append_to_transcript(
+                        written = await store.append_to_transcript(
                             sid, {"role": "assistant", "content": response, "timestamp": ts},
                             skip_db=agent_persisted,
                         )
-                        if row_id:
-                            receipt = {"message_id": int(row_id), "session_id": sid,
-                                       "source": "append_return"}
+                        if written:
+                            receipt = {"message_id": int(written[0]), "session_id": written[1],
+                                       "source": "append_return", "run": run_ref}
                 else:
                     # Attach the inbound platform message_id to the first user entry so platform-level
                     # quote-resolution (e.g. Yuanbao) can find earlier @bot messages by original id.
@@ -600,10 +609,12 @@ class GatewayTurnPersistenceMixin:
                         ):
                             entry["message_id"] = str(event.message_id)
                             _user_msg_id_attached = True
-                        row_id = await store.append_to_transcript(sid, entry, skip_db=agent_persisted)
-                        if msg.get("role") == "assistant" and row_id:
-                            receipt = {"message_id": int(row_id), "session_id": sid,
-                                       "source": "append_return"}
+                        written = await store.append_to_transcript(sid, entry, skip_db=agent_persisted)
+                        # ONLY this run's terminal candidate may produce a receipt; an earlier
+                        # assistant row in the same turn is an intermediate step, not the outcome.
+                        if msg is terminal_candidate and written:
+                            receipt = {"message_id": int(written[0]), "session_id": written[1],
+                                       "source": "append_return", "run": run_ref}
 
         # The agent persists token counts/model itself; keep only last_prompt_tokens for hygiene.
         await store.update_session(
@@ -611,14 +622,27 @@ class GatewayTurnPersistenceMixin:
             touch_activity=not bool(getattr(event, "internal", False)),
         )
 
-        # Agent-persisted turn: the gateway wrote nothing, so adopt the row the agent itself
-        # inserted — resolved by the uid the insert path stamped, never by "newest row" or content.
-        if receipt is None and agent_persisted and self._session_db is not None:
-            uid = None
-            for message in reversed(agent_messages or []):
-                if message.get("role") == "assistant":
-                    uid = message.get("message_uid") or None
-                    break
+        terminal_ok = not (
+            agent_failed_early or hidden_reasoning_incomplete or is_context_overflow_failure
+            or agent_result.get("failure_reason") == "content_policy_blocked"
+        )
+        # Agent-owned persistence: the run's termination path hands back the committed identity of the
+        # ONE candidate it designated (row id + session stamped by the flush boundary). It carries no
+        # run of its own — this persistence call is what binds the receipt to its run.
+        supplied = agent_result.get("terminal_receipt")
+        if receipt is None and terminal_ok and isinstance(supplied, dict):
+            supplied_row = supplied.get("message_id")
+            supplied_session = supplied.get("session_id")
+            if isinstance(supplied_row, int) and supplied_session:
+                receipt = {"message_id": supplied_row, "session_id": supplied_session,
+                           "source": supplied.get("source") or "agent_flush_marker", "run": run_ref}
+
+        # Fallback for agent-owned turns without a termination receipt: resolve the uid the insert path
+        # stamped on THIS run's terminal candidate. Also gated on terminal_ok — a failed / refused /
+        # overflowed run must not resurrect a partial assistant row through a uid lookup.
+        if (receipt is None and terminal_ok and agent_persisted and delivery_enabled
+                and terminal_candidate is not None and self._session_db is not None):
+            uid = terminal_candidate.get("message_uid") or None
             if uid:
                 try:
                     row_id = self._session_db.message_id_by_uid(sid, uid)
@@ -626,7 +650,7 @@ class GatewayTurnPersistenceMixin:
                     row_id = None
                 if row_id:
                     receipt = {"message_id": int(row_id), "session_id": sid,
-                               "source": "agent_persist_uid"}
+                               "source": "agent_persist_uid", "run": run_ref}
 
         # Re-baseline the cached agent's message_count now that ALL of this turn's writes are done:
         # the coherence guard snapshots at agent-BUILD time, so our own writes would otherwise

@@ -18,8 +18,13 @@ RECEIPT_SOURCE = "append_return"
 
 
 async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result, response,
-                                outcome, hook_ctx=None, run_ref=None):
-    """Emit ``agent:delivery-ready`` only when a verified receipt exists. Returns True if emitted."""
+                                outcome, hook_ctx=None):
+    """Emit ``agent:delivery-ready`` only when a *complete* verified receipt exists.
+
+    The receipt must carry the run it belongs to and the session the row landed in; this helper
+    never fills either in (that would let the notification manufacture the very binding the
+    consumer is supposed to verify). Returns True only when the event was emitted.
+    """
     if provider is None:
         return False
     try:
@@ -28,14 +33,15 @@ async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result,
             return False
         message_id = receipt.get("message_id")
         session_id = receipt.get("session_id")
-        if message_id is None or not session_id:
-            logger.warning("delivery-ready skipped: provider returned no message id/session")
+        run = receipt.get("run")
+        if message_id is None or not session_id or not run:
+            logger.warning("delivery-ready skipped: receipt lacks message id/session/run")
             return False
         await hooks.emit("agent:delivery-ready", {
             **(hook_ctx or {}),
             "session_id": session_id,
             "canonical_message_id": message_id,
-            "terminal_run": receipt.get("run") or run_ref,
+            "terminal_run": run,
             "terminal_source": receipt.get("source") or RECEIPT_SOURCE,
             "outcome": outcome,
             "response": response or "",

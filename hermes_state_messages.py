@@ -430,16 +430,18 @@ class SessionMessagesMixin(SessionDetachedResultsMixin, SessionTodoResultMixin):
     def message_id_by_uid(self, session_id: str, message_uid: str) -> Optional[int]:
         """Exact row id for a uid the *writer* stamped on the message it inserted.
 
-        This is the reliable way to adopt a terminal row the agent persisted itself: the uid was
-        minted by the insert path and stored with the row, so matching it is identity, not a
-        "newest row" guess. Returns None when the uid is unknown or belongs to another session.
+        Only the single LIVE row for that uid may answer: a rewind/compaction can leave an
+        ``active = 0`` version of the same uid behind, and picking it would hand the caller a row
+        that is not the message this run wrote. Ambiguity (more than one active row) returns None.
         """
         if not session_id or not message_uid:
             return None
         rows = self._read_all(
-            "SELECT id FROM messages WHERE session_id = ? AND message_uid = ? LIMIT 1",
+            "SELECT id FROM messages WHERE session_id = ? AND message_uid = ? AND active = 1 LIMIT 2",
             (session_id, message_uid))
-        return int(rows[0]["id"]) if rows else None
+        if len(rows) != 1:
+            return None
+        return int(rows[0]["id"])
 
     def append_messages_batch(
         self, session_id: str, messages: list[dict[str, Any]], compression_lock_holder: Optional[str] = None,

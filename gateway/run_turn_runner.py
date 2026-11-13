@@ -183,6 +183,30 @@ def _resolution_failure_reply(exc: Exception, platform: Platform) -> tuple[str, 
     return t("gateway.errors.no_credentials"), auth_permanent, False
 
 
+def _committed_terminal_identity(messages: list, history_offset: int | None) -> dict | None:
+    """Committed identity of THIS run's terminal row, or None when it has no single terminal.
+
+    Only the flush boundary can say a row is durable: ``sync_flushed_message_markers`` stamps
+    ``_row_id`` (and the owning session) on a message *after* its batch transaction committed. A
+    candidate without that stamp was not flushed — queued, skipped, or failed — so it must not be
+    reported as a deliverable terminal. The candidate itself is the run's own last generated step:
+    an assistant answer with no pending tool call. Anything else (tool call, tool result, empty)
+    means this run terminated without a message of its own.
+    """
+    tail = messages[history_offset:] if isinstance(history_offset, int) and len(messages) > history_offset else []
+    candidate = tail[-1] if tail else None
+    if not isinstance(candidate, dict):
+        return None
+    if candidate.get("role") != "assistant" or candidate.get("tool_calls"):
+        return None
+    row_id = candidate.get("_row_id")
+    if not isinstance(row_id, int):
+        return None
+    return {"message_id": row_id,
+            "session_id": candidate.get("_submit_row_session_id") or None,
+            "source": "agent_flush_marker"}
+
+
 class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
     """Per-turn collaborator carrying ``GatewayRunner._run_agent_inner``'s tool-progress callbacks."""
 
@@ -1465,4 +1489,8 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
             # Lets the persistence block tell whether the codex app-server path self-persisted (it
             # didn't — see codex_runtime.py); default True keeps skip-db for the standard runtime.
             "agent_persisted": result.get("agent_persisted", True),
+            # Committed identity of the run's designated terminal row, taken from the flush boundary's
+            # own stamps (``_row_id`` / ``_submit_row_session_id``) after the batch committed. Absent
+            # when this run has no single terminal (tool call pending, empty, or not flushed).
+            "terminal_receipt": _committed_terminal_identity(result.get("messages") or [], history_offset),
         }
