@@ -1,45 +1,89 @@
-"""Real turn entry: model call -> business artifact -> authoritative terminal -> delivery.
+"""Real turn entry: admission gate -> model call -> artifact -> canonical terminal -> delivery.
 
-This is the wiring that turns the completion consumer from "a hook someone could call" into the
-actual production path:
+This is the one-shot entry a host may run. The order is deliberate:
 
-  1. the host captures the delivery predecessor from BFF state *before* the run starts (read
-     assertion, host-held key), so a retry can never adopt a newer head;
-  2. admission stores that predecessor once;
-  3. the model is called over HTTP (no key material is logged, ever);
-  4. the business artifact is written and kept;
-  5. the authoritative terminal is appended to the canonical transcript;
-  6. the completion consumer classifies that terminal and writes the delivery back.
+  1. ``StartAdmission`` decides whether this ``(issue, execution)`` may run at all. A repeat,
+     a concurrent duplicate, a retry after completion and a recovery attempt all stop here —
+     before the model is called, before an artifact is written, before a message is appended.
+     A run whose outcome is unknown is **not** re-executed.
+  2. the delivery predecessor is captured from BFF state *before* the run starts, so a retry can
+     never adopt a newer head;
+  3. the consumer records the admission intent; ``handle`` returning ``None`` (session mismatch)
+     aborts the turn instead of continuing;
+  4. the model is called over HTTP(S); redirects are refused and the response must come from the
+     same origin, so the bearer can never be forwarded to another host;
+  5. the business artifact is written; the authoritative terminal is appended through the
+     repository's real canonical transcript API (not hand-written SQL);
+  6. the consumer classifies the persisted row *by id* and writes the delivery back.
 
-Everything is dependency-injected so the same code runs with the isolated signer (in-cluster) or a
-test transport.
+Everything is dependency-injected: ``store`` is a real ``SessionDB`` in production and in tests,
+and ``model`` may carry an explicit test transport. Nothing here starts a scheduler.
+
+Scope note: this entry is the *code path* a host would run. It does not by itself make a host
+production-ready — the isolation/custody boundary is still unimplemented (see ``host_runner``), and
+no real model or sandbox delivery has been executed through it.
 """
 
 import json
 import os
-import sqlite3
-import time
+import urllib.parse
 import urllib.request
-from contextlib import closing
 from pathlib import Path
+
+from .start_admission import StartAdmission
 
 
 class ModelUnavailable(RuntimeError):
     pass
 
 
-class OpenAICompatibleModel:
-    """Minimal chat-completions client. The API key is read from env at call time and never logged."""
+class TurnRejected(RuntimeError):
+    """The turn must not run; carries a machine-readable reason and whether anything ran."""
 
-    def __init__(self, endpoint, model, api_key_env='BAYMAX_MODEL_API_KEY', timeout=60, opener=None):
+    def __init__(self, reason, **details):
+        super().__init__(reason)
+        self.reason = reason
+        self.details = details
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is a refusal, not a hop: the Authorization header must never follow one."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _origin(url):
+    parts = urllib.parse.urlsplit(url)
+    return (parts.scheme, parts.hostname, parts.port)
+
+
+class OpenAICompatibleModel:
+    """Minimal chat-completions client with an explicit transport policy.
+
+    Production defaults: HTTPS only, redirects refused, and the response must come from the same
+    origin as the configured endpoint. A plaintext endpoint or a custom transport is only accepted
+    when the caller says so explicitly (loopback tests do), so the production default never relaxes.
+    """
+
+    def __init__(self, endpoint, model, api_key_env='BAYMAX_MODEL_API_KEY', timeout=60, opener=None,
+                 allow_plaintext_endpoint=False):
         if not endpoint or not model:
             raise ValueError('model endpoint and model name are required')
         self.endpoint = endpoint.rstrip('/')
         self.model = model
         self.api_key_env = api_key_env
         self.timeout = timeout
-        self._opener = opener or (lambda request, timeout: urllib.request.urlopen(request, timeout=timeout))
+        scheme = urllib.parse.urlsplit(self.endpoint).scheme
+        if scheme != 'https' and not allow_plaintext_endpoint:
+            raise ValueError('model endpoint must be https (plaintext only for an explicit test transport)')
+        self._allow_plaintext = allow_plaintext_endpoint
+        self._opener = opener or self._default_opener
         self.calls = 0
+
+    def _default_opener(self, request, timeout):
+        opener = urllib.request.build_opener(_NoRedirect)
+        return opener.open(request, timeout=timeout)
 
     def complete(self, prompt):
         api_key = os.environ.get(self.api_key_env, '')
@@ -47,13 +91,21 @@ class OpenAICompatibleModel:
             raise ModelUnavailable(f'model credential is not provisioned ({self.api_key_env})')
         payload = json.dumps({'model': self.model, 'messages': [{'role': 'user', 'content': prompt}],
                               'temperature': 0}).encode()
-        request = urllib.request.Request(self.endpoint + '/chat/completions', payload,
+        url = self.endpoint + '/chat/completions'
+        request = urllib.request.Request(url, payload,
                                          {'content-type': 'application/json',
                                           'authorization': 'Bearer ' + api_key})
         self.calls += 1
         try:
             with self._opener(request, self.timeout) as response:
+                final = response.geturl() if hasattr(response, 'geturl') else url
+                if _origin(final) != _origin(self.endpoint):
+                    # A transport that followed a redirect has already leaked the bearer; refuse the
+                    # result and never parse it as a completion.
+                    raise ModelUnavailable('model response came from another origin; refusing the turn')
                 body = json.loads(response.read(1 << 20))
+        except ModelUnavailable:
+            raise
         except Exception as error:
             raise ModelUnavailable(f'model call failed: {type(error).__name__}') from None
         choices = body.get('choices') or []
@@ -81,12 +133,14 @@ def _endpoint_of(transport):
     return ENDPOINT
 
 
-def persist_terminal(state_path, session_id, content, kind=None):
-    """Append the authoritative assistant terminal; returns its message id."""
-    with closing(sqlite3.connect(state_path)) as db, db:
-        cursor = db.execute('INSERT INTO messages(session_id,role,content,display_kind) VALUES(?,?,?,?)',
-                            (session_id, 'assistant', content, kind))
-        return cursor.lastrowid
+def persist_terminal(store, session_id, content, kind=None, timestamp=None):
+    """Append the authoritative assistant terminal through the real canonical API.
+
+    ``store`` is the repository's ``SessionDB`` (or its async facade's underlying object). The
+    write keeps every column the real schema requires (``timestamp`` is NOT NULL with no default)
+    and goes through the store's own guards and counters, so a real state.db accepts it.
+    """
+    return store.append_message(session_id, 'assistant', content, display_kind=kind, timestamp=timestamp)
 
 
 def write_artifact(directory, execution_ref, text, usage):
@@ -98,17 +152,49 @@ def write_artifact(directory, execution_ref, text, usage):
     return path
 
 
-def run_turn(*, transport, consumer, model, state_path, session_id, execution_ref, issue_id, prompt,
-             artifacts_dir, endpoint=None):
-    """Execute one real turn and deliver it. Returns a summary dict (never secrets)."""
-    predecessor = capture_predecessor(transport, issue_id, endpoint or _endpoint_of(transport))
-    admitted = consumer.handle('agent:start', {'session_id': session_id, 'execution_ref': execution_ref,
-                                              'expected_current_delivery_id': predecessor})
-    text, usage = model.complete(prompt)
-    artifact = write_artifact(artifacts_dir, execution_ref, text, usage)
-    message_id = persist_terminal(state_path, session_id, text)
-    ready = consumer.handle('agent:delivery-ready', {'session_id': session_id, 'execution_ref': execution_ref,
-                                                    'response': text, 'outcome': 'completed'})
-    delivery = consumer.resume(execution_ref)
-    return {'predecessor': predecessor, 'admitted': admitted, 'terminalMessageId': message_id,
-            'artifact': str(artifact), 'ready': ready, 'delivery': delivery}
+def _admission_key(issue_id, execution_ref):
+    return f'{issue_id}:{execution_ref}'
+
+
+def run_turn(*, transport, consumer, model, store, session_id, execution_ref, issue_id, prompt,
+             artifacts_dir, admission_path, goal_version=None, endpoint=None):
+    """Run at most once per ``(issue, execution)`` and deliver the persisted terminal."""
+    admission = StartAdmission(admission_path)
+    try:
+        ticket = admission.admit(request_key=_admission_key(issue_id, execution_ref),
+                                 issue_id=str(issue_id), execution_ref=execution_ref,
+                                 goal_version=goal_version)
+        if not ticket['shouldLaunch']:
+            # Repeat click, concurrent duplicate, retry after completion, or an unknown outcome:
+            # the business side already ran (or is running) and must not run again here.
+            return {'status': 'blocked_already_started', 'reason': ticket['state'],
+                    'execution_ref': execution_ref, 'modelCalls': 0, 'delivery': None}
+        predecessor = capture_predecessor(transport, issue_id, endpoint or _endpoint_of(transport))
+        admitted = consumer.handle('agent:start', {
+            'session_id': session_id, 'execution_ref': execution_ref,
+            'expected_current_delivery_id': predecessor})
+        if admitted is None:
+            admission.abandon(_admission_key(issue_id, execution_ref), note='consumer refused admission')
+            return {'status': 'blocked_consumer_refused', 'execution_ref': execution_ref,
+                    'modelCalls': 0, 'delivery': None}
+        if admitted.get('status') != 'started':
+            admission.abandon(_admission_key(issue_id, execution_ref), note='duplicate admission intent')
+            return {'status': 'blocked_duplicate_intent', 'reason': admitted.get('status'),
+                    'execution_ref': execution_ref, 'modelCalls': 0, 'delivery': None}
+        try:
+            text, usage = model.complete(prompt)
+        except ModelUnavailable:
+            admission.abandon(_admission_key(issue_id, execution_ref), note='model unavailable')
+            raise
+        artifact = write_artifact(artifacts_dir, execution_ref, text, usage)
+        message_id = persist_terminal(store, session_id, text)
+        ready = consumer.handle('agent:delivery-ready', {
+            'session_id': session_id, 'execution_ref': execution_ref,
+            'canonical_message_id': message_id, 'response': text, 'outcome': 'completed'})
+        delivery = consumer.resume(execution_ref)
+        admission.finish(_admission_key(issue_id, execution_ref), note='terminal persisted')
+        return {'status': 'completed', 'predecessor': predecessor, 'admitted': admitted,
+                'terminalMessageId': message_id, 'artifact': str(artifact), 'ready': ready,
+                'delivery': delivery, 'modelCalls': getattr(model, 'calls', None)}
+    finally:
+        admission.close()

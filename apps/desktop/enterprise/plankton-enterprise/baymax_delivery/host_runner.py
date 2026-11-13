@@ -1,18 +1,18 @@
-"""Independent sandbox execution host.
+"""Sandbox execution host **scaffold — not an enabled host**. Signing stays closed.
 
-This is a standalone process, not a shared-engine install: it never imports or patches the Test
-engine, it only reads the canonical transcript database read-only and writes the delivery through
-the reviewed BFF. The agent never receives the private key and there is no local socket that hands
-out assertions.
+Status, stated precisely: this module implements the *checks* a host would need, but its
+``--run`` path is permanently fail-closed in this PR — no receipt format can currently reach
+``verified_os_boundary``, so a key is never used and no delivery is signed here. It is shipped as a
+default-closed component, not as a working production host.
 
-OS boundary, stated precisely:
-* the key file is 0600 and owned by the uid that runs this process;
-* a declared "different agent uid" is NOT evidence — it stays unverified;
-* verification requires a *boundary receipt* produced by the controlled deploy collector, bound to
-  the pod UID, the container, the agent uid, the exact mount path, the key fingerprint and this
-  deployment's configuration fingerprint, and it must live in a deploy-managed directory the agent
-  uid cannot write. A hand-written JSON in an agent-writable place can never enable signing.
-* without such a receipt the host refuses to use the key (``--run`` exits 3).
+Why: OS isolation cannot be self-attested. A boundary receipt is only meaningful when a *controlled
+deploy collector* produces it, bound to the pod UID, the container, the real agent uid, the exact
+mount path, the key fingerprint and this deployment's configuration fingerprint, in a directory the
+agent uid cannot write. A caller-written JSON in an agent-writable directory is treated as material
+that needs verification, never as verification. Until such a collector exists, ``--run`` exits 3.
+
+What is *not* claimed: no production execution path is verified, no real model/host run has
+happened, and this file must not be presented as "the host is done".
 """
 import argparse
 import hashlib

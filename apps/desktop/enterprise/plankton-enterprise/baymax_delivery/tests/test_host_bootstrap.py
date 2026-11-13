@@ -29,7 +29,7 @@ class BootstrapTests(unittest.TestCase):
         self.state = self.root / 'state.sqlite'
         import sqlite3
         with sqlite3.connect(self.state) as db:
-            db.execute('CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, display_kind TEXT)')
+            db.execute('CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, display_kind TEXT, tool_calls TEXT, finish_reason TEXT)')
         self.binding = Binding('42', '11111111-1111-4111-8111-111111111111', 'plankton:bootstrap-unit', '7',
                                'unit-bootstrap-run', int(time.time()) + 180)
 

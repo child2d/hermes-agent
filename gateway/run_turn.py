@@ -324,11 +324,18 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
                 is_context_overflow_failure=is_context_overflow_failure,
             )
             # This is a persisted process outcome, NOT goal acceptance. A consumer must also verify
-            # a new canonical terminal row before permitting any writeback.
+            # the canonical row by id before permitting any writeback; the display text below can
+            # carry footers/reasoning that were never written to messages.content.
+            from gateway.delivery_terminal import terminal_identity
+
+            identity = await terminal_identity(self.async_session_store, session_entry.session_id)
             await self.hooks.emit("agent:delivery-ready", {
                 **hook_ctx,
-                "response": response or "",
+                "session_id": session_entry.session_id,
+                "canonical_message_id": (identity or {}).get("message_id"),
+                "terminal_display_kind": (identity or {}).get("display_kind"),
                 "outcome": "failed" if (agent_failed_early or hidden_reasoning_incomplete or is_context_overflow_failure) else "completed",
+                "response": response or "",
             })
             await self._record_room_silence_decision(
                 session_key, agent_result, _intentional_silence,

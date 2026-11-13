@@ -32,7 +32,9 @@ class StartAdmission:
         tables = {r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if identity == 0 and not tables:
             with self.db:
-                self.db.execute('''CREATE TABLE admissions(
+                # Two processes/threads can initialise at once; IF NOT EXISTS keeps that a no-op
+                # instead of a crash that would look like "admission unavailable".
+                self.db.execute('''CREATE TABLE IF NOT EXISTS admissions(
                     request_key TEXT PRIMARY KEY, issue_id TEXT NOT NULL, execution_ref TEXT NOT NULL,
                     goal_version TEXT, state TEXT NOT NULL, created_at TEXT NOT NULL,
                     started_at TEXT, finished_at TEXT, note TEXT)''')

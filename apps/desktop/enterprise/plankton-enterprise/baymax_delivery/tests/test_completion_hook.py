@@ -1,103 +1,157 @@
-import _path_setup
 import json
 import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+
+import _path_setup
 from baymax_delivery.completion_hook import CompletionConsumer
 from baymax_delivery.delivery_outbox import DeliveryOutbox
 
+
 class CompletionTests(unittest.TestCase):
+    """Consumer behaviour against the columns the consumer actually reads.
+
+    The consumer only reads canonical rows; the *writer* path (``run_turn_delivery``) is covered
+    against a real ``SessionDB`` in ``test_challenger_round1``. Here the table mirrors the real
+    column set the consumer touches so a missing column fails loudly instead of being papered over.
+    """
+
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(); self.root = Path(self.temp.name)
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
         self.state = self.root / 'state.sqlite'
         with closing(sqlite3.connect(self.state)) as db, db:
-            db.execute('CREATE TABLE messages(id INTEGER PRIMARY KEY,session_id TEXT,role TEXT,content TEXT,display_kind TEXT)')
+            db.execute('CREATE TABLE messages(id INTEGER PRIMARY KEY,session_id TEXT,role TEXT,'
+                       'content TEXT,display_kind TEXT,tool_calls TEXT,finish_reason TEXT)')
         self.outbox = DeliveryOutbox(self.root / 'outbox.sqlite')
         self.consumer = CompletionConsumer(self.state, self.root / 'intents.sqlite', 'unit-session', self.outbox)
         self.context = {'session_id': 'unit-session', 'execution_ref': 'unit-execution:1',
                         'expected_current_delivery_id': ''}
-    def tearDown(self): self.outbox.close(); self.temp.cleanup()
-    def terminal(self, content='Real isolated terminal record', kind=None):
+
+    def tearDown(self):
+        self.outbox.close()
+        self.temp.cleanup()
+
+    def terminal(self, content='Real isolated terminal record', kind=None, tool_calls=None):
         with closing(sqlite3.connect(self.state)) as db, db:
-            db.execute('INSERT INTO messages(session_id,role,content,display_kind) VALUES(?,?,?,?)', ('unit-session','assistant',content,kind))
+            cursor = db.execute('INSERT INTO messages(session_id,role,content,display_kind,tool_calls) '
+                                'VALUES(?,?,?,?,?)',
+                                ('unit-session', 'assistant', content, kind, tool_calls))
+            return cursor.lastrowid
+
+    def ready(self, message_id, context=None, outcome='completed', response=None):
+        return self.consumer.handle('agent:delivery-ready',
+                                    {**(context or self.context), 'canonical_message_id': message_id,
+                                     'response': response if response is not None else 'display text',
+                                     'outcome': outcome})
 
     def test_old_end_event_cannot_publish_or_imply_success(self):
         self.consumer.handle('agent:start', self.context)
         self.terminal()
-        result = self.consumer.handle('agent:end', {**self.context, 'response':'truncated'})
+        result = self.consumer.handle('agent:end', {**self.context, 'response': 'truncated'})
         self.assertEqual(result['status'], 'awaiting_persisted_terminal')
         self.assertEqual(self.outbox.db.execute('SELECT COUNT(*) FROM queue').fetchone()[0], 0)
 
+    def test_delivery_ready_without_a_canonical_message_id_is_refused(self):
+        self.consumer.handle('agent:start', self.context)
+        self.terminal()
+        result = self.consumer.handle('agent:delivery-ready',
+                                      {**self.context, 'response': 'Real isolated terminal record',
+                                       'outcome': 'completed'})
+        self.assertEqual(result['status'], 'blocked_terminal_identity')
+
     def test_unbound_real_terminal_is_durable_but_does_not_send(self):
-        self.consumer.handle('agent:start', self.context); self.terminal()
-        result = self.consumer.handle('agent:delivery-ready', {**self.context, 'response':'Real isolated terminal record', 'outcome':'completed'})
+        self.consumer.handle('agent:start', self.context)
+        message_id = self.terminal()
+        result = self.ready(message_id)
         self.assertEqual(result['status'], 'blocked_binding')
         restarted = CompletionConsumer(self.state, self.root / 'intents.sqlite', 'unit-session', self.outbox)
         self.assertEqual(restarted.resume('unit-execution:1')['status'], 'blocked_binding')
         self.assertEqual(self.outbox.db.execute('SELECT COUNT(*) FROM queue').fetchone()[0], 0)
-        with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db:
-            payload = json.loads(db.execute('SELECT payload FROM intents').fetchone()[0])
-            self.assertEqual(payload['terminal_message_id'], 1)
-            self.assertEqual(payload['summary'], 'Real isolated terminal record')
+        payload = json.loads(self.consumer.payload_of('unit-execution:1'))
+        self.assertEqual(payload['terminal_message_id'], message_id)
+        self.assertEqual(payload['summary'], 'Real isolated terminal record')
 
     def test_previous_reply_and_unpersisted_reply_cannot_become_new_delivery(self):
-        self.terminal('Old reply')
+        old_id = self.terminal('Old reply')
         self.consumer.handle('agent:start', self.context)
         with self.assertRaises(ValueError):
-            self.consumer.handle('agent:delivery-ready', {**self.context,'response':'Old reply','outcome':'completed'})
+            self.ready(old_id)  # older than the admission floor
         with self.assertRaises(ValueError):
-            self.consumer.handle('agent:delivery-ready', {**self.context,'response':'Not persisted','outcome':'completed'})
+            self.ready(9999)    # not in canonical state at all
 
     def test_bound_completion_hook_records_before_background_network_writeback(self):
         from types import SimpleNamespace
         binding = SimpleNamespace(execution_ref='unit-execution:1', issue_id='42')
-        def forbidden(**kwargs): self.fail('Completion hook must not wait for network writeback')
-        self.consumer.transport = SimpleNamespace(issuer=SimpleNamespace(binding=binding, require_binding=lambda:binding), register_evidence=forbidden)
-        self.consumer.handle('agent:start',self.context); self.terminal()
-        result = self.consumer.handle('agent:delivery-ready',{**self.context,'response':'Real isolated terminal record','outcome':'completed'})
-        self.assertEqual(result['status'],'ready_to_writeback')
-        self.assertEqual(self.outbox.db.execute('SELECT COUNT(*) FROM queue').fetchone()[0],0)
+
+        def forbidden(**kwargs):
+            self.fail('Completion hook must not wait for network writeback')
+
+        self.consumer.transport = SimpleNamespace(
+            issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
+            register_evidence=forbidden)
+        self.consumer.handle('agent:start', self.context)
+        message_id = self.terminal()
+        result = self.ready(message_id)
+        self.assertEqual(result['status'], 'ready_to_writeback')
+        self.assertEqual(self.outbox.db.execute('SELECT COUNT(*) FROM queue').fetchone()[0], 0)
 
     def test_confirmed_receipt_remains_confirmed_after_binding_is_removed(self):
         from types import SimpleNamespace
         binding = SimpleNamespace(execution_ref='unit-execution:1', issue_id='42')
         counter = []
-        def register(**kwargs): counter.append('evidence'); return {'id':'unit-evidence-' + str(len(counter))}
-        def submit(**kwargs): counter.append('submit'); return {'id':'unit-delivery', 'version':kwargs['version']}
-        self.consumer.transport = SimpleNamespace(issuer=SimpleNamespace(binding=binding, require_binding=lambda:binding), register_evidence=register, submit_delivery=submit)
-        self.consumer.handle('agent:start',self.context); self.terminal()
-        self.consumer.handle('agent:delivery-ready',{**self.context,'response':'Real isolated terminal record','outcome':'completed'})
+
+        def register(**kwargs):
+            counter.append('evidence')
+            return {'id': 'unit-evidence-' + str(len(counter))}
+
+        def submit(**kwargs):
+            counter.append('submit')
+            return {'id': 'unit-delivery', 'version': kwargs['version']}
+
+        self.consumer.transport = SimpleNamespace(
+            issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
+            register_evidence=register, submit_delivery=submit)
+        self.consumer.handle('agent:start', self.context)
+        self.ready(self.terminal())
         original = self.consumer.resume('unit-execution:1')
         self.consumer.transport = None
-        self.assertEqual(self.consumer.resume('unit-execution:1'),original)
-        self.assertEqual(counter,['evidence','evidence','submit'])
-        self.assertEqual(self.consumer.pending_runs(),[])
+        self.assertEqual(self.consumer.resume('unit-execution:1'), original)
+        self.assertEqual(counter, ['evidence', 'evidence', 'submit'])
+        self.assertEqual(self.consumer.pending_runs(), [])
 
     def test_other_sessions_are_not_exported(self):
-        self.assertIsNone(self.consumer.handle('agent:start', {'session_id':'private-other-session','execution_ref':'unknown'}))
-        self.assertIsNone(self.consumer.handle('agent:delivery-ready', {'session_id':'private-other-session','response':'Do not export'}))
+        self.assertIsNone(self.consumer.handle('agent:start', {'session_id': 'private-other-session',
+                                                              'execution_ref': 'unknown'}))
+        self.assertIsNone(self.consumer.handle('agent:delivery-ready', {'session_id': 'private-other-session',
+                                                                       'response': 'Do not export'}))
 
     def test_summary_stays_within_the_backend_contract_and_full_output_is_evidence(self):
         from types import SimpleNamespace
         binding = SimpleNamespace(execution_ref='unit-execution:1', issue_id='42')
         captured = {}
+
         def register(**kwargs):
             captured.setdefault('artifacts', []).append(kwargs)
             return {'id': 'unit-evidence-' + str(len(captured['artifacts']))}
+
         def submit(**kwargs):
             captured['summary'] = kwargs['summary']
             return {'id': 'unit-delivery', 'version': kwargs['version']}
-        self.consumer.transport = SimpleNamespace(issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
-                                                  register_evidence=register, submit_delivery=submit)
+
+        self.consumer.transport = SimpleNamespace(
+            issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
+            register_evidence=register, submit_delivery=submit)
         for length in (8000, 8001, 19900, 200000):
             with self.subTest(length=length):
                 captured.clear()
-                payload = {'execution_ref': 'unit-execution:1', 'session_id': 'unit-session', 'terminal_message_id': 1,
-                           'summary': 'x' * length, 'outcome': 'completed'}
+                payload = {'execution_ref': 'unit-execution:1', 'session_id': 'unit-session',
+                           'terminal_message_id': 1, 'summary': 'x' * length, 'outcome': 'completed'}
                 with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db, db:
-                    db.execute('INSERT OR REPLACE INTO intents(execution_ref,floor,payload,receipt,predecessor) VALUES(?,?,?,NULL,?)',
+                    db.execute('INSERT OR REPLACE INTO intents(execution_ref,floor,payload,receipt,predecessor) '
+                               'VALUES(?,?,?,NULL,?)',
                                ('unit-execution:1', 0, json.dumps(payload), ''))
                 result = self.consumer.resume('unit-execution:1')
                 self.assertEqual(result['status'], 'submitted')
@@ -110,20 +164,32 @@ class CompletionTests(unittest.TestCase):
                 self.assertEqual(len(full), length)  # the untruncated output is kept as evidence
                 with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db, db:
                     db.execute('DELETE FROM intents')
-                self.outbox.db.execute('DELETE FROM queue'); self.outbox.db.execute('DELETE FROM uploads'); self.outbox.db.commit()
+                self.outbox.db.execute('DELETE FROM queue')
+                self.outbox.db.execute('DELETE FROM uploads')
+                self.outbox.db.commit()
 
     def test_lost_ready_event_is_recovered_from_canonical_without_rerunning(self):
         from types import SimpleNamespace
         binding = SimpleNamespace(execution_ref='unit-execution:1', issue_id='42')
         calls = []
-        def register(**kwargs): calls.append('evidence'); return {'id': 'unit-evidence-1'}
+
+        def register(**kwargs):
+            calls.append('evidence')
+            return {'id': 'unit-evidence-1'}
+
         def submit(**kwargs):
             calls.append({'outcome': kwargs.get('outcome'), 'unfinished': kwargs.get('unfinished')})
             return {'id': 'unit-delivery', 'version': kwargs['version']}
-        self.consumer.transport = SimpleNamespace(issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
-                                                  register_evidence=register, submit_delivery=submit)
+
+        self.consumer.transport = SimpleNamespace(
+            issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
+            register_evidence=register, submit_delivery=submit)
         self.consumer.handle('agent:start', self.context)
-        self.terminal('Persisted output but the ready event never arrived')
+        message_id = self.terminal('Persisted output but the ready event never arrived')
+        # Without a durable association the run must not adopt the newest assistant row.
+        self.assertEqual(self.consumer.recover_from_canonical('unit-execution:1')['status'],
+                         'pending_terminal_association')
+        self.consumer.associate_terminal('unit-execution:1', message_id)
         recovery = self.consumer.recover_from_canonical('unit-execution:1')
         self.assertEqual(recovery['status'], 'recovered_terminal')
         self.assertEqual(recovery['outcome'], 'unknown')
@@ -134,29 +200,29 @@ class CompletionTests(unittest.TestCase):
         self.assertEqual(submits[0]['outcome'], 'unknown')
         self.assertIn('完成事件丢失', submits[0]['unfinished'][0])
         # A late event for the same run must neither deliver twice nor upgrade the outcome claim.
-        late = self.consumer.handle('agent:delivery-ready', {**self.context, 'response': 'Persisted output but the ready event never arrived', 'outcome': 'completed'})
+        late = self.ready(message_id, outcome='completed')
         self.assertEqual(late['status'], 'submitted')
         self.assertEqual(len([c for c in calls if isinstance(c, dict)]), 1)
 
     def test_two_runs_in_one_session_never_share_the_later_terminal(self):
         """A's completion event is lost; B runs later. A must not adopt B's output."""
         self.consumer.handle('agent:start', self.context)          # run A admitted, event lost
-        self.terminal('A terminal never delivered')
+        a_terminal = self.terminal('A terminal never delivered')
         context_b = {**self.context, 'execution_ref': 'unit-execution:2'}
         self.consumer.handle('agent:start', context_b)             # run B admitted after A
-        # The newest assistant message now belongs to B's window, not A's.
+        self.consumer.associate_terminal('unit-execution:1', a_terminal)
         result = self.consumer.recover_from_canonical('unit-execution:1')
         self.assertEqual(result['status'], 'ambiguous_terminal')
         self.assertEqual(result['blocked_by'], ['unit-execution:2'])
         self.assertEqual(self.outbox.db.execute('SELECT COUNT(*) FROM queue').fetchone()[0], 0)
-        # The later run can still be recovered on its own, and only then does a delivery appear.
         from types import SimpleNamespace
         binding = SimpleNamespace(execution_ref='unit-execution:2', issue_id='42')
-        self.consumer.transport = SimpleNamespace(issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
-                                                  register_evidence=lambda **k: {'id': 'unit-evidence-b'},
-                                                  submit_delivery=lambda **k: {'id': 'unit-delivery-b', 'version': k['version']})
-        self.terminal('B output owned by run B')
-        self.consumer.handle('agent:delivery-ready', {**context_b, 'response': 'B output owned by run B', 'outcome': 'completed'})
+        self.consumer.transport = SimpleNamespace(
+            issuer=SimpleNamespace(binding=binding, require_binding=lambda: binding),
+            register_evidence=lambda **k: {'id': 'unit-evidence-b'},
+            submit_delivery=lambda **k: {'id': 'unit-delivery-b', 'version': k['version']})
+        b_terminal = self.terminal('B output owned by run B')
+        self.ready(b_terminal, context=context_b)
         self.consumer.resume('unit-execution:2')
         with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db:
             rows = dict(db.execute('SELECT execution_ref, payload FROM intents').fetchall())
@@ -184,8 +250,9 @@ class CompletionTests(unittest.TestCase):
         self.consumer.handle('agent:start', self.context)                 # A: floor = latest id (0)
         context_b = {**self.context, 'execution_ref': 'unit-execution:2'}
         self.consumer.handle('agent:start', context_b)                    # B: same floor
-        self.terminal('B output for the same floor window')
-        self.consumer.handle('agent:delivery-ready', {**context_b, 'response': 'B output for the same floor window', 'outcome': 'completed'})
+        b_terminal = self.terminal('B output for the same floor window')
+        self.consumer.associate_terminal('unit-execution:1', b_terminal)
+        self.ready(b_terminal, context=context_b)
         with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db:
             floors = dict(db.execute('SELECT execution_ref, floor FROM intents').fetchall())
             seqs = dict(db.execute('SELECT execution_ref, seq FROM intents').fetchall())
@@ -201,16 +268,28 @@ class CompletionTests(unittest.TestCase):
 
     def test_recovery_preserves_a_persisted_failure_marker(self):
         self.consumer.handle('agent:start', self.context)
-        self.terminal('Attempt failed', kind='error')
+        message_id = self.terminal('Attempt failed', kind='error')
+        self.consumer.associate_terminal('unit-execution:1', message_id)
         self.assertEqual(self.consumer.recover_from_canonical('unit-execution:1')['outcome'], 'failed')
 
     def test_recovery_without_a_new_terminal_stays_blocked(self):
         self.consumer.handle('agent:start', self.context)
         self.terminal('Old reply')
         self.consumer.handle('agent:start', {'session_id': 'unit-session', 'execution_ref': 'unit-execution:2'})
-        self.assertEqual(self.consumer.recover_from_canonical('unit-execution:2')['status'], 'no_terminal')
+        self.assertEqual(self.consumer.recover_from_canonical('unit-execution:2')['status'],
+                         'pending_terminal_association')
         with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db:
             self.assertIsNone(db.execute("SELECT payload FROM intents WHERE execution_ref='unit-execution:2'").fetchone()[0])
         self.assertEqual(self.consumer.unfinished_runs(), ['unit-execution:1', 'unit-execution:2'])
 
-if __name__ == '__main__': unittest.main()
+    def test_a_tool_call_message_is_never_a_terminal(self):
+        self.consumer.handle('agent:start', self.context)
+        mid = self.terminal('', tool_calls='[{"id":"call-1"}]')
+        with self.assertRaises(ValueError):
+            self.consumer.associate_terminal('unit-execution:1', mid)
+        with self.assertRaises(ValueError):
+            self.ready(mid)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,28 +1,30 @@
-import _path_setup
 """End-to-end wiring test: model HTTP call -> artifact -> authoritative terminal -> delivery.
 
 Scope: the model is a loopback OpenAI-compatible server and the BFF is a loopback stand-in, so this
-is *code-level* integration evidence, not a sandbox run and not a real model. It proves the real
-entry (run_turn_delivery) captures the predecessor, calls the model, persists the terminal the
-consumer later classifies, and delivers with the frozen predecessor.
+is *code-level* integration evidence, not a sandbox run and not a real model. The canonical store is
+the repository's real ``SessionDB`` (not a hand-written table), so the terminal write exercises the
+real schema and its maintenance path.
 """
 
 import json
 import os
-import sqlite3
+import sys
 import tempfile
 import threading
 import unittest
-from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import Request, urlopen
 
+import _path_setup
 from baymax_delivery.completion_hook import CompletionConsumer
 from baymax_delivery.delivery_outbox import DeliveryOutbox
 from baymax_delivery.run_turn_delivery import ModelUnavailable, OpenAICompatibleModel, run_turn
 
+sys.path.insert(0, str(_path_setup.REPO_ROOT))
+from hermes_state import SessionDB
+
 ENDPOINT = 'https://baymax-bff-sandbox.shaoke.com/graphql'
+SESSION = 'unit-session'
 
 
 class FakeTransport:
@@ -54,15 +56,13 @@ class FakeTransport:
 
 class TurnDeliveryTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir=os.environ['TMPDIR'], prefix='baymax-turn-')
+        self.tmp = tempfile.TemporaryDirectory(prefix='baymax-turn-')
         self.root = Path(self.tmp.name)
-        self.state = self.root / 'state.sqlite'
-        with closing(sqlite3.connect(self.state)) as db, db:
-            db.execute('CREATE TABLE messages(id INTEGER PRIMARY KEY,session_id TEXT,role TEXT,content TEXT,display_kind TEXT)')
+        self.store = SessionDB(db_path=self.root / 'state.db')
+        self.store.create_session(SESSION, 'test')
         self.outbox = DeliveryOutbox(self.root / 'outbox.sqlite')
-        self.consumer = CompletionConsumer(self.state, self.root / 'intents.sqlite', 'unit-session',
+        self.consumer = CompletionConsumer(self.root / 'state.db', self.root / 'intents.sqlite', SESSION,
                                            self.outbox, transport=None)
-        self.prompts = []
 
         class Model(BaseHTTPRequestHandler):
             def do_POST(self):
@@ -71,47 +71,51 @@ class TurnDeliveryTests(unittest.TestCase):
                 reply = {'choices': [{'message': {'content': 'BUSINESS OUTPUT: 42 items reconciled'}}],
                          'usage': {'total_tokens': 17}}
                 data = json.dumps(reply).encode()
-                self.send_response(200); self.send_header('content-type', 'application/json')
-                self.send_header('content-length', str(len(data))); self.end_headers(); self.wfile.write(data)
+                self.send_response(200)
+                self.send_header('content-type', 'application/json')
+                self.send_header('content-length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
 
-            def log_message(self, format, *args):
+            def log_message(self, *args):
                 pass
 
         self.model_server = ThreadingHTTPServer(('127.0.0.1', 0), Model)
         threading.Thread(target=self.model_server.serve_forever, daemon=True).start()
         os.environ['BAYMAX_MODEL_API_KEY'] = 'unit-test-key'
-        self.model = OpenAICompatibleModel(f'http://127.0.0.1:{self.model_server.server_port}', 'unit-model')
+        self.model = OpenAICompatibleModel(f'http://127.0.0.1:{self.model_server.server_port}',
+                                           'unit-model', allow_plaintext_endpoint=True)
 
     def tearDown(self):
         self.outbox.close()
-        self.model_server.shutdown(); self.model_server.server_close()
+        try:
+            self.store.close()
+        except Exception:
+            pass
+        self.model_server.shutdown()
+        self.model_server.server_close()
         self.tmp.cleanup()
 
     def run_once(self, transport, execution_ref='turn-run:1'):
         self.consumer.transport = transport
-        return run_turn(transport=transport, consumer=self.consumer, model=self.model, state_path=self.state,
-                        session_id='unit-session', execution_ref=execution_ref, issue_id='42',
-                        prompt='Do the business task', artifacts_dir=self.root / 'artifacts', endpoint=ENDPOINT)
+        return run_turn(transport=transport, consumer=self.consumer, model=self.model, store=self.store,
+                        session_id=SESSION, execution_ref=execution_ref, issue_id='42',
+                        prompt='Do the business task', artifacts_dir=self.root / 'artifacts',
+                        admission_path=self.root / 'admissions.sqlite', endpoint=ENDPOINT)
 
     def test_real_model_call_produces_artifact_terminal_and_delivery(self):
         transport = FakeTransport(head='')
         result = self.run_once(transport)
-        # 1) the model was really called with the prompt
         seen = getattr(self.model_server, 'seen', {})
         self.assertEqual(seen['model'], 'unit-model')
         self.assertEqual(seen['messages'][0]['content'], 'Do the business task')
-        # 2) the business artifact exists and carries the model output
         artifact = json.loads(Path(result['artifact']).read_text())
         self.assertIn('BUSINESS OUTPUT', artifact['output'])
-        # 3) the authoritative terminal is in the canonical store and matches the delivery record
-        with closing(sqlite3.connect(self.state)) as db:
-            row = db.execute('SELECT id, content FROM messages ORDER BY id DESC LIMIT 1').fetchone()
-        self.assertEqual(row[1], 'BUSINESS OUTPUT: 42 items reconciled')
-        with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db:
-            payload = json.loads(db.execute('SELECT payload FROM intents WHERE execution_ref=?',
-                                            ('turn-run:1',)).fetchone()[0])
-        self.assertEqual(payload['terminal_message_id'], row[0])
-        # 4) delivery used the frozen predecessor and registered evidence first
+        rows = [row for row in self.store.get_messages(SESSION) if row.get('role') == 'assistant']
+        self.assertEqual(rows[-1]['content'], 'BUSINESS OUTPUT: 42 items reconciled')
+        self.assertEqual(rows[-1]['id'], result['terminalMessageId'])
+        payload = json.loads(self.consumer.payload_of('turn-run:1'))
+        self.assertEqual(payload['terminal_message_id'], rows[-1]['id'])
         self.assertEqual(result['predecessor'], '')
         self.assertEqual(transport.submitted[0]['expected_current_delivery_id'], '')
         self.assertEqual(len(transport.evidence), 2)
@@ -129,13 +133,12 @@ class TurnDeliveryTests(unittest.TestCase):
         transport = FakeTransport(head='')
         self.consumer.transport = transport
         with self.assertRaises(ModelUnavailable):
-            run_turn(transport=transport, consumer=self.consumer, model=self.model, state_path=self.state,
-                     session_id='unit-session', execution_ref='turn-run:3', issue_id='42',
-                     prompt='x', artifacts_dir=self.root / 'artifacts', endpoint=ENDPOINT)
+            run_turn(transport=transport, consumer=self.consumer, model=self.model, store=self.store,
+                     session_id=SESSION, execution_ref='turn-run:3', issue_id='42',
+                     prompt='x', artifacts_dir=self.root / 'artifacts',
+                     admission_path=self.root / 'admissions.sqlite', endpoint=ENDPOINT)
         self.assertEqual(transport.submitted, [])
-        with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db:
-            payload = db.execute("SELECT payload FROM intents WHERE execution_ref='turn-run:3'").fetchone()
-        self.assertIsNone(payload[0])
+        self.assertIsNone(self.consumer.payload_of('turn-run:3'))
 
 
 if __name__ == '__main__':
