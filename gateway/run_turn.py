@@ -16,6 +16,7 @@ import os
 import queue
 import threading
 import time
+import uuid
 from agent.i18n import t
 from agent.session_activity import format_iteration_progress
 from agent.turn_failure_copy import FAILED_TURN_DISPLAY_KIND, FAILED_TURN_NOTICE, PARTIAL_FAILED_TURN_NOTICE
@@ -222,6 +223,7 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
 
         try:
             hook_ctx = {
+                "execution_ref": f"plankton-run:{uuid.uuid4()}",
                 "platform": source.platform.value if source.platform else "",
                 "user_id": source.user_id,
                 "chat_id": source.chat_id or "",
@@ -230,6 +232,12 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
                 "session_id": session_entry.session_id,
                 "message": message_text[:500],
             }
+            # The delivery predecessor is captured at admission (host-supplied provider). A missing
+            # provider is recorded, and a delivery consumer then blocks with blocked_predecessor
+            # instead of submitting against an unknown head.
+            from gateway.delivery_predecessor import attach_predecessor
+
+            attach_predecessor(hook_ctx, getattr(self, "delivery_predecessor_provider", None))
             await self.hooks.emit("agent:start", hook_ctx)
 
             # Capture the launch session id so post-run compression publication is identity-guarded
@@ -315,6 +323,13 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
                 hidden_reasoning_incomplete=hidden_reasoning_incomplete,
                 is_context_overflow_failure=is_context_overflow_failure,
             )
+            # This is a persisted process outcome, NOT goal acceptance. A consumer must also verify
+            # a new canonical terminal row before permitting any writeback.
+            await self.hooks.emit("agent:delivery-ready", {
+                **hook_ctx,
+                "response": response or "",
+                "outcome": "failed" if (agent_failed_early or hidden_reasoning_incomplete or is_context_overflow_failure) else "completed",
+            })
             await self._record_room_silence_decision(
                 session_key, agent_result, _intentional_silence,
                 display_kind=prepared.persist_user_display_kind, reply_expected=event.reply_expected)
