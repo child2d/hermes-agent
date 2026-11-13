@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.request
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,11 +31,19 @@ from hermes_state import SessionDB
 
 class _Recorder(BaseHTTPRequestHandler):
     auth_headers = []
+    hits = 0
     status = 200
     location = None
     body = b'{"choices":[{"message":{"content":"answer"}}]}'
 
+    def do_GET(self):
+        self.__class__.hits += 1
+        self.send_response(404)
+        self.send_header('content-length', '0')
+        self.end_headers()
+
     def do_POST(self):
+        self.__class__.hits += 1
         self.__class__.auth_headers.append(self.headers.get('authorization'))
         self.rfile.read(int(self.headers.get('content-length') or 0))
         if self.__class__.location:
@@ -93,19 +102,38 @@ class ModelTransportPolicy(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-    def test_injected_transport_still_cannot_bounce_to_another_origin(self):
-        """Even a caller-supplied opener may not return a response from a different origin."""
-        server, _, url = _server()
+    def test_an_injected_transport_is_trusted_code_and_only_the_default_refuses_redirects(self):
+        """Records the real split instead of claiming the injected path is safe.
+
+        The default opener refuses the redirect outright, so the other origin is never contacted.
+        An injected opener is trusted code: a naive ``urllib.request.urlopen`` *does* follow the
+        redirect (the other origin is contacted) and the client can only refuse the result
+        afterwards. Whether the credential survives the hop is the transport's behaviour — urllib
+        rewrites the POST as a GET and drops Authorization, which is why this test asserts the
+        observed header count rather than claiming the header is always forwarded.
+        """
+        target, target_handler, target_url = _server()
+        source, _, source_url = _server(location=target_url + '/v1/chat/completions')
         try:
-            def opener(request, timeout):
-                raise AssertionError('unused')
-            model = OpenAICompatibleModel(url + '/v1', 'unit', allow_plaintext_endpoint=True, opener=opener)
             os.environ['BAYMAX_MODEL_API_KEY'] = 'unit-test-key'
+            default_model = OpenAICompatibleModel(source_url + '/v1', 'unit',
+                                                  allow_plaintext_endpoint=True)
             with self.assertRaises(Exception):
-                model.complete('hello')
+                default_model.complete('hello')
+            self.assertEqual(target_handler.hits, 0)  # never contacted
+
+            injected = OpenAICompatibleModel(
+                source_url + '/v1', 'unit', allow_plaintext_endpoint=True,
+                opener=lambda request, timeout: urllib.request.urlopen(request, timeout=timeout))
+            with self.assertRaises(Exception):
+                injected.complete('hello')
+            self.assertGreaterEqual(target_handler.hits, 1)  # redirect was followed
+            self.assertEqual(len([h for h in target_handler.auth_headers if h]), 0)
         finally:
-            server.shutdown()
-            server.server_close()
+            source.shutdown()
+            source.server_close()
+            target.shutdown()
+            target.server_close()
 
 
 class _StubModel:
@@ -215,6 +243,7 @@ class TerminalIdentity(unittest.TestCase):
         message_id = self.store.append_message('s1', 'assistant', 'canonical body', display_kind='final')
         result = self.consumer.handle('agent:delivery-ready', {
             'session_id': 's1', 'execution_ref': 'run-1', 'canonical_message_id': message_id,
+            'terminal_run': 'run-1', 'terminal_source': 'append_return',
             'response': 'canonical body\n\nfooter · 0.4s · reasoning…', 'outcome': 'completed'})
         self.assertEqual(result['status'], 'blocked_binding')  # accepted, only the transport is absent
         payload = json.loads(self.consumer.payload_of('run-1'))
@@ -227,11 +256,39 @@ class TerminalIdentity(unittest.TestCase):
             'session_id': 's1', 'execution_ref': 'run-1', 'response': 'body', 'outcome': 'completed'})
         self.assertEqual(result['status'], 'blocked_terminal_identity')
 
+    def test_an_intermediate_assistant_text_is_not_a_terminal_without_a_receipt(self):
+        """The round-2 counterexample: plain mid-turn text with no tool_calls and no receipt."""
+        message_id = self.store.append_message('s1', 'assistant', 'thinking out loud',
+                                               display_kind='intermediate')
+        result = self.consumer.handle('agent:delivery-ready', {
+            'session_id': 's1', 'execution_ref': 'run-1', 'canonical_message_id': message_id,
+            'response': 'thinking out loud', 'outcome': 'completed'})
+        self.assertEqual(result['status'], 'blocked_terminal_receipt')
+        self.assertIsNone(self.consumer.payload_of('run-1'))
+
+    def test_a_receipt_from_another_run_is_refused(self):
+        message_id = self.store.append_message('s1', 'assistant', 'body', display_kind='final')
+        result = self.consumer.handle('agent:delivery-ready', {
+            'session_id': 's1', 'execution_ref': 'run-1', 'canonical_message_id': message_id,
+            'terminal_run': 'run-2', 'terminal_source': 'append_return',
+            'response': 'body', 'outcome': 'completed'})
+        self.assertEqual(result['status'], 'blocked_terminal_receipt')
+        self.assertIsNone(self.consumer.payload_of('run-1'))
+
+    def test_association_requires_the_persistence_receipt(self):
+        message_id = self.store.append_message('s1', 'assistant', 'body', display_kind='final')
+        with self.assertRaises(ValueError):
+            self.consumer.associate_terminal('run-1', message_id)
+        with self.assertRaises(ValueError):
+            self.consumer.associate_terminal('run-1', message_id, source='append_return', run='run-2')
+        self.consumer.associate_terminal('run-1', message_id, source='append_return', run='run-1')
+
     def test_a_tool_call_row_is_not_a_terminal(self):
         message_id = self.store.append_message('s1', 'assistant', '', tool_calls=[{'id': 'c1'}])
         with self.assertRaises(ValueError):
             self.consumer.handle('agent:delivery-ready', {
                 'session_id': 's1', 'execution_ref': 'run-1', 'canonical_message_id': message_id,
+            'terminal_run': 'run-1', 'terminal_source': 'append_return',
                 'response': 'anything', 'outcome': 'completed'})
 
     def test_recovery_without_association_stays_pending(self):
@@ -242,9 +299,9 @@ class TerminalIdentity(unittest.TestCase):
     def test_recovery_after_explicit_association_uses_the_associated_row(self):
         message_id = self.store.append_message('s1', 'assistant', 'real terminal', display_kind='final')
         with self.assertRaises(ValueError):
-            self.consumer.associate_terminal('run-1', self.store.append_message(
+            self.consumer.associate_terminal('run-1', source='append_return', run='run-1', message_id=self.store.append_message(
                 's1', 'assistant', '', tool_calls=[{'id': 'c2'}]))
-        self.consumer.associate_terminal('run-1', message_id)
+        self.consumer.associate_terminal('run-1', message_id, source='append_return', run='run-1')
         outcome = self.consumer.recover_from_canonical('run-1')
         self.assertEqual(outcome['status'], 'recovered_terminal')
         self.assertEqual(outcome['outcome'], 'unknown')

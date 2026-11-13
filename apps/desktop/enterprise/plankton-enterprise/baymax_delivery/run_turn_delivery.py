@@ -10,8 +10,10 @@ This is the one-shot entry a host may run. The order is deliberate:
      never adopt a newer head;
   3. the consumer records the admission intent; ``handle`` returning ``None`` (session mismatch)
      aborts the turn instead of continuing;
-  4. the model is called over HTTP(S); redirects are refused and the response must come from the
-     same origin, so the bearer can never be forwarded to another host;
+  4. the model is called over HTTP(S). The **default** transport requires HTTPS, refuses redirects
+     and refuses a response from another origin, so the bearer cannot be sent to a different host.
+     An injected transport is trusted code and owns its own redirect policy; the client can only
+     refuse the resulting response, not un-send the request;
   5. the business artifact is written; the authoritative terminal is appended through the
      repository's real canonical transcript API (not hand-written SQL);
   6. the consumer classifies the persisted row *by id* and writes the delivery back.
@@ -187,10 +189,17 @@ def run_turn(*, transport, consumer, model, store, session_id, execution_ref, is
             admission.abandon(_admission_key(issue_id, execution_ref), note='model unavailable')
             raise
         artifact = write_artifact(artifacts_dir, execution_ref, text, usage)
-        message_id = persist_terminal(store, session_id, text)
+        try:
+            message_id = persist_terminal(store, session_id, text)
+        except Exception:
+            # No persisted terminal means nothing to deliver: keep the run pending instead of
+            # emitting a ready event or inventing an id.
+            admission.abandon(_admission_key(issue_id, execution_ref), note='terminal persist failed')
+            raise
         ready = consumer.handle('agent:delivery-ready', {
             'session_id': session_id, 'execution_ref': execution_ref,
-            'canonical_message_id': message_id, 'response': text, 'outcome': 'completed'})
+            'canonical_message_id': message_id, 'terminal_run': execution_ref,
+            'terminal_source': 'append_return', 'response': text, 'outcome': 'completed'})
         delivery = consumer.resume(execution_ref)
         admission.finish(_admission_key(issue_id, execution_ref), note='terminal persisted')
         return {'status': 'completed', 'predecessor': predecessor, 'admitted': admitted,

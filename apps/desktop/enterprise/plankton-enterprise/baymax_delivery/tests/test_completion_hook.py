@@ -44,6 +44,8 @@ class CompletionTests(unittest.TestCase):
     def ready(self, message_id, context=None, outcome='completed', response=None):
         return self.consumer.handle('agent:delivery-ready',
                                     {**(context or self.context), 'canonical_message_id': message_id,
+                                     'terminal_run': (context or self.context).get('execution_ref'),
+                                     'terminal_source': 'append_return',
                                      'response': response if response is not None else 'display text',
                                      'outcome': outcome})
 
@@ -189,7 +191,7 @@ class CompletionTests(unittest.TestCase):
         # Without a durable association the run must not adopt the newest assistant row.
         self.assertEqual(self.consumer.recover_from_canonical('unit-execution:1')['status'],
                          'pending_terminal_association')
-        self.consumer.associate_terminal('unit-execution:1', message_id)
+        self.consumer.associate_terminal('unit-execution:1', message_id, source='append_return', run='unit-execution:1')
         recovery = self.consumer.recover_from_canonical('unit-execution:1')
         self.assertEqual(recovery['status'], 'recovered_terminal')
         self.assertEqual(recovery['outcome'], 'unknown')
@@ -210,7 +212,7 @@ class CompletionTests(unittest.TestCase):
         a_terminal = self.terminal('A terminal never delivered')
         context_b = {**self.context, 'execution_ref': 'unit-execution:2'}
         self.consumer.handle('agent:start', context_b)             # run B admitted after A
-        self.consumer.associate_terminal('unit-execution:1', a_terminal)
+        self.consumer.associate_terminal('unit-execution:1', a_terminal, source='append_return', run='unit-execution:1')
         result = self.consumer.recover_from_canonical('unit-execution:1')
         self.assertEqual(result['status'], 'ambiguous_terminal')
         self.assertEqual(result['blocked_by'], ['unit-execution:2'])
@@ -251,7 +253,7 @@ class CompletionTests(unittest.TestCase):
         context_b = {**self.context, 'execution_ref': 'unit-execution:2'}
         self.consumer.handle('agent:start', context_b)                    # B: same floor
         b_terminal = self.terminal('B output for the same floor window')
-        self.consumer.associate_terminal('unit-execution:1', b_terminal)
+        self.consumer.associate_terminal('unit-execution:1', b_terminal, source='append_return', run='unit-execution:1')
         self.ready(b_terminal, context=context_b)
         with closing(sqlite3.connect(self.root / 'intents.sqlite')) as db:
             floors = dict(db.execute('SELECT execution_ref, floor FROM intents').fetchall())
@@ -269,7 +271,7 @@ class CompletionTests(unittest.TestCase):
     def test_recovery_preserves_a_persisted_failure_marker(self):
         self.consumer.handle('agent:start', self.context)
         message_id = self.terminal('Attempt failed', kind='error')
-        self.consumer.associate_terminal('unit-execution:1', message_id)
+        self.consumer.associate_terminal('unit-execution:1', message_id, source='append_return', run='unit-execution:1')
         self.assertEqual(self.consumer.recover_from_canonical('unit-execution:1')['outcome'], 'failed')
 
     def test_recovery_without_a_new_terminal_stays_blocked(self):
@@ -286,7 +288,7 @@ class CompletionTests(unittest.TestCase):
         self.consumer.handle('agent:start', self.context)
         mid = self.terminal('', tool_calls='[{"id":"call-1"}]')
         with self.assertRaises(ValueError):
-            self.consumer.associate_terminal('unit-execution:1', mid)
+            self.consumer.associate_terminal('unit-execution:1', mid, source='append_return', run='unit-execution:1')
         with self.assertRaises(ValueError):
             self.ready(mid)
 

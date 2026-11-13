@@ -1,9 +1,16 @@
 """Native HookRegistry integration for the delivered hook — with a real installation closure.
 
-The hook is installed into an isolated profile home by ``baymax_delivery.hooks.install`` and then
-discovered/dispatched by the repository's own ``HookRegistry`` inside a subprocess. No test-only
-``sys.path`` injection into the handler and no ``HOOKS_DIR`` monkeypatching: if the installer stops
-writing its pointer, or the handler stops resolving the package, these tests fail.
+Three processes, no shared state:
+
+1. **install** — ``python -m baymax_delivery.hooks.install --hermes-home <tmp>`` writes
+   ``HOOK.yaml`` / ``handler.py`` / ``plugin_root.txt`` into an isolated profile.
+2. **discover** — a clean process that puts only the repository on ``sys.path`` (never the plugin
+   directory) and has not imported ``baymax_delivery``; the gateway's own ``HookRegistry`` discovers
+   the hook, whose handler resolves the package through the pointer.
+3. **bare** — the same clean environment with the pointer removed: discovery must load **zero**
+   hooks, and ``baymax_delivery`` must stay unimportable.
+
+Nothing here patches ``HOOKS_DIR`` or injects the plugin directory into the handler's process.
 """
 
 import ast
@@ -19,7 +26,19 @@ import _path_setup
 ROOT = _path_setup.PACKAGE_ROOT
 REPO = _path_setup.REPO_ROOT
 PLUGIN_DIR = ROOT.parent
-HOOK_SRC = ROOT / 'hooks' / 'baymax-delivery'
+
+
+def _install(home):
+    return subprocess.run(
+        [sys.executable, '-m', 'baymax_delivery.hooks.install', '--hermes-home', home],
+        capture_output=True, text=True, timeout=120, check=False, cwd=str(PLUGIN_DIR))
+
+
+def _probe(mode, home):
+    return subprocess.run(
+        [sys.executable, str(ROOT / 'tests' / '_hook_install_probe.py'), mode, home,
+         str(PLUGIN_DIR), str(REPO)],
+        capture_output=True, text=True, timeout=240, check=False)
 
 
 class NativeHookTests(unittest.TestCase):
@@ -27,70 +46,47 @@ class NativeHookTests(unittest.TestCase):
         tree = ast.parse((REPO / 'gateway' / 'run_turn.py').read_text())
         lines = {}
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if node.func.attr in ('_hmwa_classify_turn_failure', '_hmwa_persist_turn_transcript'):
-                    lines[node.func.attr] = node.lineno
-                if (node.func.attr == 'emit' and node.args
-                        and isinstance(node.args[0], ast.Constant)
-                        and node.args[0].value == 'agent:delivery-ready'):
-                    lines['ready'] = node.lineno
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, 'attr', None) or getattr(node.func, 'id', None)
+                if name in ('_hmwa_classify_turn_failure', '_hmwa_persist_turn_transcript',
+                            'notify_delivery_ready'):
+                    lines['ready' if name == 'notify_delivery_ready' else name] = node.lineno
         self.assertIn('ready', lines)
         self.assertGreater(lines['ready'], lines['_hmwa_persist_turn_transcript'])
         self.assertGreater(lines['ready'], lines['_hmwa_classify_turn_failure'])
 
-    def test_ready_event_carries_the_persisted_message_id_not_the_display_text(self):
-        tree = ast.parse((REPO / 'gateway' / 'run_turn.py').read_text())
-        keys = []
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == 'emit' and node.args
-                    and isinstance(node.args[0], ast.Constant)
-                    and node.args[0].value == 'agent:delivery-ready'):
-                for argument in node.args[1:]:
-                    if isinstance(argument, ast.Dict):
-                        keys = [k.value for k in argument.keys
-                                if isinstance(k, ast.Constant)]
-        self.assertIn('canonical_message_id', keys)
-        self.assertIn('session_id', keys)
+    def test_the_notification_is_optional_and_receipt_driven(self):
+        source = (REPO / 'gateway' / 'run_turn.py').read_text()
+        self.assertIn('delivery_terminal_receipt_provider', source)
+        notify = (REPO / 'gateway' / 'delivery_notify.py').read_text()
+        self.assertIn('if provider is None', notify)
+        self.assertNotIn('get_messages', notify)
 
-    def test_installer_closure_is_discovered_by_the_real_registry(self):
+    def test_installer_closure_is_discovered_by_a_clean_process(self):
         with tempfile.TemporaryDirectory(prefix='baymax-hook-') as home:
-            done = subprocess.run(
-                [sys.executable, str(ROOT / 'tests' / '_hook_install_probe.py'), home, str(PLUGIN_DIR),
-                 str(REPO)],
-                capture_output=True, text=True, timeout=240, check=False)
-            self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+            installed = _install(home)
+            self.assertEqual(installed.returncode, 0, installed.stderr[-2000:])
+            done = _probe('discover', home)
+            self.assertEqual(done.returncode, 0, done.stdout[-2000:] + done.stderr[-2000:])
             report = json.loads(done.stdout.strip().splitlines()[-1])
             self.assertEqual(report['hooks'], ['baymax-delivery-bridge'])
-            self.assertIn('agent:delivery-ready', report['events'])
+            self.assertFalse(report['pluginRootOnPath'])
+            self.assertFalse(report['preimported'])
             self.assertEqual(report['intentRow'], ['probe-run-1', ''])
-            self.assertTrue(Path(report['installedTo']).is_dir())
-            # The registry really dispatched: the terminal was accepted by the persisted row id,
-            # the display text (with a footer) played no part, and a repeat start is a duplicate.
-            self.assertEqual(report['ready'].get('status'), 'blocked_binding')
             self.assertEqual(report['payloadSummary'], 'probe output')
             self.assertEqual(report['payloadTerminalId'], 1)
             self.assertEqual(report['duplicateStart'].get('status'), 'duplicate')
 
-    def test_a_hand_copied_handler_without_the_pointer_fails_loudly(self):
+    def test_the_same_environment_without_the_pointer_loads_nothing(self):
         with tempfile.TemporaryDirectory(prefix='baymax-hook-bare-') as home:
-            target = Path(home) / 'hooks' / 'baymax-delivery'
-            target.mkdir(parents=True)
-            source = HOOK_SRC
-            (target / 'HOOK.yaml').write_text((source / 'HOOK.yaml').read_text())
-            (target / 'handler.py').write_text((source / 'handler.py').read_text())
-            probe = Path(home) / 'probe.py'
-            probe.write_text(
-                'import importlib.util as u, sys\n'
-                f's = u.spec_from_file_location("h", {str(target / "handler.py")!r})\n'
-                'm = u.module_from_spec(s)\n'
-                'try:\n'
-                '    s.loader.exec_module(m)\n'
-                'except ModuleNotFoundError as error:\n'
-                '    print("MISSING", error)\n')
-            done = subprocess.run([sys.executable, str(probe)], capture_output=True, text=True,
-                                  timeout=120, check=False)
-            self.assertIn('MISSING', done.stdout + done.stderr)
+            installed = _install(home)
+            self.assertEqual(installed.returncode, 0, installed.stderr[-2000:])
+            (Path(home) / 'hooks' / 'baymax-delivery' / 'plugin_root.txt').unlink()
+            done = _probe('bare', home)
+            self.assertEqual(done.returncode, 0, done.stdout[-2000:] + done.stderr[-2000:])
+            report = json.loads(done.stdout.strip().splitlines()[-1])
+            self.assertEqual(report['hooks'], [])
+            self.assertFalse(report['importableAfterDiscovery'])
 
 
 if __name__ == '__main__':

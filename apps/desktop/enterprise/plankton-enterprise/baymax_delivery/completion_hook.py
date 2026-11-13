@@ -25,6 +25,8 @@ from .delivery_outbox import SUMMARY_HINT, SUMMARY_LIMIT, DeliveryOutbox, clip_u
 from .runtime_bridge import ENDPOINT
 
 _APP_ID = 0x42434D50
+# Only the persistence call that actually appended the row can name this run's terminal.
+APPEND_RECEIPT_SOURCE = 'append_return'
 
 
 def _json(value):
@@ -138,6 +140,15 @@ class CompletionConsumer:
             if canonical_id is None:
                 return {'status': 'blocked_terminal_identity',
                         'reason': 'delivery event must carry the persisted canonical message id'}
+            # A row id is only trustworthy when the *writing* path says it produced this run's
+            # terminal. "Newest assistant without tool_calls" is not proof: an intermediate text
+            # message looks identical. Without that binding the run stays pending.
+            if context.get('terminal_source') != APPEND_RECEIPT_SOURCE:
+                return {'status': 'blocked_terminal_receipt',
+                        'reason': 'delivery event lacks a persistence receipt'}
+            if context.get('terminal_run') != execution_ref:
+                return {'status': 'blocked_terminal_receipt',
+                        'reason': 'persistence receipt belongs to another run'}
             terminal = self._by_id(canonical_id)
             if not self._is_terminal_row(terminal):
                 raise ValueError('Delivered message id is not a terminal assistant row')
@@ -228,12 +239,16 @@ class CompletionConsumer:
             return [r[0] for r in db.execute('SELECT execution_ref FROM intents WHERE receipt IS NULL')]
 
     # -- recovery --------------------------------------------------------------
-    def associate_terminal(self, execution_ref, message_id):
+    def associate_terminal(self, execution_ref, message_id, *, source=None, run=None):
         """Record a durable run↔terminal association a human verified; this is not automatic.
 
-        Only a terminal assistant row (no pending tool calls) newer than the admission may be
-        associated. Everything else is refused, so recovery can never adopt a mid-turn message.
+        The caller must also state *where the binding came from*: only the persistence call that
+        appended this run's terminal (``source='append_return'``, ``run=execution_ref``) counts.
+        A row that merely looks terminal (assistant, no pending tool calls) is not enough, and an
+        intermediate text message looks exactly the same.
         """
+        if source != APPEND_RECEIPT_SOURCE or run != execution_ref:
+            raise ValueError('Only the persistence receipt of this run can name its terminal')
         with closing(sqlite3.connect(self.intent_path)) as db:
             row = db.execute('SELECT floor,payload,receipt FROM intents WHERE execution_ref=?',
                              (execution_ref,)).fetchone()
