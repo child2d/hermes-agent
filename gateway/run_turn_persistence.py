@@ -663,7 +663,11 @@ class GatewayTurnPersistenceMixin:
         # the coherence guard snapshots at agent-BUILD time, so our own writes would otherwise
         # trigger a rebuild next turn (destroying prompt caching).
         await self._refresh_agent_cache_message_count(session_key, sid)
-        return receipt
+        # ONE exit for every receipt shape: a run that did not terminate successfully must not hand
+        # back a receipt — including the append_return one the gateway-owned branch built above while
+        # writing the transcript. The transcript writes, counters and the reply path stay untouched;
+        # only the delivery identity is withheld.
+        return receipt if terminal_ok else None
 
     async def _hmwa_retain_content_policy_refused_turn(self, sid, session_key, boundary_row_id=None):
         """Retain a safety-refused turn for display while forcing the next turn to rebuild from the

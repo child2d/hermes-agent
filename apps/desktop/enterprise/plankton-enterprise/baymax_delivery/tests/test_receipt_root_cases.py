@@ -185,6 +185,9 @@ class ReceiptRootCases(unittest.TestCase):
     def _consumer(self):
         return CompletionConsumer(DB_PATH, ROOT / 'intents.sqlite3', self.sid, self.outbox)
 
+    def _consumer_for(self, sid):
+        return CompletionConsumer(DB_PATH, ROOT / 'intents.sqlite3', sid, self.outbox)
+
     def _admit(self, run_ref):
         consumer = self._consumer()
         consumer.handle('agent:start', {'session_id': self.sid, 'execution_ref': run_ref,
@@ -281,11 +284,11 @@ class ReceiptRootCases(unittest.TestCase):
                               f'partial uid revived for {kwargs}')
 
     # -- ROOT #4: agent-owned terminal identity comes from the real flush boundary ---------
-    def _real_flush(self, messages):
+    def _real_flush(self, messages, sid=None):
         """Run the agent's REAL commit boundary: _db_flush_write -> append_messages_batch -> stamps."""
         from agent.session_persistence import _db_flush_row, _db_flush_write
 
-        agent = SimpleNamespace(session_id=self.sid, _session_db=self.db)
+        agent = SimpleNamespace(session_id=sid or self.sid, _session_db=self.db)
         batch_rows, batch_msgs = [], []
         for msg in messages:
             batch_rows.append(_db_flush_row(agent, msg, False))
@@ -331,6 +334,53 @@ class ReceiptRootCases(unittest.TestCase):
                                 interrupted=True, completed=False)
         self.assertIsNone(receipt, 'an interrupted run must not produce a completed receipt')
         self.assertIsNone(consumer.payload_of('run-int'), 'no completed payload for an interrupted run')
+
+    def test_terminal_state_gates_every_receipt_shape_for_both_owners(self):
+        """Same combination for gateway-owned and agent-owned persistence.
+
+        A partial that really landed may stay in the transcript, but no receipt may leave the
+        persistence call and no completed payload may reach the outbox. The reply path itself keeps
+        working (persist returns normally; notify does not raise).
+        """
+        from gateway.run_turn_runner import _committed_terminal_identity
+
+        cases = {
+            'interrupted': {'interrupted': True, 'completed': False, 'failed': False},
+            'completed_false': {'completed': False},
+            'success': {},
+        }
+        for owner in (False, True):
+            for label, state in cases.items():
+                run_ref = f'run-{owner}-{label}'
+                with self.subTest(owner=owner, state=label):
+                    sid = f'root-{owner}-{label}'
+                    self.db.ensure_session(sid, 'test')
+                    consumer = self._consumer_for(sid)
+                    consumer.handle('agent:start', {'session_id': sid, 'execution_ref': run_ref,
+                                                    'expected_current_delivery_id': ''})
+                    messages = [{'role': 'user', 'content': 'question'},
+                                {'role': 'assistant', 'content': f'PARTIAL {label}'}]
+                    terminal_receipt = None
+                    if owner:
+                        # agent-owned: the REAL flush boundary commits and stamps the partial.
+                        self._real_flush(messages, sid=sid)
+                        terminal_receipt = _committed_terminal_identity(messages, 0)
+                        self.assertIsNotNone(terminal_receipt)
+                    receipt = self._persist(messages=messages, agent_persisted=owner,
+                                            run_ref=run_ref, session_id=sid,
+                                            terminal_receipt=terminal_receipt,
+                                            **state)
+                    rows = self._rows(sid)
+                    if state:
+                        self.assertTrue(any(f'PARTIAL {label}' == (c or '') for _i, _r, c in rows),
+                                        'the partial may stay in the transcript')
+                        self.assertIsNone(receipt, f'{label} must not produce a receipt (owner={owner})')
+                        self.assertIsNone(consumer.payload_of(run_ref),
+                                          f'{label} must not produce a completed payload (owner={owner})')
+                    else:
+                        self.assertIsNotNone(receipt, f'normal success must receipt (owner={owner})')
+                        payload = self._deliver(receipt, run_ref=run_ref, consumer=consumer)
+                        self.assertEqual(payload['summary'], f'PARTIAL {label}')
 
     def test_failed_run_receipt_does_not_touch_the_main_reply(self):
         consumer = self._admit('run-failed')
