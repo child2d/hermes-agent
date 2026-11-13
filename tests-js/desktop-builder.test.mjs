@@ -63,6 +63,9 @@ function fixture() {
   put(join(app, 'electron/preload.ts'), 'globalThis.fixturePreload = "compiled preload"')
   put(join(app, 'electron/preview-guest-preload-entry.ts'), 'globalThis.fixtureGuestPreload = "compiled guest preload"')
   cpSync(join(repo, 'apps/desktop/product-identity.cjs'), join(app, 'product-identity.cjs'))
+  // ...and its sibling: product-identity.cjs does require('./plankton-envs.cjs'), so the fixture
+  // must carry that file too or the bundle step dies with MODULE_NOT_FOUND.
+  cpSync(join(repo, 'apps/desktop/plankton-envs.cjs'), join(app, 'plankton-envs.cjs'))
   cpSync(join(repo, 'apps/desktop/electron/native'), join(app, 'electron/native'), { recursive: true })
   // product-identity.cjs resolves the channel request through the in-tree
   // packaging helper (and its content-types table) by relative path.
