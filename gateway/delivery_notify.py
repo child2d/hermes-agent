@@ -18,7 +18,7 @@ RECEIPT_SOURCE = "append_return"
 
 
 async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result, response,
-                                outcome, hook_ctx=None):
+                                outcome, hook_ctx=None, run_ref=None):
     """Emit ``agent:delivery-ready`` only when a verified receipt exists. Returns True if emitted."""
     if provider is None:
         return False
@@ -35,8 +35,8 @@ async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result,
             **(hook_ctx or {}),
             "session_id": session_id,
             "canonical_message_id": message_id,
-            "terminal_run": receipt.get("run"),
-            "terminal_source": receipt.get("source"),
+            "terminal_run": receipt.get("run") or run_ref,
+            "terminal_source": receipt.get("source") or RECEIPT_SOURCE,
             "outcome": outcome,
             "response": response or "",
         })

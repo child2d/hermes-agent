@@ -427,6 +427,20 @@ class SessionMessagesMixin(SessionDetachedResultsMixin, SessionTodoResultMixin):
         # holding the lock for seconds (VACUUM, checkpoint) can't kill it.
         return self._execute_write(_do, patience_s=self._TRANSCRIPT_WRITE_PATIENCE_S)
 
+    def message_id_by_uid(self, session_id: str, message_uid: str) -> Optional[int]:
+        """Exact row id for a uid the *writer* stamped on the message it inserted.
+
+        This is the reliable way to adopt a terminal row the agent persisted itself: the uid was
+        minted by the insert path and stored with the row, so matching it is identity, not a
+        "newest row" guess. Returns None when the uid is unknown or belongs to another session.
+        """
+        if not session_id or not message_uid:
+            return None
+        rows = self._read_all(
+            "SELECT id FROM messages WHERE session_id = ? AND message_uid = ? LIMIT 1",
+            (session_id, message_uid))
+        return int(rows[0]["id"]) if rows else None
+
     def append_messages_batch(
         self, session_id: str, messages: list[dict[str, Any]], compression_lock_holder: Optional[str] = None,
         turn_lease_holder: Optional[str] = None, chunk_rows: Optional[int] = None,

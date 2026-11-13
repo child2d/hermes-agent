@@ -316,26 +316,29 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
             response, session_entry = await self._hmwa_compression_exhaustion_reset(
                 agent_result, response, session_entry, session_key, source,
             )
-            await self._hmwa_persist_turn_transcript(
+            receipt = await self._hmwa_persist_turn_transcript(
                 event=event, source=source, session_entry=session_entry, session_key=session_key,
                 agent_result=agent_result, agent_messages=agent_messages, prepared=prepared,
                 response=response, agent_failed_early=agent_failed_early,
                 hidden_reasoning_incomplete=hidden_reasoning_incomplete,
                 is_context_overflow_failure=is_context_overflow_failure,
             )
-            # Optional delivery notification; it runs only when a host wires a receipt provider
-            # (see gateway/delivery_notify.py: core cannot name this turn's terminal row).
+            # Delivery notification uses the receipt the persistence call itself returned: the id
+            # of THIS turn's terminal row (gateway write) or the agent's own row resolved by the uid
+            # it stamped. No receipt -> no event, and nothing is ever inferred from "the newest row".
             from gateway.delivery_notify import notify_delivery_ready
 
             await notify_delivery_ready(
                 hooks=self.hooks,
-                provider=getattr(self, "delivery_terminal_receipt_provider", None),
+                provider=getattr(self, "delivery_terminal_receipt_provider", None) or (
+                    (lambda **_: receipt) if receipt else None),
                 session_entry=session_entry,
                 agent_result=agent_result,
                 response=response,
                 outcome="failed" if (agent_failed_early or hidden_reasoning_incomplete
                                      or is_context_overflow_failure) else "completed",
                 hook_ctx=hook_ctx,
+                run_ref=hook_ctx.get("execution_ref"),
             )
             await self._record_room_silence_decision(
                 session_key, agent_result, _intentional_silence,

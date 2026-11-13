@@ -523,6 +523,9 @@ class GatewayTurnPersistenceMixin:
         # into a gateway-side write by returning False.
         agent_persisted = agent_result.get("agent_persisted", self._session_db is not None)
         _user_row = self._hmwa_user_transcript_entry(event, prepared, ts)
+        # Receipt for this turn's terminal row: the id the write itself returned. None means the
+        # terminal is not provably persisted (queued, skipped, or failed) and no delivery may claim it.
+        receipt = None
 
         if is_context_overflow_failure:
             pass  # Skip all transcript writes — don't grow a broken session
@@ -574,10 +577,13 @@ class GatewayTurnPersistenceMixin:
                     # Edge case: fall back to simple user/assistant rows.
                     await store.append_to_transcript(sid, _user_row, skip_db=agent_persisted)
                     if response:
-                        await store.append_to_transcript(
+                        row_id = await store.append_to_transcript(
                             sid, {"role": "assistant", "content": response, "timestamp": ts},
                             skip_db=agent_persisted,
                         )
+                        if row_id:
+                            receipt = {"message_id": int(row_id), "session_id": sid,
+                                       "source": "append_return"}
                 else:
                     # Attach the inbound platform message_id to the first user entry so platform-level
                     # quote-resolution (e.g. Yuanbao) can find earlier @bot messages by original id.
@@ -594,7 +600,10 @@ class GatewayTurnPersistenceMixin:
                         ):
                             entry["message_id"] = str(event.message_id)
                             _user_msg_id_attached = True
-                        await store.append_to_transcript(sid, entry, skip_db=agent_persisted)
+                        row_id = await store.append_to_transcript(sid, entry, skip_db=agent_persisted)
+                        if msg.get("role") == "assistant" and row_id:
+                            receipt = {"message_id": int(row_id), "session_id": sid,
+                                       "source": "append_return"}
 
         # The agent persists token counts/model itself; keep only last_prompt_tokens for hygiene.
         await store.update_session(
@@ -602,10 +611,28 @@ class GatewayTurnPersistenceMixin:
             touch_activity=not bool(getattr(event, "internal", False)),
         )
 
+        # Agent-persisted turn: the gateway wrote nothing, so adopt the row the agent itself
+        # inserted — resolved by the uid the insert path stamped, never by "newest row" or content.
+        if receipt is None and agent_persisted and self._session_db is not None:
+            uid = None
+            for message in reversed(agent_messages or []):
+                if message.get("role") == "assistant":
+                    uid = message.get("message_uid") or None
+                    break
+            if uid:
+                try:
+                    row_id = self._session_db.message_id_by_uid(sid, uid)
+                except Exception:  # a lookup failure means "not provable", never a guess
+                    row_id = None
+                if row_id:
+                    receipt = {"message_id": int(row_id), "session_id": sid,
+                               "source": "agent_persist_uid"}
+
         # Re-baseline the cached agent's message_count now that ALL of this turn's writes are done:
         # the coherence guard snapshots at agent-BUILD time, so our own writes would otherwise
         # trigger a rebuild next turn (destroying prompt caching).
         await self._refresh_agent_cache_message_count(session_key, sid)
+        return receipt
 
     async def _hmwa_retain_content_policy_refused_turn(self, sid, session_key, boundary_row_id=None):
         """Retain a safety-refused turn for display while forcing the next turn to rebuild from the

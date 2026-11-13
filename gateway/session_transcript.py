@@ -157,15 +157,19 @@ class SessionTranscriptMixin:
         """Return the lock that serializes pending-queue drain boundaries."""
         return self._lazy("_transcript_drain_lock", threading.RLock)
 
-    def append_to_transcript(self, session_id: str, message: dict[str, Any], skip_db: bool = False) -> None:
+    def append_to_transcript(self, session_id: str, message: dict[str, Any], skip_db: bool = False):
         """Serialize transcript draining across queue migration boundaries. A session with no usable
         store is NOT skipped: the write is queued and counted like any other failed append, so a
         dead/unopenable state.db escalates and spools instead of dropping turns silently
-        (#114266)."""
+        (#114266).
+
+        Returns the new row id when this call's write landed synchronously, else None (skipped,
+        queued for retry, or diverted). Callers must treat None as "not persisted yet" rather than
+        looking the row up by content."""
         if skip_db:
-            return
+            return None
         with self._get_transcript_drain_lock():
-            self._append_to_transcript_serialized(self._follow_reroutes(session_id), message)
+            return self._append_to_transcript_serialized(self._follow_reroutes(session_id), message)
 
     def _follow_reroutes(self, session_id: str) -> str:
         """Follow the compression reroute chain (cycle-guarded)."""
@@ -274,9 +278,14 @@ class SessionTranscriptMixin:
         """Append a message to a session's transcript (SQLite), draining the per-session retry
         queue.
 
+        Returns the row id **only** when this call's own write landed synchronously and the queue
+        drained; a queued/retried/deferred write returns None. Callers use that as the persistence
+        receipt for a turn's terminal row instead of guessing "the newest row".
+
         Args: skip_db: When True, skip the SQLite write. Used when the agent already persisted messages to
         SQLite via its own _flush_messages_to_session_db(), preventing the duplicate-write bug (#860).
         """
+        written_row_id = None
         with self._transcript_retry_lock:
             pending = self._enqueue_transcript_message(session_id, message)
             msg = pending[0]
@@ -303,7 +312,7 @@ class SessionTranscriptMixin:
                 spool_exc = self._drain_spooled_drops(session_id)
                 if spool_exc is not None:
                     raise spool_exc
-                self._append_transcript_message(session_id, msg)
+                written_row_id = self._append_transcript_message(session_id, msg)
             except Exception as exc:
                 from hermes_state import StateDbCorruptError, StateDbReplacedError
                 from hermes_state_errors import CompressionSessionClosedError
@@ -320,7 +329,7 @@ class SessionTranscriptMixin:
                         if _owner_key:
                             self._lazy("_session_owner_hints", dict)[child_id] = _owner_key
                         try:
-                            self._append_transcript_message(child_id, msg)
+                            written_row_id = self._append_transcript_message(child_id, msg)
                         except Exception as reroute_exc:
                             exc = reroute_exc
                         else:
@@ -347,7 +356,7 @@ class SessionTranscriptMixin:
                     if spool_exc is not None:
                         continue  # repaired: drain the older spool again before ``msg``
                     try:
-                        self._append_transcript_message(session_id, msg)
+                        written_row_id = self._append_transcript_message(session_id, msg)
                     except Exception as retry_exc:
                         exc = retry_exc
                     else:
@@ -374,7 +383,7 @@ class SessionTranscriptMixin:
                     if not queue_empty:
                         msg = pending[0]
                 if queue_empty:
-                    return
+                    return written_row_id
                 continue
 
     def _spool_stalled_backlog(self, session_id: str, queue_session_id: str) -> int:
@@ -448,7 +457,7 @@ class SessionTranscriptMixin:
             # into the ambient store.
             raise RuntimeError(
                 f"no owning session store for {session_id}; deferring transcript write")
-        _db.append_message(**transcript_append_kwargs(session_id, message))
+        return _db.append_message(**transcript_append_kwargs(session_id, message))
 
     @staticmethod
     def _is_fts_corruption_error(exc: Exception) -> bool:

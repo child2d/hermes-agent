@@ -27,6 +27,9 @@ from .runtime_bridge import ENDPOINT
 _APP_ID = 0x42434D50
 # Only the persistence call that actually appended the row can name this run's terminal.
 APPEND_RECEIPT_SOURCE = 'append_return'
+# The agent's own insert path is equally exact: its uid is minted by the writer and stored with the row.
+AGENT_PERSIST_RECEIPT_SOURCE = 'agent_persist_uid'
+RECEIPT_SOURCES = (APPEND_RECEIPT_SOURCE, AGENT_PERSIST_RECEIPT_SOURCE)
 
 
 def _json(value):
@@ -143,7 +146,7 @@ class CompletionConsumer:
             # A row id is only trustworthy when the *writing* path says it produced this run's
             # terminal. "Newest assistant without tool_calls" is not proof: an intermediate text
             # message looks identical. Without that binding the run stays pending.
-            if context.get('terminal_source') != APPEND_RECEIPT_SOURCE:
+            if context.get('terminal_source') not in RECEIPT_SOURCES:
                 return {'status': 'blocked_terminal_receipt',
                         'reason': 'delivery event lacks a persistence receipt'}
             if context.get('terminal_run') != execution_ref:
@@ -247,7 +250,7 @@ class CompletionConsumer:
         A row that merely looks terminal (assistant, no pending tool calls) is not enough, and an
         intermediate text message looks exactly the same.
         """
-        if source != APPEND_RECEIPT_SOURCE or run != execution_ref:
+        if source not in RECEIPT_SOURCES or run != execution_ref:
             raise ValueError('Only the persistence receipt of this run can name its terminal')
         with closing(sqlite3.connect(self.intent_path)) as db:
             row = db.execute('SELECT floor,payload,receipt FROM intents WHERE execution_ref=?',
