@@ -24,7 +24,8 @@ from agent.memory_context import sanitize_context
 from agent.tool_dispatch_helpers import _is_multimodal_tool_result, _multimodal_text_summary
 from agent.trajectory import save_trajectory as _save_trajectory_to_file
 from agent.message_metadata import (
-    DB_ROW_SNAPSHOT, MERGED_TURN_PREFIX, REPAIR_BOOKKEEPING_FIELDS, RESTORED_FROM_STORE, TOOL_CALL_UID,
+    DB_COMMITTED_SESSION, DB_ROW_SNAPSHOT, MERGED_TURN_PREFIX, REPAIR_BOOKKEEPING_FIELDS,
+    RESTORED_FROM_STORE, TOOL_CALL_UID,
     copy_identity_fields, message_uid_or_none, tool_call_uid_from_history)
 from agent.transcript_repair import sync_flushed_message_markers
 
@@ -371,6 +372,14 @@ def _db_flush_write(agent, batch_rows: list[dict[str, Any]], batch_msgs: list[di
         turn_lease_ttl_seconds=getattr(agent, "_active_session_turn_lease_ttl_seconds", 300.0) or 300.0,
     )
     sync_flushed_message_markers(batch_msgs, batch_rows)
+    # The committed row's owning session, stamped only after the batch above returned successfully.
+    # This is the identity the delivery receipt needs; ``_submit_row_session_id`` belongs to TUI submit
+    # messages and must not be borrowed for assistant rows.
+    committed_session = getattr(agent, "session_id", None)
+    if committed_session:
+        for written in batch_msgs:
+            if isinstance(written.get("_row_id"), int):
+                written[DB_COMMITTED_SESSION] = committed_session
     _db_flush_store_uids(agent).update(uid for msg in batch_msgs if (uid := message_uid_or_none(msg)) is not None)
     if _newest_checkpoint_carrier(batch_msgs, "codex_reasoning_items") >= 0:
         # The insert already rewrote the older rows (SessionDB._drop_shadowed_checkpoint_rows); mirror it on

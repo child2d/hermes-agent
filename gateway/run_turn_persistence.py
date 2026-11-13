@@ -625,6 +625,13 @@ class GatewayTurnPersistenceMixin:
         terminal_ok = not (
             agent_failed_early or hidden_reasoning_incomplete or is_context_overflow_failure
             or agent_result.get("failure_reason") == "content_policy_blocked"
+            # Same boundary the streaming finalizer already uses: an interrupted run reports
+            # {interrupted: True, completed: False} with a DIAGNOSTIC final_response, and a failed run
+            # sets failed. None of those may produce a completed delivery receipt. A legacy result that
+            # simply omits ``completed`` is not treated as success by assertion — it stays allowed only
+            # when the run also reports no failure/interrupt, which is the same test the stream uses.
+            or agent_result.get("interrupted") or agent_result.get("failed")
+            or agent_result.get("completed") is False
         )
         # Agent-owned persistence: the run's termination path hands back the committed identity of the
         # ONE candidate it designated (row id + session stamped by the flush boundary). It carries no

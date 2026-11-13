@@ -24,6 +24,10 @@ CANONICAL_ROW = "_canonical_row"
 # row address or snapshot, may be skipped as a re-insert of an ACTIVE uid; a bare copied uid proves nothing.
 RESTORED_FROM_STORE = "_restored_from_store"
 REPAIR_BOOKKEEPING_FIELDS = frozenset({DB_ROW_SNAPSHOT, CANONICAL_ROW, RESTORED_FROM_STORE})
+# Session that actually owns the committed row, stamped by the flush boundary (``_db_flush_write``)
+# only AFTER its batch transaction committed. Distinct from ``_submit_row_session_id``, which records
+# the session of a TUI submit message and says nothing about an assistant row.
+DB_COMMITTED_SESSION = "_db_committed_session_id"
 # Unanswered text a merged user row held before the current turn was absorbed
 # (agent_runtime_helpers._merge_consecutive_users); the persist override keeps it.
 # It repeats the row's own content, so pricing it would double the estimate.
@@ -48,6 +52,7 @@ PERSISTENCE_ONLY_MESSAGE_FIELDS = frozenset(
     # to sweep underscore keys, but turn_context.py pops this set from every outgoing copy and a strict
     # backend 400s on any key it does not know.
     {"timestamp", "display_kind", "display_metadata", "_row_id", "_submit_row_session_id",
+     DB_COMMITTED_SESSION,
      MERGED_TURN_PREFIX, MESSAGE_UID, ABSORBED_MESSAGE_UIDS, TOOL_CALL_UIDS, TOOL_CALL_UID,
      # The alternation repair's row counts: an in-place compaction reads them off the live dict.
      MERGED_DURABLE_ROWS, UNNAMED_DURABLE_ROWS, RETIRED_DURABLE_ROWS}

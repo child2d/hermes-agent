@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from agent.i18n import t
 from agent.interrupt_compat import _accepts_keyword
+from agent.message_metadata import DB_COMMITTED_SESSION
 from agent.replay_cleanup import canonicalize_replay_history
 from gateway.config import Platform
 from gateway.media_repair import repair_explicit_computer_use_media_paths
@@ -203,7 +204,9 @@ def _committed_terminal_identity(messages: list, history_offset: int | None) -> 
     if not isinstance(row_id, int):
         return None
     return {"message_id": row_id,
-            "session_id": candidate.get("_submit_row_session_id") or None,
+            # Only the flush boundary's own stamp counts; a borrowable field (TUI submit session) or a
+            # guess derived from the runner's context would be identity we cannot prove.
+            "session_id": candidate.get(DB_COMMITTED_SESSION) or None,
             "source": "agent_flush_marker"}
 
 

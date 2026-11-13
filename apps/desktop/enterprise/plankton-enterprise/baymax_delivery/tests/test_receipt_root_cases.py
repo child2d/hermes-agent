@@ -19,19 +19,18 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-# These cases re-point HOME/HERMES_HOME/TMPDIR and install a process-wide audit hook that refuses any
-# I/O outside their own scratch root, so they must own their interpreter. Run with
-# BAYMAX_HERMETIC_RECEIPT=1 in a separate pytest process; in a shared run they skip instead of
-# poisoning the rest of the suite.
-if os.environ.get('BAYMAX_HERMETIC_RECEIPT') != '1':
-    raise unittest.SkipTest('hermetic receipt cases need BAYMAX_HERMETIC_RECEIPT=1 in their own process')
+# Hermetic cases: they re-point HOME/HERMES_HOME/TMPDIR and install a process-wide audit hook, so they
+# own their interpreter. They run automatically from ``test_hermetic_receipt_runner.py`` (a normal
+# pytest entry that spawns this module in a clean child process) — never mind manually setting env.
+_HERMETIC_FLAG = 'BAYMAX_HERMETIC_RECEIPT'
+if os.environ.get(_HERMETIC_FLAG) != '1':
+    raise unittest.SkipTest(f'hermetic receipt cases run in their own process (see test_hermetic_receipt_runner); '
+                            f'set {_HERMETIC_FLAG}=1 to run directly')
 
-SCRATCH = Path('/Users/perrychentao/.plankton/test/engine/home/profiles/orchestrator/work/'
-               'baymax-ai-delivery/isolated-tests').resolve()
-SCRATCH.mkdir(parents=True, exist_ok=True)
-ROOT = Path(tempfile.mkdtemp(prefix='receipt-root-', dir=SCRATCH)).resolve()
-REPO = Path(os.environ.get('BAYMAX_TEST_REPO') or
-            '/Users/perrychentao/.plankton/test/engine/home/profiles/developer/workspaces/hermes-pr-baymax')
+# Repo root from this file's location: apps/desktop/enterprise/plankton-enterprise/baymax_delivery/tests/
+REPO = Path(__file__).resolve().parents[6]
+SCRATCH = Path(os.environ.get('BAYMAX_TEST_SCRATCH') or tempfile.gettempdir()).resolve()
+ROOT = Path(tempfile.mkdtemp(prefix='hermetic-receipt-', dir=SCRATCH)).resolve()
 for _part in ('home', 'hermes', 'tmp'):
     (ROOT / _part).mkdir(parents=True, exist_ok=True)
 for _key in list(os.environ):
@@ -135,7 +134,8 @@ class ReceiptRootCases(unittest.TestCase):
     # -- harness -------------------------------------------------------------
     def _persist(self, *, messages, response='FINAL ANSWER', agent_persisted=False,
                  delivery_enabled=True, run_ref='run-1', overflow=False, failed_early=False,
-                 failure_reason=None, terminal_receipt=None, session_id=None):
+                 failure_reason=None, terminal_receipt=None, session_id=None,
+                 interrupted=None, completed=None, failed=None):
         async def _noop(*a, **k):
             return None
 
@@ -158,6 +158,13 @@ class ReceiptRootCases(unittest.TestCase):
             result['failure_reason'] = failure_reason
         if terminal_receipt is not None:
             result['terminal_receipt'] = terminal_receipt
+        # Real run termination state, exactly as the streaming finalizer reads it.
+        if interrupted is not None:
+            result['interrupted'] = interrupted
+        if completed is not None:
+            result['completed'] = completed
+        if failed is not None:
+            result['failed'] = failed
         return asyncio.run(bound(
             event=SimpleNamespace(message_id=None, internal=False, reply_expected=True),
             source=SimpleNamespace(platform=None, user_id='1', chat_id='', chat_type=''),
@@ -273,22 +280,66 @@ class ReceiptRootCases(unittest.TestCase):
             self.assertIsNone(self._persist(messages=messages, agent_persisted=True, **kwargs),
                               f'partial uid revived for {kwargs}')
 
-    # -- ROOT #4: agent-owned terminal identity is the flush stamp -----------
-    def test_agent_flush_marker_is_the_agent_owned_terminal(self):
+    # -- ROOT #4: agent-owned terminal identity comes from the real flush boundary ---------
+    def _real_flush(self, messages):
+        """Run the agent's REAL commit boundary: _db_flush_write -> append_messages_batch -> stamps."""
+        from agent.session_persistence import _db_flush_row, _db_flush_write
+
+        agent = SimpleNamespace(session_id=self.sid, _session_db=self.db)
+        batch_rows, batch_msgs = [], []
+        for msg in messages:
+            batch_rows.append(_db_flush_row(agent, msg, False))
+            batch_msgs.append(msg)
+        _db_flush_write(agent, batch_rows, batch_msgs, messages)
+        return messages
+
+    def test_agent_flush_produces_the_committed_identity(self):
+        from gateway.run_turn_runner import _committed_terminal_identity
+
         consumer = self._admit('run-flush')
-        committed = self.db.append_message(self.sid, 'assistant', 'AGENT FINAL')
-        messages = [{'role': 'user', 'content': 'question'},
-                    {'role': 'assistant', 'content': 'AGENT FINAL'}]
-        receipt = self._persist(
-            messages=messages, agent_persisted=True, run_ref='run-flush',
-            terminal_receipt={'message_id': committed, 'session_id': self.sid,
-                              'source': 'agent_flush_marker'})
+        messages = self._real_flush([{'role': 'user', 'content': 'question'},
+                                     {'role': 'assistant', 'content': 'AGENT FINAL'}])
+        identity = _committed_terminal_identity(messages, 0)
+        self.assertIsNotNone(identity, 'a committed terminal must yield an identity')
+        self.assertIsInstance(identity['message_id'], int)
+        self.assertEqual(identity['session_id'], self.sid,
+                         'flush must stamp the owning session for the committed row')
+        landed = next(r for r in self.db.get_messages(self.sid) if r['id'] == identity['message_id'])
+        self.assertEqual(landed['content'], 'AGENT FINAL')
+
+        receipt = self._persist(messages=messages, agent_persisted=True, run_ref='run-flush',
+                                terminal_receipt=identity)
         self.assertIsNotNone(receipt)
-        self.assertEqual(receipt['message_id'], committed)
+        self.assertEqual(receipt['message_id'], identity['message_id'])
+        self.assertEqual(receipt['session_id'], self.sid)
         self.assertEqual(receipt['source'], 'agent_flush_marker')
         self.assertEqual(receipt['run'], 'run-flush')
         payload = self._deliver(receipt, run_ref='run-flush', consumer=consumer)
         self.assertEqual(payload['summary'], 'AGENT FINAL')
+
+    def test_interrupted_run_never_delivers_its_committed_partial(self):
+        from gateway.run_turn_runner import _committed_terminal_identity
+
+        consumer = self._admit('run-int')
+        messages = self._real_flush([{'role': 'user', 'content': 'question'},
+                                     {'role': 'assistant', 'content': 'PARTIAL INTERRUPTED'}])
+        # The partial really is committed, so the identity exists — but the RUN did not complete.
+        identity = _committed_terminal_identity(messages, 0)
+        self.assertIsNotNone(identity)
+        receipt = self._persist(messages=messages, agent_persisted=True, run_ref='run-int',
+                                terminal_receipt=identity,
+                                interrupted=True, completed=False)
+        self.assertIsNone(receipt, 'an interrupted run must not produce a completed receipt')
+        self.assertIsNone(consumer.payload_of('run-int'), 'no completed payload for an interrupted run')
+
+    def test_failed_run_receipt_does_not_touch_the_main_reply(self):
+        consumer = self._admit('run-failed')
+        messages = self._real_flush([{'role': 'user', 'content': 'question'},
+                                     {'role': 'assistant', 'content': 'PARTIAL'}])
+        receipt = self._persist(messages=messages, agent_persisted=True, run_ref='run-failed',
+                                failed_early=True)
+        self.assertIsNone(receipt)
+        self.assertIsNone(consumer.payload_of('run-failed'))
 
     def test_agent_owned_without_marker_or_uid_returns_none(self):
         messages = [{'role': 'user', 'content': 'question'},
