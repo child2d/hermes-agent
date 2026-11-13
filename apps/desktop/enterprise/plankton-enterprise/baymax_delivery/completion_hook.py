@@ -142,50 +142,54 @@ class CompletionConsumer:
                 raise ValueError('Run admission intent missing')
             if event == 'agent:end':
                 return {'status': 'awaiting_persisted_terminal'}
-            canonical_id = context.get('canonical_message_id')
-            if canonical_id is None:
-                return {'status': 'blocked_terminal_identity',
-                        'reason': 'delivery event must carry the persisted canonical message id'}
-            # A row id is only trustworthy when the *writing* path says it produced this run's
-            # terminal. "Newest assistant without tool_calls" is not proof: an intermediate text
-            # message looks identical. Without that binding the run stays pending.
-            if context.get('terminal_source') not in RECEIPT_SOURCES:
-                return {'status': 'blocked_terminal_receipt',
-                        'reason': 'delivery event lacks a persistence receipt'}
-            if context.get('terminal_run') != execution_ref:
-                return {'status': 'blocked_terminal_receipt',
-                        'reason': 'persistence receipt belongs to another run'}
-            terminal = self._by_id(canonical_id)
-            if not self._is_terminal_row(terminal):
-                raise ValueError('Delivered message id is not a terminal assistant row')
-            if terminal['session_id'] != self.session_id:
-                return {'status': 'blocked_foreign_session'}
-            if row[1]:
-                saved = json.loads(row[1])
-                if saved['terminal_message_id'] != terminal['id'] or saved['outcome'] != context.get('outcome'):
-                    if saved.get('recovered') and saved['terminal_message_id'] == terminal['id']:
-                        if row[2]:
-                            return json.loads(row[2])
-                        return {'status': 'ready_to_writeback', 'execution_ref': execution_ref, 'recovered': True}
-                    raise ValueError('Completed execution content conflict')
-                if row[2]:
-                    return json.loads(row[2])
-            else:
-                if terminal['id'] <= row[0]:
-                    raise ValueError('Terminal is not newer than this run admission')
-                if context.get('outcome') not in ('completed', 'failed'):
-                    raise ValueError('Runtime terminal outcome required')
-                if 'failed' in (terminal.get('display_kind') or '') and context['outcome'] != 'failed':
-                    raise ValueError('Failure cannot become successful completion')
-                summary = terminal['content']
-                if not isinstance(summary, str) or not summary.strip() or len(summary.encode()) > 262144:
-                    raise ValueError('Bounded nonempty persisted output required')
-                payload = {'execution_ref': execution_ref, 'session_id': self.session_id,
-                           'terminal_message_id': terminal['id'], 'summary': summary,
-                           'outcome': context['outcome'],
-                           'output_sha256': hashlib.sha256(summary.encode()).hexdigest()}
-                db.execute('UPDATE intents SET payload=?, terminal_id=? WHERE execution_ref=?',
-                           (_json(payload), terminal['id'], execution_ref))
+            return self._handle_delivery(db, execution_ref, row, context)
+
+    def _handle_delivery(self, db, execution_ref, row, context):
+        """Validate the terminal identity/outcome and persist this run's payload."""
+        canonical_id = context.get('canonical_message_id')
+        if canonical_id is None:
+            return {'status': 'blocked_terminal_identity',
+                    'reason': 'delivery event must carry the persisted canonical message id'}
+        # A row id is only trustworthy when the *writing* path says it produced this run's
+        # terminal. "Newest assistant without tool_calls" is not proof: an intermediate text
+        # message looks identical. Without that binding the run stays pending.
+        if context.get('terminal_source') not in RECEIPT_SOURCES:
+            return {'status': 'blocked_terminal_receipt',
+                    'reason': 'delivery event lacks a persistence receipt'}
+        if context.get('terminal_run') != execution_ref:
+            return {'status': 'blocked_terminal_receipt',
+                    'reason': 'persistence receipt belongs to another run'}
+        terminal = self._by_id(canonical_id)
+        if not self._is_terminal_row(terminal):
+            raise ValueError('Delivered message id is not a terminal assistant row')
+        if terminal['session_id'] != self.session_id:
+            return {'status': 'blocked_foreign_session'}
+        if row[1]:
+            saved = json.loads(row[1])
+            if saved['terminal_message_id'] != terminal['id'] or saved['outcome'] != context.get('outcome'):
+                if saved.get('recovered') and saved['terminal_message_id'] == terminal['id']:
+                    if row[2]:
+                        return json.loads(row[2])
+                    return {'status': 'ready_to_writeback', 'execution_ref': execution_ref, 'recovered': True}
+                raise ValueError('Completed execution content conflict')
+            if row[2]:
+                return json.loads(row[2])
+        else:
+            if terminal['id'] <= row[0]:
+                raise ValueError('Terminal is not newer than this run admission')
+            if context.get('outcome') not in ('completed', 'failed'):
+                raise ValueError('Runtime terminal outcome required')
+            if 'failed' in (terminal.get('display_kind') or '') and context['outcome'] != 'failed':
+                raise ValueError('Failure cannot become successful completion')
+            summary = terminal['content']
+            if not isinstance(summary, str) or not summary.strip() or len(summary.encode()) > 262144:
+                raise ValueError('Bounded nonempty persisted output required')
+            payload = {'execution_ref': execution_ref, 'session_id': self.session_id,
+                       'terminal_message_id': terminal['id'], 'summary': summary,
+                       'outcome': context['outcome'],
+                       'output_sha256': hashlib.sha256(summary.encode()).hexdigest()}
+            db.execute('UPDATE intents SET payload=?, terminal_id=? WHERE execution_ref=?',
+                       (_json(payload), terminal['id'], execution_ref))
         enabled = self.transport_factory is not None or (self.transport is not None and self.transport.issuer.binding is not None)
         return {'status': 'ready_to_writeback' if enabled else 'blocked_binding', 'execution_ref': execution_ref}
 
@@ -356,7 +360,7 @@ async def _writeback(consumer, execution_ref):
         except ValueError:
             logging.getLogger(__name__).warning('Runtime writeback scope rejected; pending record retained')
             return
-        except Exception:
+        except (OSError, RuntimeError, sqlite3.Error):
             if attempt == 2:
                 logging.getLogger(__name__).warning('Runtime writeback unconfirmed; pending record retained')
                 return

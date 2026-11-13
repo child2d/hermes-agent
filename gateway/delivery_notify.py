@@ -17,6 +17,36 @@ logger = logging.getLogger("gateway.delivery_notify")
 RECEIPT_SOURCE = "append_return"
 
 
+def delivery_receipt_enabled(hooks) -> bool:
+    """True when a delivery consumer is installed for this profile.
+
+    Checked before persistence reaches for any delivery-specific work, so the default install (no
+    Baymax hook) performs zero delivery I/O — including the agent-persisted uid lookup.
+    """
+    try:
+        return bool(hooks.has_handlers("agent:delivery-ready"))
+    except (AttributeError, TypeError):
+        return False
+
+
+async def notify_turn_receipt(*, hooks, provider, session_entry, agent_result, response,
+                              outcome, hook_ctx, receipt) -> bool:
+    """Emit this turn's ``agent:delivery-ready`` from the persistence receipt alone.
+
+    The caller passes no run reference: the receipt carries it, so the notification cannot invent the
+    binding the consumer is supposed to verify.
+    """
+    return await notify_delivery_ready(
+        hooks=hooks,
+        provider=provider or ((lambda **_: receipt) if receipt else None),
+        session_entry=session_entry,
+        agent_result=agent_result,
+        response=response,
+        outcome=outcome,
+        hook_ctx=hook_ctx,
+    )
+
+
 async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result, response,
                                 outcome, hook_ctx=None):
     """Emit ``agent:delivery-ready`` only when a *complete* verified receipt exists.
@@ -47,6 +77,6 @@ async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result,
             "response": response or "",
         })
         return True
-    except Exception as error:  # never let a notification break the reply path
-        logger.warning("delivery-ready notification skipped: %s", type(error).__name__)
+    except (OSError, RuntimeError, ValueError, TypeError) as error:  # never break the reply path
+        logger.warning("delivery-ready notification skipped: %s", type(error).__name__, exc_info=True)
         return False

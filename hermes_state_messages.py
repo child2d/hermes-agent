@@ -428,12 +428,7 @@ class SessionMessagesMixin(SessionDetachedResultsMixin, SessionTodoResultMixin):
         return self._execute_write(_do, patience_s=self._TRANSCRIPT_WRITE_PATIENCE_S)
 
     def message_id_by_uid(self, session_id: str, message_uid: str) -> Optional[int]:
-        """Exact row id for a uid the *writer* stamped on the message it inserted.
-
-        Only the single LIVE row for that uid may answer: a rewind/compaction can leave an
-        ``active = 0`` version of the same uid behind, and picking it would hand the caller a row
-        that is not the message this run wrote. Ambiguity (more than one active row) returns None.
-        """
+        """Exact row id for a uid the writer stamped; only the single LIVE row may answer (else None)."""
         if not session_id or not message_uid:
             return None
         rows = self._read_all(

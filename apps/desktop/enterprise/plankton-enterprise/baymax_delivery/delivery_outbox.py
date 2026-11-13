@@ -186,7 +186,7 @@ class DeliveryOutbox:
             raise
         except DeliveryRevoked:
             raise
-        except Exception:
+        except (OSError, RuntimeError, sqlite3.Error, ValueError):
             if not reconcile_unknown:
                 raise
             # An unobserved outcome is resolved from server truth, never by guessing.
@@ -194,7 +194,7 @@ class DeliveryOutbox:
                 resolved = self.reconcile(key, transport)
             except DeliveryCancelled:
                 raise
-            except Exception:
+            except (OSError, RuntimeError, sqlite3.Error, ValueError):
                 resolved = None  # Unreadable receipt: keep the outbox pending and surface the original failure.
             if resolved:
                 return resolved

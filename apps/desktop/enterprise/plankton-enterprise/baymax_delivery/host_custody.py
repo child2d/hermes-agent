@@ -26,6 +26,7 @@ import os
 import stat
 from pathlib import Path
 
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 
 from .runtime_bridge import Binding, RuntimeIssuer
@@ -73,7 +74,7 @@ class HostCustody:
         data = resolved.read_bytes()
         try:
             key = serialization.load_pem_private_key(data, password=None)
-        except Exception:
+        except (ValueError, TypeError, UnsupportedAlgorithm):
             raise CustodyError('Key file is not an unencrypted PEM private key') from None
         finally:
             data = b'\x00' * len(data)

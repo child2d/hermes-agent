@@ -43,21 +43,39 @@ def _probe(mode, home):
 
 class NativeHookTests(unittest.TestCase):
     def test_ready_event_is_emitted_after_persistence_and_failure_classification(self):
+        # The emit lives in the persistence path (where the receipt exists), so the ordering assertion
+        # reads that module: notify_turn_receipt must come after the classify/persist calls in
+        # run_turn and be driven by persistence in run_turn_persistence.
         tree = ast.parse((REPO / 'gateway' / 'run_turn.py').read_text())
         lines = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 name = getattr(node.func, 'attr', None) or getattr(node.func, 'id', None)
-                if name in ('_hmwa_classify_turn_failure', '_hmwa_persist_turn_transcript',
-                            'notify_delivery_ready'):
-                    lines['ready' if name == 'notify_delivery_ready' else name] = node.lineno
-        self.assertIn('ready', lines)
-        self.assertGreater(lines['ready'], lines['_hmwa_persist_turn_transcript'])
-        self.assertGreater(lines['ready'], lines['_hmwa_classify_turn_failure'])
+                if name in ('_hmwa_classify_turn_failure', '_hmwa_persist_turn_transcript'):
+                    lines[name] = node.lineno
+        self.assertIn('_hmwa_persist_turn_transcript', lines)
+        self.assertIn('_hmwa_classify_turn_failure', lines)
+        self.assertGreater(lines['_hmwa_persist_turn_transcript'], lines['_hmwa_classify_turn_failure'])
+
+        persistence = ast.parse((REPO / 'gateway' / 'run_turn_persistence.py').read_text())
+        emit, persist_def = None, {}
+        for node in ast.walk(persistence):
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, 'attr', None) or getattr(node.func, 'id', None)
+                if name == 'notify_turn_receipt' and emit is None:
+                    emit = node.lineno
+                if name == 'delivery_receipt_enabled' and 'gate' not in persist_def:
+                    persist_def['gate'] = node.lineno
+        self.assertIsNotNone(emit, 'persistence must emit the delivery event')
+        self.assertIsNotNone(persist_def.get('gate'), 'the emit must be gated on an installed consumer')
+        self.assertGreater(emit, persist_def['gate'])
 
     def test_the_notification_is_optional_and_receipt_driven(self):
-        source = (REPO / 'gateway' / 'run_turn.py').read_text()
-        self.assertIn('delivery_terminal_receipt_provider', source)
+        # The provider attribute is consumed by the persistence call site...
+        persistence = (REPO / 'gateway' / 'run_turn_persistence.py').read_text()
+        self.assertIn('delivery_terminal_receipt_provider', persistence)
+        # ...and run_turn still exposes the provider attribute it reads.
+        self.assertIn('delivery_predecessor_provider', (REPO / 'gateway' / 'run_turn.py').read_text())
         notify = (REPO / 'gateway' / 'delivery_notify.py').read_text()
         self.assertIn('if provider is None', notify)
         self.assertNotIn('get_messages', notify)

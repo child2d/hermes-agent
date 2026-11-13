@@ -28,6 +28,7 @@ no real model or sandbox delivery has been executed through it.
 
 import json
 import os
+import sqlite3
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -108,7 +109,7 @@ class OpenAICompatibleModel:
                 body = json.loads(response.read(1 << 20))
         except ModelUnavailable:
             raise
-        except Exception as error:
+        except (OSError, ValueError, RuntimeError) as error:
             raise ModelUnavailable(f'model call failed: {type(error).__name__}') from None
         choices = body.get('choices') or []
         if not choices:
@@ -191,7 +192,7 @@ def run_turn(*, transport, consumer, model, store, session_id, execution_ref, is
         artifact = write_artifact(artifacts_dir, execution_ref, text, usage)
         try:
             message_id = persist_terminal(store, session_id, text)
-        except Exception:
+        except (OSError, RuntimeError, ValueError, sqlite3.Error):
             # No persisted terminal means nothing to deliver: keep the run pending instead of
             # emitting a ready event or inventing an id.
             admission.abandon(_admission_key(issue_id, execution_ref), note='terminal persist failed')

@@ -147,6 +147,8 @@ class ReceiptRootCases(unittest.TestCase):
             _hmwa_retain_content_policy_refused_turn=_noop,
             _refresh_agent_cache_message_count=_noop)
         bound = GatewayTurnPersistenceMixin._hmwa_persist_turn_transcript.__get__(obj)
+        # The receipt resolver is its own method; bind it to this host too.
+        obj._hmwa_agent_owned_receipt = GatewayTurnPersistenceMixin._hmwa_agent_owned_receipt.__get__(obj)
         import inspect
 
         accepted = inspect.signature(bound).parameters

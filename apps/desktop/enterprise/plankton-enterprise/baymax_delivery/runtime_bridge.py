@@ -98,7 +98,7 @@ class SandboxTransport:
             if len(body) > 1048576:
                 raise RuntimeError('Writeback response too large')
             result = json.loads(body)
-        except Exception:
+        except (OSError, ValueError, RuntimeError):
             # Never expose request headers, bearer assertions or raw remote error bodies.
             raise RuntimeError('Writeback not confirmed; resume same outbox key') from None
         if result.get('errors'):

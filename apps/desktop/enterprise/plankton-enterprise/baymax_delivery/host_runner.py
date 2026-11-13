@@ -18,9 +18,12 @@ import argparse
 import hashlib
 import json
 import os
+import sqlite3
 import stat
 import sys
 from pathlib import Path
+
+from cryptography.exceptions import UnsupportedAlgorithm
 
 from .completion_hook import CompletionConsumer
 from .delivery_outbox import DeliveryOutbox
@@ -49,7 +52,7 @@ def key_fingerprint(key_path):
         public = key.public_key().public_bytes(serialization.Encoding.PEM,
                                                serialization.PublicFormat.SubjectPublicKeyInfo)
         return 'sha256:' + hashlib.sha256(public).hexdigest()
-    except Exception:
+    except (OSError, ValueError, TypeError, UnsupportedAlgorithm):
         return None
 
 
@@ -170,7 +173,7 @@ def run_once(consumer, transport):
         if recovered.get('status') in ('recovered_terminal', 'awaiting_writeback'):
             try:
                 entry['writeback'] = consumer.resume(execution_ref).get('status')
-            except Exception as error:  # keep the run pending; never re-run business work
+            except (OSError, RuntimeError, sqlite3.Error, ValueError) as error:  # keep the run pending; never re-run business work
                 entry['writeback'] = 'pending:' + type(error).__name__
         results.append(entry)
     return results

@@ -298,14 +298,25 @@ class SessionTranscriptMixin:
         queue_session_id = session_id
 
         def _ack_head() -> bool:
-            """Pop the acknowledged head (retry lock held). True if queue drained."""
+            """Pop the acknowledged head (retry lock held). True if queue drained.
+
+            Also re-points ``msg`` at the new head, so call sites never re-derive it.
+            """
+            nonlocal msg
             if pending and pending[0] is msg:
                 pending.pop(0)
             if not pending:
                 self._dirty_transcripts.pop(queue_session_id, None)
                 self._transcript_append_failures.pop(session_id, None)
                 return True
+            msg = pending[0]
             return False
+
+        def _note_receipt(written_row_id, session_id):
+            """Receipt for THIS call's own item only; a later drained item never answers for it."""
+            nonlocal original_receipt
+            if written_row_id and msg is original_msg:
+                original_receipt = (int(written_row_id), session_id)
 
         # DB write outside the retry lock so other sessions can append.
         while True:
@@ -319,8 +330,7 @@ class SessionTranscriptMixin:
                 if spool_exc is not None:
                     raise spool_exc
                 written_row_id = self._append_transcript_message(session_id, msg)
-                if msg is original_msg and written_row_id:
-                    original_receipt = (int(written_row_id), session_id)
+                _note_receipt(written_row_id, session_id)
             except Exception as exc:
                 from hermes_state import StateDbCorruptError, StateDbReplacedError
                 from hermes_state_errors import CompressionSessionClosedError
@@ -338,10 +348,9 @@ class SessionTranscriptMixin:
                             self._lazy("_session_owner_hints", dict)[child_id] = _owner_key
                         try:
                             written_row_id = self._append_transcript_message(child_id, msg)
-                            if msg is original_msg and written_row_id:
-                                # The row really lives in the child session; report that session,
-                                # never the parent id with a child row.
-                                original_receipt = (int(written_row_id), child_id)
+                            # The row really lives in the child session; report that session, never
+                            # the parent id with a child row.
+                            _note_receipt(written_row_id, child_id)
                         except Exception as reroute_exc:
                             exc = reroute_exc
                         else:
@@ -369,16 +378,13 @@ class SessionTranscriptMixin:
                         continue  # repaired: drain the older spool again before ``msg``
                     try:
                         written_row_id = self._append_transcript_message(session_id, msg)
-                        if msg is original_msg and written_row_id:
-                            original_receipt = (int(written_row_id), session_id)
+                        _note_receipt(written_row_id, session_id)
                     except Exception as retry_exc:
                         exc = retry_exc
                     else:
                         with self._transcript_retry_lock:
-                            queue_empty = _ack_head()
-                            if not queue_empty:
-                                msg = pending[0]
-                        if queue_empty:
+                            drained = _ack_head()
+                        if drained:
                             return original_receipt
                         continue
                 with self._transcript_retry_lock:
@@ -397,10 +403,8 @@ class SessionTranscriptMixin:
                 return
             else:
                 with self._transcript_retry_lock:
-                    queue_empty = _ack_head()
-                    if not queue_empty:
-                        msg = pending[0]
-                if queue_empty:
+                    drained = _ack_head()
+                if drained:
                     return original_receipt
                 continue
 

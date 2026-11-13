@@ -16,7 +16,6 @@ import os
 import queue
 import threading
 import time
-import uuid
 from agent.i18n import t
 from agent.session_activity import format_iteration_progress
 from agent.turn_failure_copy import FAILED_TURN_DISPLAY_KIND, FAILED_TURN_NOTICE, PARTIAL_FAILED_TURN_NOTICE
@@ -24,6 +23,7 @@ from contextlib import nullcontext, suppress
 from contextvars import copy_context
 from gateway.bot_peer_notices import automatic_notices_allowed
 from gateway.config import Platform
+from gateway.delivery_predecessor import build_hook_ctx
 from gateway.platforms.base import BasePlatformAdapter, ProcessingOutcome
 from gateway.platforms.event import MessageEvent
 from gateway.platforms.helpers import typing_metadata_for_turn
@@ -222,22 +222,10 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
         history, message_text = prepared.history, prepared.message_text
 
         try:
-            hook_ctx = {
-                "execution_ref": f"plankton-run:{uuid.uuid4()}",
-                "platform": source.platform.value if source.platform else "",
-                "user_id": source.user_id,
-                "chat_id": source.chat_id or "",
-                "thread_id": str(source.thread_id) if getattr(source, "thread_id", None) else "",
-                "chat_type": getattr(source, "chat_type", "") or "",
-                "session_id": session_entry.session_id,
-                "message": message_text[:500],
-            }
-            # The delivery predecessor is captured at admission (host-supplied provider). A missing
-            # provider is recorded, and a delivery consumer then blocks with blocked_predecessor
-            # instead of submitting against an unknown head.
-            from gateway.delivery_predecessor import attach_predecessor
-
-            attach_predecessor(hook_ctx, getattr(self, "delivery_predecessor_provider", None))
+            hook_ctx = build_hook_ctx(
+                source=source, session_entry=session_entry, message_text=message_text,
+                predecessor_provider=getattr(self, "delivery_predecessor_provider", None),
+            )
             await self.hooks.emit("agent:start", hook_ctx)
 
             # Capture the launch session id so post-run compression publication is identity-guarded
@@ -316,40 +304,14 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
             response, session_entry = await self._hmwa_compression_exhaustion_reset(
                 agent_result, response, session_entry, session_key, source,
             )
-            # Is any delivery consumer installed for this profile? Checked before persistence so the
-            # default (no Baymax hook) path performs zero delivery-specific work, including the
-            # agent-persisted uid lookup.
-            try:
-                delivery_enabled = bool(self.hooks.has_handlers("agent:delivery-ready"))
-            except Exception:
-                delivery_enabled = False
-            receipt = await self._hmwa_persist_turn_transcript(
+            await self._hmwa_persist_turn_transcript(
                 event=event, source=source, session_entry=session_entry, session_key=session_key,
                 agent_result=agent_result, agent_messages=agent_messages, prepared=prepared,
                 response=response, agent_failed_early=agent_failed_early,
                 hidden_reasoning_incomplete=hidden_reasoning_incomplete,
                 is_context_overflow_failure=is_context_overflow_failure,
-                delivery_enabled=delivery_enabled,
                 run_ref=hook_ctx.get("execution_ref"),
             )
-            # Delivery notification uses the receipt the persistence call itself returned: the row of
-            # THIS turn's terminal candidate, with its own run and session. No receipt -> no event,
-            # and nothing is ever inferred from "the newest row". When no delivery hook is installed
-            # the whole branch is skipped, so the default path performs no delivery-specific I/O.
-            if delivery_enabled:
-                from gateway.delivery_notify import notify_delivery_ready
-
-                await notify_delivery_ready(
-                    hooks=self.hooks,
-                    provider=getattr(self, "delivery_terminal_receipt_provider", None) or (
-                        (lambda **_: receipt) if receipt else None),
-                    session_entry=session_entry,
-                    agent_result=agent_result,
-                    response=response,
-                    outcome="failed" if (agent_failed_early or hidden_reasoning_incomplete
-                                         or is_context_overflow_failure) else "completed",
-                    hook_ctx=hook_ctx,
-                )
             await self._record_room_silence_decision(
                 session_key, agent_result, _intentional_silence,
                 display_kind=prepared.persist_user_display_kind, reply_expected=event.reply_expected)
