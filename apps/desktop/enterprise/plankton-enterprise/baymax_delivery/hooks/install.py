@@ -8,8 +8,8 @@ absolute plugin root next to them.
 
 Nothing here touches a real user profile unless the caller names it::
 
-    python -m baymax_delivery.hooks.install --hermes-home /tmp/isolated-home --dry-run
-    python -m baymax_delivery.hooks.install --hermes-home /tmp/isolated-home
+    python -m baymax_delivery.hooks.install --hermes-home "$TMPDIR/isolated-home" --dry-run
+    python -m baymax_delivery.hooks.install --hermes-home "$TMPDIR/isolated-home"
 """
 
 import argparse
@@ -50,7 +50,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog='baymax_delivery.hooks.install',
                                      description='Install the Baymax delivery hook into one profile.')
     parser.add_argument('--hermes-home', required=True,
-                        help='profile home that owns hooks/ (e.g. /tmp/isolated-home)')
+                        help='profile home that owns hooks/ (e.g. "$TMPDIR/isolated-home")')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--force', action='store_true')
     args = parser.parse_args(argv)

@@ -21,11 +21,14 @@ def delivery_receipt_enabled(hooks) -> bool:
     """True when a delivery consumer is installed for this profile.
 
     Checked before persistence reaches for any delivery-specific work, so the default install (no
-    Baymax hook) performs zero delivery I/O — including the agent-persisted uid lookup.
+    Baymax hook) performs zero delivery I/O — including the agent-persisted uid lookup. A hook
+    registry that cannot answer is treated as "no consumer": this is an optional integration probe,
+    never a reason to fail the turn.
     """
     try:
         return bool(hooks.has_handlers("agent:delivery-ready"))
-    except (AttributeError, TypeError):
+    except Exception:  # optional boundary: any registry failure means "no delivery consumer"
+        logger.warning("delivery consumer probe failed; treating delivery as disabled", exc_info=True)
         return False
 
 
@@ -36,15 +39,19 @@ async def notify_turn_receipt(*, hooks, provider, session_entry, agent_result, r
     The caller passes no run reference: the receipt carries it, so the notification cannot invent the
     binding the consumer is supposed to verify.
     """
-    return await notify_delivery_ready(
-        hooks=hooks,
-        provider=provider or ((lambda **_: receipt) if receipt else None),
-        session_entry=session_entry,
-        agent_result=agent_result,
-        response=response,
-        outcome=outcome,
-        hook_ctx=hook_ctx,
-    )
+    try:
+        return await notify_delivery_ready(
+            hooks=hooks,
+            provider=provider or ((lambda **_: receipt) if receipt else None),
+            session_entry=session_entry,
+            agent_result=agent_result,
+            response=response,
+            outcome=outcome,
+            hook_ctx=hook_ctx,
+        )
+    except Exception:  # optional boundary: a notification must never fail the turn
+        logger.warning("delivery-ready emit failed; turn unaffected", exc_info=True)
+        return False
 
 
 async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result, response,
@@ -77,6 +84,6 @@ async def notify_delivery_ready(*, hooks, provider, session_entry, agent_result,
             "response": response or "",
         })
         return True
-    except (OSError, RuntimeError, ValueError, TypeError) as error:  # never break the reply path
+    except Exception as error:  # optional boundary; logged, never the user's error reply
         logger.warning("delivery-ready notification skipped: %s", type(error).__name__, exc_info=True)
         return False

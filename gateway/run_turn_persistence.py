@@ -505,7 +505,7 @@ class GatewayTurnPersistenceMixin:
     async def _hmwa_persist_turn_transcript(
         self, *, event, source, session_entry, session_key, agent_result, agent_messages,
         prepared, response, agent_failed_early, hidden_reasoning_incomplete, is_context_overflow_failure,
-        delivery_enabled=None, run_ref=None,
+        delivery_enabled=None, run_ref=None, hook_ctx=None,
     ):
         """Persist this turn to the transcript (session_meta on first turn, user-only on transient
         failure, nothing on context overflow), update last_prompt_tokens, and re-baseline the
@@ -648,22 +648,23 @@ class GatewayTurnPersistenceMixin:
         # the coherence guard snapshots at agent-BUILD time, so our own writes would otherwise
         # trigger a rebuild next turn (destroying prompt caching).
         await self._refresh_agent_cache_message_count(session_key, sid)
-        # Emit the delivery event here, where the receipt and its run are both in hand. No delivery
-        # hook means no work at all; a run without a receipt emits nothing.
-        if delivery_receipt_enabled(getattr(self, "hooks", None)):
+        # ONE terminal gate for every receipt shape, applied BEFORE any notify/provider side effect:
+        # a run that did not terminate successfully has no deliverable terminal, so nothing may be
+        # published for it — not even as "failed". The transcript writes and the cache refresh above
+        # still happen; only the delivery identity is withheld.
+        deliverable = receipt if terminal_ok else None
+        if deliverable is not None and delivery_receipt_enabled(getattr(self, "hooks", None)):
             await notify_turn_receipt(
                 hooks=self.hooks,
                 provider=getattr(self, "delivery_terminal_receipt_provider", None),
                 session_entry=session_entry, agent_result=agent_result, response=response,
-                outcome="completed" if terminal_ok else "failed",
-                hook_ctx={"execution_ref": run_ref},
-                receipt=receipt,
+                outcome="completed",
+                # The event keeps its original contract (identity + admission context); the receipt
+                # still carries the run, so the notification cannot invent the binding.
+                hook_ctx=hook_ctx if hook_ctx is not None else {"execution_ref": run_ref},
+                receipt=deliverable,
             )
-        # ONE exit for every receipt shape: a run that did not terminate successfully must not hand
-        # back a receipt — including the append_return one the gateway-owned branch built above while
-        # writing the transcript. The transcript writes, counters and the reply path stay untouched;
-        # only the delivery identity is withheld.
-        return receipt if terminal_ok else None
+        return deliverable
 
     def _hmwa_agent_owned_receipt(self, *, receipt, terminal_ok, agent_result, terminal_candidate,
                                   agent_persisted, delivery_enabled, sid, run_ref):
@@ -675,7 +676,9 @@ class GatewayTurnPersistenceMixin:
         notification can never invent the binding the consumer verifies. A failed/refused/overflowed
         run returns whatever came in (normally None) — a partial row must not be revived.
         """
-        if not terminal_ok or receipt is not None:
+        if not terminal_ok:
+            return None
+        if receipt is not None:
             return receipt
         supplied = agent_result.get("terminal_receipt")
         if isinstance(supplied, dict):
@@ -691,7 +694,8 @@ class GatewayTurnPersistenceMixin:
             return receipt
         try:
             row_id = self._session_db.message_id_by_uid(sid, uid)
-        except (OSError, ValueError, sqlite3.Error):  # not provable, never a guess
+        except Exception:  # optional lookup on an already-persisted row; failure means "unprovable"
+            logger.warning("terminal uid lookup failed; no delivery receipt", exc_info=True)
             return receipt
         if not row_id:
             return receipt

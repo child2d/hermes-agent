@@ -311,6 +311,7 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
                 hidden_reasoning_incomplete=hidden_reasoning_incomplete,
                 is_context_overflow_failure=is_context_overflow_failure,
                 run_ref=hook_ctx.get("execution_ref"),
+                hook_ctx=hook_ctx,
             )
             await self._record_room_silence_decision(
                 session_key, agent_result, _intentional_silence,

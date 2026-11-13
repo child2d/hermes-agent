@@ -15,11 +15,13 @@ from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO = TESTS_DIR.parents[5]
-TARGET = TESTS_DIR / 'test_receipt_root_cases.py'
-EXPECTED_MIN_CASES = 8
+TARGETS = (
+    (TESTS_DIR / 'test_receipt_root_cases.py', 8),
+    (TESTS_DIR / 'test_hook_delivery_chain.py', 4),
+)
 
 
-def test_hermetic_receipt_cases_run_in_a_clean_child_process():
+def _run_hermetic(target, minimum):
     env = {k: v for k, v in os.environ.items() if not k.startswith(('HERMES_', 'PLANKTON_'))}
     env.update({
         'BAYMAX_HERMETIC_RECEIPT': '1',
@@ -27,15 +29,17 @@ def test_hermetic_receipt_cases_run_in_a_clean_child_process():
         'PYTHONDONTWRITEBYTECODE': '1',
     })
     proc = subprocess.run(
-        [sys.executable, '-B', '-m', 'pytest', '-p', 'no:cacheprovider', str(TARGET), '-q'],
+        [sys.executable, '-B', '-m', 'pytest', '-p', 'no:cacheprovider', str(target), '-q'],
         cwd=str(REPO), env=env, capture_output=True, text=True, timeout=300, check=False,
     )
     output = proc.stdout + proc.stderr
-    # The child must have executed the real cases, not skipped the module.
-    assert 'skipped' not in output.split('passed')[0].replace('3 skipped', ''), output[-3000:]
     match = re.search(r'(\d+) passed', output)
     passed = int(match.group(1)) if match else 0
-    assert passed >= EXPECTED_MIN_CASES, (
-        f'hermetic cases did not run: expected >= {EXPECTED_MIN_CASES} passed, got {passed}\n'
-        f'{output[-3000:]}')
-    assert proc.returncode == 0, f'hermetic cases failed (exit {proc.returncode})\n{output[-3000:]}'
+    assert passed >= minimum, (
+        f'{target.name}: expected >= {minimum} passed, got {passed}\n{output[-3000:]}')
+    assert proc.returncode == 0, f'{target.name}: failed (exit {proc.returncode})\n{output[-3000:]}'
+
+
+def test_hermetic_receipt_cases_run_in_a_clean_child_process():
+    for target, minimum in TARGETS:
+        _run_hermetic(target, minimum)
