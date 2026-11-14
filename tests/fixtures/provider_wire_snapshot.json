@@ -10053,6 +10053,182 @@
    ]
   }
  },
+ "shaoke-antimage": {
+  "api_mode": "chat_completions",
+  "base_url": "https://anti-mage.shaoke.com/v1",
+  "high": {
+   "messages": [
+    {
+     "content": "You are a test agent.",
+     "role": "system"
+    },
+    {
+     "content": "list files",
+     "role": "user"
+    },
+    {
+     "content": "",
+     "role": "assistant",
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"ls\"}",
+        "name": "terminal"
+       },
+       "id": "call_1",
+       "type": "function"
+      }
+     ]
+    },
+    {
+     "content": "a.txt\nb.txt",
+     "role": "tool",
+     "tool_call_id": "call_1"
+    },
+    {
+     "content": "thanks, now summarize",
+     "role": "user"
+    }
+   ],
+   "model": "minimax-m3",
+   "timeout": 1800.0,
+   "tools": [
+    {
+     "function": {
+      "description": "Run a shell command.",
+      "name": "terminal",
+      "parameters": {
+       "properties": {
+        "command": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "command"
+       ],
+       "type": "object"
+      }
+     },
+     "type": "function"
+    }
+   ]
+  },
+  "model": "minimax-m3",
+  "off": {
+   "messages": [
+    {
+     "content": "You are a test agent.",
+     "role": "system"
+    },
+    {
+     "content": "list files",
+     "role": "user"
+    },
+    {
+     "content": "",
+     "role": "assistant",
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"ls\"}",
+        "name": "terminal"
+       },
+       "id": "call_1",
+       "type": "function"
+      }
+     ]
+    },
+    {
+     "content": "a.txt\nb.txt",
+     "role": "tool",
+     "tool_call_id": "call_1"
+    },
+    {
+     "content": "thanks, now summarize",
+     "role": "user"
+    }
+   ],
+   "model": "minimax-m3",
+   "timeout": 1800.0,
+   "tools": [
+    {
+     "function": {
+      "description": "Run a shell command.",
+      "name": "terminal",
+      "parameters": {
+       "properties": {
+        "command": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "command"
+       ],
+       "type": "object"
+      }
+     },
+     "type": "function"
+    }
+   ]
+  },
+  "unset": {
+   "messages": [
+    {
+     "content": "You are a test agent.",
+     "role": "system"
+    },
+    {
+     "content": "list files",
+     "role": "user"
+    },
+    {
+     "content": "",
+     "role": "assistant",
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"ls\"}",
+        "name": "terminal"
+       },
+       "id": "call_1",
+       "type": "function"
+      }
+     ]
+    },
+    {
+     "content": "a.txt\nb.txt",
+     "role": "tool",
+     "tool_call_id": "call_1"
+    },
+    {
+     "content": "thanks, now summarize",
+     "role": "user"
+    }
+   ],
+   "model": "minimax-m3",
+   "timeout": 1800.0,
+   "tools": [
+    {
+     "function": {
+      "description": "Run a shell command.",
+      "name": "terminal",
+      "parameters": {
+       "properties": {
+        "command": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "command"
+       ],
+       "type": "object"
+      }
+     },
+     "type": "function"
+    }
+   ]
+  }
+ },
  "solstice": {
   "api_mode": "chat_completions",
   "base_url": "https://generativelanguage.googleapis.com/v1alpha",

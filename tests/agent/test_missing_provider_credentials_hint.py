@@ -4,6 +4,8 @@ Deriving the env var from the provider id (``f"{id.upper()}_API_KEY"``) invents 
 ``MINIMAX-OAUTH_API_KEY`` for OAuth ids (#114405, #78996) and ``ALIBABA_API_KEY`` where the registry
 reads ``DASHSCOPE_API_KEY``. Both the auxiliary ladder and main-agent init share one helper.
 """
+import re
+
 import pytest
 import hermes_yaml as yaml
 
@@ -48,7 +50,9 @@ def test_main_init_shares_helper_and_no_registry_provider_gets_an_invented_env_v
     for pid, pconfig in PROVIDER_REGISTRY.items():
         invented = f"{pid.upper()}_API_KEY"
         message = missing_provider_credentials_message(pid)
-        if invented in message:
+        # Match an env-var token, not a suffix: ANTIMAGE_API_KEY is a
+        # substring of the registered SHAOKE_ANTIMAGE_API_KEY alias remedy.
+        if invented in re.findall(r"[A-Z][A-Z0-9_-]*_API_KEY", message):
             assert invented in pconfig.api_key_env_vars, (pid, message)
         if not pconfig.api_key_env_vars:
             assert "_API_KEY environment variable" not in message, (pid, message)
