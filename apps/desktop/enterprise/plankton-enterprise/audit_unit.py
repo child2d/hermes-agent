@@ -49,7 +49,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Optional
 
@@ -261,7 +261,7 @@ def derive_session_audit_id(engine_session_id: Any) -> str:
 
 def _iso8601(now: Optional[float] = None) -> str:
     stamp = time.time() if now is None else float(now)
-    return datetime.fromtimestamp(stamp, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.fromtimestamp(stamp, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def build_transcript(messages: Iterable[Any]) -> list:

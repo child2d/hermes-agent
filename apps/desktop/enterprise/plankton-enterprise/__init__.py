@@ -73,7 +73,7 @@ def _load_proposals() -> Any:
     return module
 
 
-def register(ctx: Any) -> None:  # noqa: ARG001 - the manifest contract requires the parameter
+def register(ctx: Any) -> None:
     """Register this pack's ONE skill with the engine (read-only; writes nothing).
 
     Fail-closed on our own payload: a missing ``SKILL.md`` is a defect in the
@@ -109,7 +109,6 @@ def register(ctx: Any) -> None:  # noqa: ARG001 - the manifest contract requires
     # （check_audit_landing，fail-closed）。传输默认关闭（no-transport 安全态）。
     # 见 audit_wiring.py 的模块头（接线依据＝引擎既有钩子面，不改上游）。
     _wire_audit(ctx)
-    return None
 
 
 #: 审计接线模块（批 4 · 客户端接线）。按绝对路径、固定名导入（与 proposals/audit_unit 同法）。

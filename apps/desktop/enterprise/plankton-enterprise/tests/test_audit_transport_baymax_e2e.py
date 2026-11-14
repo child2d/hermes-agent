@@ -105,7 +105,7 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # 静音
         return
 
-    def do_POST(self):  # noqa: N802
+    def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length)
         auth = self.headers.get("Authorization") or ""
@@ -279,7 +279,7 @@ def test_expired_jwt_with_failing_refresh_sends_nothing(transport, home, mock_en
 
 
 def test_no_token_zero_egress_with_poisoned_socket(transport, home, mock_endpoint, monkeypatch, tmp_path):
-    url, server, secret = mock_endpoint
+    url, server, _secret = mock_endpoint
     monkeypatch.setenv("PLANKTON_AUDIT_EGRESS_TOKEN_STORE", str(tmp_path / "missing.json"))
     _write_config(home, url)
 

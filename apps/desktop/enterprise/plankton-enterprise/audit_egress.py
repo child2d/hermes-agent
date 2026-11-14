@@ -48,7 +48,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Optional
 
@@ -119,7 +119,7 @@ class AuditEgressRefused(Exception):
 
 def _iso8601(now: Optional[float] = None) -> str:
     stamp = time.time() if now is None else float(now)
-    return datetime.fromtimestamp(stamp, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.fromtimestamp(stamp, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _key_of(unit: Any) -> str:
