@@ -1856,10 +1856,10 @@ const DESKTOP_LOG_BUFFER_MAX_CHARS = 64 * 1024
 // #100573: keep the FATAL line and a local minidump for the next Linux SIGTRAP.
 // Both must be wired before `app` is ready; the log-file switch is inherited by
 // every child process, so a zygote or GPU CHECK lands in the same file.
-// Chromium opens an explicit --log-file with APPEND_TO_OLD_LOG_FILE, so this
-// one accumulates across launches exactly like desktop.log: bound it the same
-// way, and never let optional diagnostics fail the shell's startup.
-const CRASH_DIAGNOSTICS_LOGS_DIR = path.dirname(DESKTOP_LOG_PATH)
+// Chromium appends across launches; bound it like desktop.log and never let
+// optional diagnostics fail startup. Shell diagnostics are machine-owned, not
+// authenticated engine state: never create HERMES_HOME before login.
+const CRASH_DIAGNOSTICS_LOGS_DIR = PRODUCT_IDENTITY.enterprise ? app.getPath('logs') : path.dirname(DESKTOP_LOG_PATH)
 
 const CRASH_DIAGNOSTICS = linuxCrashDiagnostics(CRASH_DIAGNOSTICS_LOGS_DIR)
 const CHROMIUM_LOG_PATH = path.join(CRASH_DIAGNOSTICS_LOGS_DIR, CHROMIUM_LOG_FILENAME)

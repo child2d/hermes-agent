@@ -27,6 +27,10 @@ function executable(file: string, version = '1.2.3') {
 function options() {
   return {
     hermesHome: path.join(root, 'home'),
+    // The seeder accepts a resource platform as data; do not inherit the
+    // Linux CI host for a fixture exercising the macOS enterprise bundle.
+    platform: 'darwin' as const,
+    arch: 'arm64',
     resourcesPath: path.join(root, 'resources'),
     pathValue: path.join(root, 'system'),
     userHome: root,
@@ -72,7 +76,7 @@ it('falls back offline, preserves valid existing copies, and reports failed prob
 
   for (const command of ['aliyun', 'lark-cli']) {
     executable(path.join(root, 'system', command), 'invalid')
-    executable(path.join(opts.resourcesPath, 'enterprise/cli', `${process.platform}-${process.arch}`, command))
+    executable(path.join(opts.resourcesPath, 'enterprise/cli', `${opts.platform}-${opts.arch}`, command))
   }
 
   const logs: string[] = []
@@ -86,7 +90,7 @@ it('falls back offline, preserves valid existing copies, and reports failed prob
   const dest = path.join(opts.hermesHome, 'bin/aliyun')
   fs.writeFileSync(dest, 'old-broken')
   executable(
-    path.join(opts.resourcesPath, 'enterprise/cli', `${process.platform}-${process.arch}`, 'aliyun'),
+    path.join(opts.resourcesPath, 'enterprise/cli', `${opts.platform}-${opts.arch}`, 'aliyun'),
     'invalid'
   )
   expect(seedEnterpriseVendorClis(opts)[0]).toMatchObject({ status: 'failed', reason: 'bundled-version-probe-failed' })

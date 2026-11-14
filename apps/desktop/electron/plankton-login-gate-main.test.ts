@@ -325,7 +325,22 @@ describe('plankton main-process login gate (real main.ts, logged out)', () => {
     expect(identity.enterprise, 'test identity must be the plankton variant').toBe(true)
 
     fs.mkdirSync(bundleDir, { recursive: true })
+    // Exercise Linux's optional diagnostic plan on every host, without lying
+    // about the process OS. This is an injected plan, not a platform mock.
+    const diagnosticsFixture = path.join(bundleDir, 'diagnostics.ts')
+    const diagnosticsModule = path.join(here, 'linux-crash-diagnostics.ts')
+    fs.writeFileSync(diagnosticsFixture, `
+      export * from ${JSON.stringify(diagnosticsModule)}
+      import { linuxCrashDiagnostics as plan } from ${JSON.stringify(diagnosticsModule)}
+      export const linuxCrashDiagnostics = (dir) => plan(dir, 'linux')
+    `)
     await build({
+      plugins: [{
+        name: 'linux-diagnostics-plan',
+        setup(plugin) {
+          plugin.onResolve({ filter: /^\.\/linux-crash-diagnostics$/ }, () => ({ path: diagnosticsFixture }))
+        }
+      }],
       absWorkingDir: desktop,
       bundle: true,
       platform: 'node',
