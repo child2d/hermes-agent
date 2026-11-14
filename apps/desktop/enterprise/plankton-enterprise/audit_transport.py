@@ -177,7 +177,7 @@ def _urlopen(url: str, data: bytes, headers: dict, timeout: float):
     import urllib.request  # 局部导入：本模块是传输层，构造时才引入网络栈
 
     request = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    return urllib.request.urlopen(request, timeout=timeout)  # noqa: S310 - 端点来自受信配置
+    return urllib.request.urlopen(request, timeout=timeout)
 
 
 def _classify_status(status: int) -> tuple[bool, bool]:
@@ -266,7 +266,7 @@ def refresh_cli_token() -> bool:
     """
     binary = (os.environ.get(CLI_BIN_ENV) or "").strip() or DEFAULT_CLI_BIN
     try:
-        subprocess.run(  # noqa: S603 - 固定 argv、固定二进制（可覆盖）、无 shell
+        subprocess.run(
             [binary, *REFRESH_COMMAND],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,

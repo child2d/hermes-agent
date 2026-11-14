@@ -9,6 +9,7 @@ import inspect
 import json
 import os
 import queue
+import sqlite3
 import threading
 import time
 from agent.i18n import t
@@ -20,6 +21,7 @@ from contextlib import nullcontext, suppress
 from contextvars import copy_context
 from gateway.bot_peer_notices import automatic_notices_allowed
 from gateway.config import Platform
+from gateway.delivery_notify import delivery_receipt_enabled, notify_turn_receipt
 from gateway.media_repair import repair_explicit_computer_use_media_paths
 from gateway.platforms.base import BasePlatformAdapter
 from gateway.platforms.event import MessageEvent
@@ -503,6 +505,7 @@ class GatewayTurnPersistenceMixin:
     async def _hmwa_persist_turn_transcript(
         self, *, event, source, session_entry, session_key, agent_result, agent_messages,
         prepared, response, agent_failed_early, hidden_reasoning_incomplete, is_context_overflow_failure,
+        delivery_enabled=None, run_ref=None, hook_ctx=None,
     ):
         """Persist this turn to the transcript (session_meta on first turn, user-only on transient
         failure, nothing on context overflow), update last_prompt_tokens, and re-baseline the
@@ -522,7 +525,23 @@ class GatewayTurnPersistenceMixin:
         # not None) keeps the persistence contract explicit and lets any future non-persisting runtime opt
         # into a gateway-side write by returning False.
         agent_persisted = agent_result.get("agent_persisted", self._session_db is not None)
+        if delivery_enabled is None:
+            # Default: ask the hooks, so a plain install never reaches delivery code at all.
+            delivery_enabled = delivery_receipt_enabled(getattr(self, "hooks", None))
         _user_row = self._hmwa_user_transcript_entry(event, prepared, ts)
+        # Receipt for this turn's terminal row: the id the write itself returned. None means the
+        # terminal is not provably persisted (queued, skipped, or failed) and no delivery may claim it.
+        receipt = None
+        # This turn's own generated boundary: only the LAST message the run produced can be its
+        # terminal, and only when that message is an assistant answer (not a pending tool call and
+        # not a tool result). Anything else means this run has no terminal of its own.
+        history_len = agent_result.get("history_offset", len(history))
+        new_messages = agent_messages[history_len:] if len(agent_messages) > history_len else []
+        terminal_candidate = new_messages[-1] if new_messages else None
+        if terminal_candidate is not None and (
+            terminal_candidate.get("role") != "assistant" or terminal_candidate.get("tool_calls")
+        ):
+            terminal_candidate = None
 
         if is_context_overflow_failure:
             pass  # Skip all transcript writes — don't grow a broken session
@@ -568,16 +587,17 @@ class GatewayTurnPersistenceMixin:
             else:
                 # Only the NEW messages: history_offset (what the agent saw), not len(history), which
                 # counts session_meta entries stripped before the agent saw them.
-                history_len = agent_result.get("history_offset", len(history))
-                new_messages = agent_messages[history_len:] if len(agent_messages) > history_len else []
                 if not new_messages:
                     # Edge case: fall back to simple user/assistant rows.
                     await store.append_to_transcript(sid, _user_row, skip_db=agent_persisted)
                     if response:
-                        await store.append_to_transcript(
+                        written = await store.append_to_transcript(
                             sid, {"role": "assistant", "content": response, "timestamp": ts},
                             skip_db=agent_persisted,
                         )
+                        if written:
+                            receipt = {"message_id": int(written[0]), "session_id": written[1],
+                                       "source": "append_return", "run": run_ref}
                 else:
                     # Attach the inbound platform message_id to the first user entry so platform-level
                     # quote-resolution (e.g. Yuanbao) can find earlier @bot messages by original id.
@@ -594,7 +614,12 @@ class GatewayTurnPersistenceMixin:
                         ):
                             entry["message_id"] = str(event.message_id)
                             _user_msg_id_attached = True
-                        await store.append_to_transcript(sid, entry, skip_db=agent_persisted)
+                        written = await store.append_to_transcript(sid, entry, skip_db=agent_persisted)
+                        # ONLY this run's terminal candidate may produce a receipt; an earlier
+                        # assistant row in the same turn is an intermediate step, not the outcome.
+                        if msg is terminal_candidate and written:
+                            receipt = {"message_id": int(written[0]), "session_id": written[1],
+                                       "source": "append_return", "run": run_ref}
 
         # The agent persists token counts/model itself; keep only last_prompt_tokens for hygiene.
         await store.update_session(
@@ -602,10 +627,80 @@ class GatewayTurnPersistenceMixin:
             touch_activity=not bool(getattr(event, "internal", False)),
         )
 
+        terminal_ok = not (
+            agent_failed_early or hidden_reasoning_incomplete or is_context_overflow_failure
+            or agent_result.get("failure_reason") == "content_policy_blocked"
+            # Same boundary the streaming finalizer already uses: an interrupted run reports
+            # {interrupted: True, completed: False} with a DIAGNOSTIC final_response, and a failed run
+            # sets failed. None of those may produce a completed delivery receipt. A legacy result that
+            # simply omits ``completed`` is not treated as success by assertion — it stays allowed only
+            # when the run also reports no failure/interrupt, which is the same test the stream uses.
+            or agent_result.get("interrupted") or agent_result.get("failed")
+            or agent_result.get("completed") is False
+        )
+        receipt = self._hmwa_agent_owned_receipt(
+            receipt=receipt, terminal_ok=terminal_ok, agent_result=agent_result,
+            terminal_candidate=terminal_candidate, agent_persisted=agent_persisted,
+            delivery_enabled=delivery_enabled, sid=sid, run_ref=run_ref,
+        )
+
         # Re-baseline the cached agent's message_count now that ALL of this turn's writes are done:
         # the coherence guard snapshots at agent-BUILD time, so our own writes would otherwise
         # trigger a rebuild next turn (destroying prompt caching).
         await self._refresh_agent_cache_message_count(session_key, sid)
+        # ONE terminal gate for every receipt shape, applied BEFORE any notify/provider side effect:
+        # a run that did not terminate successfully has no deliverable terminal, so nothing may be
+        # published for it — not even as "failed". The transcript writes and the cache refresh above
+        # still happen; only the delivery identity is withheld.
+        deliverable = receipt if terminal_ok else None
+        if deliverable is not None and delivery_receipt_enabled(getattr(self, "hooks", None)):
+            await notify_turn_receipt(
+                hooks=self.hooks,
+                provider=getattr(self, "delivery_terminal_receipt_provider", None),
+                session_entry=session_entry, agent_result=agent_result, response=response,
+                outcome="completed",
+                # The event keeps its original contract (identity + admission context); the receipt
+                # still carries the run, so the notification cannot invent the binding.
+                hook_ctx=hook_ctx if hook_ctx is not None else {"execution_ref": run_ref},
+                receipt=deliverable,
+            )
+        return deliverable
+
+    def _hmwa_agent_owned_receipt(self, *, receipt, terminal_ok, agent_result, terminal_candidate,
+                                  agent_persisted, delivery_enabled, sid, run_ref):
+        """Adopt the agent's own terminal identity — only for a run that terminated successfully.
+
+        Two sources, in order: the committed identity the run's termination path handed back (row id
+        + session stamped by the flush boundary), then the uid the insert path stamped on THIS run's
+        terminal candidate. Neither carries the run itself: this persistence call binds it, so the
+        notification can never invent the binding the consumer verifies. A failed/refused/overflowed
+        run returns whatever came in (normally None) — a partial row must not be revived.
+        """
+        if not terminal_ok:
+            return None
+        if receipt is not None:
+            return receipt
+        supplied = agent_result.get("terminal_receipt")
+        if isinstance(supplied, dict):
+            supplied_row, supplied_session = supplied.get("message_id"), supplied.get("session_id")
+            if isinstance(supplied_row, int) and supplied_session:
+                return {"message_id": supplied_row, "session_id": supplied_session,
+                        "source": supplied.get("source") or "agent_flush_marker", "run": run_ref}
+        if not (agent_persisted and delivery_enabled and terminal_candidate is not None
+                and self._session_db is not None):
+            return receipt
+        uid = terminal_candidate.get("message_uid") or None
+        if not uid:
+            return receipt
+        try:
+            row_id = self._session_db.message_id_by_uid(sid, uid)
+        except Exception:  # optional lookup on an already-persisted row; failure means "unprovable"
+            logger.warning("terminal uid lookup failed; no delivery receipt", exc_info=True)
+            return receipt
+        if not row_id:
+            return receipt
+        return {"message_id": int(row_id), "session_id": sid, "source": "agent_persist_uid",
+                "run": run_ref}
 
     async def _hmwa_retain_content_policy_refused_turn(self, sid, session_key, boundary_row_id=None):
         """Retain a safety-refused turn for display while forcing the next turn to rebuild from the

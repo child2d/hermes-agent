@@ -347,7 +347,7 @@ def test_loadbearing_personal_home_is_not_a_false_negative(egress, tmp_path, mon
     inside = personal / ".hermes" / "x"
     inside.mkdir(parents=True)
     # 朴素「只看存在」判据：永不拒绝。
-    def naive_exists_only(_home):  # noqa: ARG001
+    def naive_exists_only(_home):
         return {"ok": True}
 
     assert naive_exists_only(inside)["ok"] is True, "朴素判据放行（说明严格判据不是恒真）"
@@ -407,8 +407,8 @@ def _code_only(src: str) -> str:
     """去掉模块 docstring 与注释行，只留会执行的代码（结构断言针对代码，不针对说明文字）。"""
     import re
 
-    html = re.sub(r'""".*?"""', "", src, flags=re.S)
-    html = re.sub(r"'''.*?'''", "", html, flags=re.S)
+    html = re.sub(r'""".*?"""', "", src, flags=re.DOTALL)
+    html = re.sub(r"'''.*?'''", "", html, flags=re.DOTALL)
     return "\n".join(line for line in html.splitlines() if not line.strip().startswith("#"))
 
 

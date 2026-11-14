@@ -427,6 +427,17 @@ class SessionMessagesMixin(SessionDetachedResultsMixin, SessionTodoResultMixin):
         # holding the lock for seconds (VACUUM, checkpoint) can't kill it.
         return self._execute_write(_do, patience_s=self._TRANSCRIPT_WRITE_PATIENCE_S)
 
+    def message_id_by_uid(self, session_id: str, message_uid: str) -> Optional[int]:
+        """Exact row id for a uid the writer stamped; only the single LIVE row may answer (else None)."""
+        if not session_id or not message_uid:
+            return None
+        rows = self._read_all(
+            "SELECT id FROM messages WHERE session_id = ? AND message_uid = ? AND active = 1 LIMIT 2",
+            (session_id, message_uid))
+        if len(rows) != 1:
+            return None
+        return int(rows[0]["id"])
+
     def append_messages_batch(
         self, session_id: str, messages: list[dict[str, Any]], compression_lock_holder: Optional[str] = None,
         turn_lease_holder: Optional[str] = None, chunk_rows: Optional[int] = None,

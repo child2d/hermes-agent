@@ -91,7 +91,7 @@ def test_session_audit_id_has_no_entropy_in_source(audit):
     """结构断言：派生函数体不含 uuid / random / time —— 幂等键不可能被随机化。"""
     body = AUDIT_SRC.split("def derive_session_audit_id", 1)[1].split("\ndef ", 1)[0]
     # 去掉 docstring 与注释行，只看会执行的代码。
-    code = re.sub(r'""".*?"""', "", body, flags=re.S)
+    code = re.sub(r'""".*?"""', "", body, flags=re.DOTALL)
     code = "\n".join(line for line in code.splitlines() if not line.strip().startswith("#"))
     for forbidden in ("uuid", "random", "time.", "time()", "urandom"):
         assert forbidden not in code, f"幂等键派生不得含 {forbidden}"

@@ -81,7 +81,6 @@ class RecordingContext:
 
     def _register_tool(self, **kwargs):
         self.tools.append(kwargs)
-        return None
 
 
 # ── 1 · 具名提案 + 引用键 + 命名空间 ─────────────────────────────────────────
@@ -242,7 +241,7 @@ def test_the_agent_draftable_whitelist_mirrors_the_declaration(proposals):
         f"only-in-whitelist={sorted(set(proposals.AGENT_DRAFTABLE_FIELDS) - declared)}"
     )
     # The proposal block itself must be declaration-sourced as a PROPOSAL block (not a ledger read).
-    assert re.search(r"tag:\s*'plankton-baymax-new',[^}]*?source:\s*\{\s*proposals:\s*true\s*\}", source, re.S), (
+    assert re.search(r"tag:\s*'plankton-baymax-new',[^}]*?source:\s*\{\s*proposals:\s*true\s*\}", source, re.DOTALL), (
         "the new-draft block must declare `source:{proposals:true}`"
     )
 

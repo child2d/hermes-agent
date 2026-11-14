@@ -56,8 +56,13 @@ def _arch_guard(store_dir: Path) -> list[str]:
 
 from pm.uv_cache_prune import lock_package_names, prune_uv_cache_to_lock
 
-__all__ = ["prune_uv_cache_to_lock", "lock_package_names", "stage_uv_cache",
-           "UV_CACHE_SWITCH", "payload_uv_cache_enabled"]
+__all__ = [
+    "UV_CACHE_SWITCH",
+    "lock_package_names",
+    "payload_uv_cache_enabled",
+    "prune_uv_cache_to_lock",
+    "stage_uv_cache",
+]
 
 # Build switch. The payload's `uv-cache/` (~1.9 GB) is what lets a per-install
 # venv rebuild — plugin extras, feature changes — resolve with zero network.

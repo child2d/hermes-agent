@@ -49,7 +49,6 @@ class RecordingContext:
     def _register_skill(self, name, path, description=""):
         self.calls.append((name, Path(path)))
         self.descriptions.append(description)
-        return None
 
 
 def test_register_hands_the_one_skill_to_the_engine(half):

@@ -722,7 +722,7 @@ def _stub_engine_config(monkeypatch, *, on_save=None):
     skills_mod = types.ModuleType("hermes_cli.skills_config")
     skills_mod.get_disabled_skills = lambda config: set(config.get("skills", {}).get("disabled", []))  # type: ignore[attr-defined]
 
-    def save_disabled_skills(config, names):  # noqa: ANN001
+    def save_disabled_skills(config, names):
         if on_save is not None:
             on_save()
         state.clear()
@@ -1124,7 +1124,6 @@ def test_install_state_reads_the_version_from_the_engines_own_field(api):
 def test_a_disabled_install_is_its_own_state_not_an_unknown(api):
     """``disabled`` outranks the version comparison, and it must also not read as
     version-unknown (that state is what gated the manage buttons)."""
-    home = api._TEST_HOME
     assert _install_with_bundle(
         api, _skill_zip("v1"), slug="x", reference="u/x", name="x", category="", version="2.0.0", confirm=True
     )["ok"]

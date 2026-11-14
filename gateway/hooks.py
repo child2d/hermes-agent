@@ -74,6 +74,10 @@ class HookRegistry:
     def loaded_hooks(self) -> list[dict]:
         return list(self._loaded_hooks)
 
+    def has_handlers(self, event_type: str) -> bool:
+        """True when at least one handler would run for ``event_type`` (cheap, no I/O)."""
+        return bool(self._resolve_handlers(event_type))
+
     def discover_and_load(self) -> None:
         """Load every valid hook dir under the active profile's ``hooks/``."""
         hooks_dir = _resolve_hooks_dir()
@@ -160,6 +164,9 @@ class ProfileHookRegistries:
     def discover_and_load(self) -> None:
         """Load the active home's hooks now (startup, or a secondary profile's scoped startup)."""
         self._active()
+
+    def has_handlers(self, event_type: str) -> bool:
+        return self._active().has_handlers(event_type)
 
     async def emit(self, event_type: str, context: Optional[dict[str, Any]] = None) -> None:
         await self._active().emit(event_type, context)

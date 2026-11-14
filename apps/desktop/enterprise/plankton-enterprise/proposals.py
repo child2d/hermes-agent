@@ -315,7 +315,7 @@ def register_tools(ctx: Any) -> None:
             "draft-proposal tool is present but not registered for the agent.",
             TOOL_NAME,
         )
-        return None
+        return
     register_tool(
         name=TOOL_NAME,
         toolset=TOOLSET,
@@ -343,7 +343,7 @@ def register_tools(ctx: Any) -> None:
         description=TOOL_DESCRIPTION,
         emoji="\U0001f4dd",
     )
-    return None
+    return
 
 
 def handle_propose_draft(args: Any = None, **kwargs: Any) -> str:

@@ -1,0 +1,7 @@
+name: baymax-delivery-bridge
+description: Persisted runtime completion to scoped Baymax writeback; disabled without trusted host bootstrap.
+events:
+  - agent:start
+  - agent:end
+  - agent:delivery-ready
+  - gateway:startup

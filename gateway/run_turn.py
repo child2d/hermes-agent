@@ -23,6 +23,7 @@ from contextlib import nullcontext, suppress
 from contextvars import copy_context
 from gateway.bot_peer_notices import automatic_notices_allowed
 from gateway.config import Platform
+from gateway.delivery_predecessor import build_hook_ctx
 from gateway.platforms.base import BasePlatformAdapter, ProcessingOutcome
 from gateway.platforms.event import MessageEvent
 from gateway.platforms.helpers import typing_metadata_for_turn
@@ -221,15 +222,10 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
         history, message_text = prepared.history, prepared.message_text
 
         try:
-            hook_ctx = {
-                "platform": source.platform.value if source.platform else "",
-                "user_id": source.user_id,
-                "chat_id": source.chat_id or "",
-                "thread_id": str(source.thread_id) if getattr(source, "thread_id", None) else "",
-                "chat_type": getattr(source, "chat_type", "") or "",
-                "session_id": session_entry.session_id,
-                "message": message_text[:500],
-            }
+            hook_ctx = build_hook_ctx(
+                source=source, session_entry=session_entry, message_text=message_text,
+                predecessor_provider=getattr(self, "delivery_predecessor_provider", None),
+            )
             await self.hooks.emit("agent:start", hook_ctx)
 
             # Capture the launch session id so post-run compression publication is identity-guarded
@@ -314,6 +310,8 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
                 response=response, agent_failed_early=agent_failed_early,
                 hidden_reasoning_incomplete=hidden_reasoning_incomplete,
                 is_context_overflow_failure=is_context_overflow_failure,
+                run_ref=hook_ctx.get("execution_ref"),
+                hook_ctx=hook_ctx,
             )
             await self._record_room_silence_decision(
                 session_key, agent_result, _intentional_silence,

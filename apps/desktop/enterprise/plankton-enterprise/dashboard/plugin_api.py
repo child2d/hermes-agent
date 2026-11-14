@@ -255,7 +255,7 @@ def engine_skills_dir() -> Optional[Path]:
         return None
 
 
-def resolve_cli() -> Tuple[Optional[str], str]:
+def resolve_cli() -> tuple[Optional[str], str]:
     """Locate the ENTERPRISE ``shaoke-cli`` without ever reading credentials.
 
     Precedence: an explicit override → the enterprise copy at
@@ -492,7 +492,7 @@ def _has_forbidden_argv_char(value: object) -> bool:
     return bool(_FORBIDDEN_ARGV_CHARS.search(str(value)))
 
 
-def _read_argv(template: dict, params: dict) -> Tuple[Optional[list], Optional[str]]:
+def _read_argv(template: dict, params: dict) -> tuple[Optional[list], Optional[str]]:
     params = params or {}
     allowed = [str(f) for f in (list(template.get("required") or []) + list(template.get("optional") or []))]
     for flag in params:
@@ -878,7 +878,7 @@ def assert_outside_personal_trees(directory: Path, personal_home: Optional[Path]
             raise ValueError(f"落点落在个人环境内（{tree}），拒绝取用：{target}")
 
 
-def _enterprise_home_usable(home: Path) -> Tuple[bool, str]:
+def _enterprise_home_usable(home: Path) -> tuple[bool, str]:
     """The enterprise home must exist and be writable, or we refuse to act."""
     if not home.exists():
         return False, "企业侧引擎 home 未初始化（目录不存在），请先让管理员为本机完成企业安装"
@@ -985,7 +985,7 @@ def check_skills_root_chain(home: Path, skills_path: Path,
         checked.append(str(component))
         try:
             is_link = component.is_symlink()
-        except OSError as exc:  # noqa: BLE001 - unreadable chain is fail-closed
+        except OSError as exc:
             findings.append({
                 "check": "path-lstat-failed",
                 "layer": "skills-root" if component == root else "path-chain",
@@ -1160,7 +1160,7 @@ def plan_install_path(name: str, category: str) -> Optional[str]:
     return plan_install_path_ex(name, category)[0]
 
 
-def plan_install_path_ex(name: str, category: str) -> Tuple[Optional[str], Optional[str]]:
+def plan_install_path_ex(name: str, category: str) -> tuple[Optional[str], Optional[str]]:
     """``(planned, engine_error_kind)`` for ``(name, category)``.
 
     ``engine_error_kind`` is ``"engine-unavailable"`` when the engine's own
@@ -1176,18 +1176,18 @@ def plan_install_path_ex(name: str, category: str) -> Tuple[Optional[str], Optio
     try:
         from tools.skills_hub_models import (  # type: ignore
             _validate_install_parent_path, _validate_skill_name)
-    except Exception:  # noqa: BLE001 - the engine's validation module is absent
+    except Exception:
         return None, "engine-unavailable"
     try:
         safe_name = _validate_skill_name(str(name or ""))
         raw_category = str(category or "").strip()
         safe_category = _validate_install_parent_path(raw_category) if raw_category else ""
-    except Exception:  # noqa: BLE001 - the engine's rules rejected the pair
+    except Exception:
         return None, None
     return (f"{safe_category}/{safe_name}" if safe_category else safe_name), None
 
 
-def read_engine_installations() -> Tuple[list, Optional[str]]:
+def read_engine_installations() -> tuple[list, Optional[str]]:
     """The engine's OWN install records — ``tools.skills_hub.HubLockFile``.
 
     This replaces the plugin's former private ledger (see the module docstring):
@@ -1205,7 +1205,7 @@ def read_engine_installations() -> Tuple[list, Optional[str]]:
         from tools.skills_hub import HubLockFile  # type: ignore
 
         return list(HubLockFile().list_installed()), note
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return [], note or f"引擎技能锁文件读取失败，按空处理：{exc}"
 
 
@@ -1278,7 +1278,7 @@ def _local_edit_verdict(entry: Optional[dict], install_rel: str,
 
         if _has_local_edits(entry):
             return True
-    except Exception:  # noqa: BLE001 - fall through to our own comparison
+    except Exception:
         pass
     # Confirming the negative: the engine said "no edits", but it also says that
     # when the recorded hash is empty or the path could not be hashed. Compare
@@ -1323,7 +1323,7 @@ def engine_local_edits(name: str, install_rel: str) -> Optional[bool]:
         from tools.skills_hub import HubLockFile  # type: ignore
 
         entry = HubLockFile().get_installed(str(name))
-    except Exception:  # noqa: BLE001 - an unreadable lock means "cannot decide"
+    except Exception:
         return None
     return _local_edit_verdict(entry, install_rel)
 
@@ -1365,7 +1365,7 @@ def _lock_entry_view(entry: dict, skills_path: Optional[Path], disabled_set: set
 # ── CLI invocation (module-level for test injection) ─────────────────────────
 
 
-def _exec_cli(cli_path: str, args: list, timeout_s: int) -> Tuple[int, str, str]:
+def _exec_cli(cli_path: str, args: list, timeout_s: int) -> tuple[int, str, str]:
     """Run the CLI. Raises ``FileNotFoundError`` for a missing binary."""
     completed = subprocess.run(
         [cli_path, *args],
@@ -1377,7 +1377,7 @@ def _exec_cli(cli_path: str, args: list, timeout_s: int) -> Tuple[int, str, str]
     return completed.returncode, completed.stdout or "", completed.stderr or ""
 
 
-def _classify_cli_failure(returncode: int, stdout: str, stderr: str) -> Tuple[str, str]:
+def _classify_cli_failure(returncode: int, stdout: str, stderr: str) -> tuple[str, str]:
     """Map a non-zero CLI exit to a DISTINGUISHABLE failure kind.
 
     The CLI writes its structured errors to stderr (and sometimes stdout), so
@@ -1761,7 +1761,7 @@ def _engine_lock_path() -> Optional[Path]:
 
 def _http_get(url: str, timeout_s: int = SKILL_CLI_TIMEOUT_S) -> bytes:
     """Fetch bytes from a presigned bundle URL. Module-level for test injection."""
-    with urllib.request.urlopen(url, timeout=timeout_s) as response:  # noqa: S310 - CLI-provided presigned URL
+    with urllib.request.urlopen(url, timeout=timeout_s) as response:
         return response.read()
 
 
@@ -1834,12 +1834,12 @@ def _download_bundle_entries(cli_path: str, slug: str) -> dict:
 
     try:
         buffer = _http_get(url)
-    except Exception as exc:  # noqa: BLE001 - transport shape is unknown
+    except Exception as exc:
         return {"ok": False, "kind": "download-failed", "detail": {"message": str(exc)}}
 
     try:
         entries = strip_top_dir(_zip_entries(buffer))
-    except Exception as exc:  # noqa: BLE001 - a corrupt archive
+    except Exception as exc:
         return {"ok": False, "kind": "extract-failed", "detail": {"message": str(exc)}}
     if not entries:
         return {"ok": False, "kind": "extract-failed", "detail": {"message": "包里没有文件"}}
@@ -1972,14 +1972,14 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
         from tools.skills_hub_install import (  # type: ignore
             install_from_quarantine, quarantine_bundle)
         from tools.skills_hub_models import SkillBundle  # type: ignore
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"ok": False, "kind": "engine-unavailable", "detail": {"message": f"引擎技能管理模块不可用：{exc}"}}
 
     # The engine's own hub bookkeeping (quarantine dir + lock.json) must exist
     # before it can stage a bundle — its own helper, not ours.
     try:
         engine_hub.ensure_hub_dirs()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"ok": False, "kind": "write-failed", "detail": {"message": f"引擎 hub 目录不可用：{exc}"}}
 
     target = skills_path / planned
@@ -2012,7 +2012,7 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
         quarantine_path = quarantine_bundle(bundle)
     except ValueError as exc:
         return {"ok": False, "kind": "engine-refused", "detail": {"reason": str(exc), "installPath": planned}}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"ok": False, "kind": "write-failed", "detail": {"message": f"引擎暂存技能包失败：{exc}"}}
 
     try:
@@ -2034,7 +2034,7 @@ def _install_skill(data: InstallRequest, *, require_confirm: bool = False) -> di
         )
     except ValueError as exc:
         return {"ok": False, "kind": "engine-refused", "detail": {"reason": str(exc), "installPath": planned}}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"ok": False, "kind": "write-failed", "detail": {"message": f"引擎安装失败：{exc}", "installPath": planned}}
     finally:
         # Remove OUR staging input if the engine left it behind (the engine
@@ -2109,7 +2109,7 @@ def _uninstall_skill(data: UninstallRequest) -> dict:
 
     try:
         from tools.skills_hub_install import uninstall_skill as engine_uninstall  # type: ignore
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"ok": False, "kind": "engine-unavailable", "detail": {"message": f"引擎技能管理模块不可用：{exc}"}}
 
     entries, note = read_engine_installations()
@@ -2140,7 +2140,7 @@ def _uninstall_skill(data: UninstallRequest) -> dict:
     install_path = str(entry.get("install_path") or "")
     try:
         ok, message = engine_uninstall(name)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"ok": False, "kind": "remove-failed", "detail": {"message": f"引擎卸载失败：{exc}", "name": name}}
 
     if not ok:
