@@ -102,7 +102,11 @@ def _runner_scratch_root() -> str:
     back that does not need root. Keying by uid means no run is blocked by another's leftovers.
     """
     name = "hermes-pytest" + (f"-{os.getuid()}" if hasattr(os, "getuid") else "")
-    if os.name == "nt" or not os.path.isdir("/var/tmp"):  # no-tmp: ok — probing the disk-backed FHS root
+    # Respect pytest's explicit caller-owned root without changing the
+    # disk-backed default when macOS exports its ordinary long TMPDIR.
+    if explicit := os.environ.get("PYTEST_DEBUG_TEMPROOT"):
+        root = os.path.join(explicit, name)
+    elif os.name == "nt" or not os.path.isdir("/var/tmp"):  # no-tmp: ok — probing the disk-backed FHS root
         root = os.path.join(tempfile.gettempdir(), name)
     else:
         root = f"/var/tmp/{name}"  # no-tmp: ok — /var/tmp is disk-backed by FHS, never tmpfs
@@ -871,27 +875,23 @@ def _print_progress(
 def _print_inline_failure(
     file: Path, output: str, repo_root: Path, pytest_passthrough: list[str]
 ) -> None:
-    """Print a compact failure summary immediately when a file fails.
+    """Print the complete failure output as soon as a file finishes.
 
-    Shows the tail of the pytest output (the failure section with stack
-    traces) and a ready-to-run repro command, so the developer doesn't
-    have to wait for the full run to finish before seeing what broke.
+    CI can cancel the suite before the final report; a long FAILED summary
+    must not displace the root traceback from the only surviving output.
     """
     rel = _format_file(file, repo_root)
     # Build a repro command the developer can copy-paste.
     passthrough_str = " ".join(pytest_passthrough) if pytest_passthrough else ""
-    repro = f"python -m pytest {rel}"
+    repro = f"scripts/run_tests.sh {rel}"
     if passthrough_str:
         repro += f" {passthrough_str}"
 
-    # Grab just the failure lines (last ~30 lines of pytest output —
-    # typically the FAILED summary + short test info).
     lines = output.rstrip().splitlines()
-    tail = "\n".join(lines[-30:])
 
     print(flush=True)
-    print(f"  ╔╍ Failed: {rel} ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍", flush=True)
-    for line in tail.splitlines():
+    print(f"  ╔╍ Failed: {rel} ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍", flush=True)
+    for line in lines:
         print(f"  ║ {line}", flush=True)
     print("  ║", flush=True)
     print(f"  ║  Repro: {repro}", flush=True)
